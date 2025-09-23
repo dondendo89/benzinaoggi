@@ -63,7 +63,7 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/api/distributors?city={{city}}&fuel={{fuel}}&limit={{limit}}",
+          "raw": "{{baseUrl}}/api/distributors?city={{city}}&fuel={{fuel}}&brand={{brand}}&sort={{sort}}&lat={{lat}}&lon={{lon}}&limit={{limit}}",
           "host": [
             "{{baseUrl}}"
           ],
@@ -75,7 +75,7 @@
             {
               "key": "city",
               "value": "{{city}}",
-              "description": "Filtro per città (opzionale)"
+              "description": "Filtro per città (opzionale, case-insensitive)"
             },
             {
               "key": "fuel",
@@ -83,10 +83,48 @@
               "description": "Filtro per carburante (opzionale)"
             },
             {
+              "key": "brand",
+              "value": "{{brand}}",
+              "description": "Filtro per bandiera (opzionale)"
+            },
+            {
+              "key": "sort",
+              "value": "{{sort}}",
+              "description": "Ordina: nearest (richiede lat/lon) o cheapest"
+            },
+            {
+              "key": "lat",
+              "value": "{{lat}}",
+              "description": "Latitudine utente per sort=nearest"
+            },
+            {
+              "key": "lon",
+              "value": "{{lon}}",
+              "description": "Longitudine utente per sort=nearest"
+            },
+            {
               "key": "limit",
               "value": "{{limit}}",
               "description": "Numero massimo risultati (default 200)"
             }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Distributor Detail",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/distributor/{{impiantoId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "distributor",
+            "{{impiantoId}}"
           ]
         }
       }
@@ -99,6 +137,10 @@
       "value": "http://localhost:3000"
     },
     {
+      "key": "scope",
+      "value": "active"
+    },
+    {
       "key": "city",
       "value": ""
     },
@@ -107,8 +149,28 @@
       "value": ""
     },
     {
+      "key": "brand",
+      "value": ""
+    },
+    {
+      "key": "sort",
+      "value": ""
+    },
+    {
+      "key": "lat",
+      "value": ""
+    },
+    {
+      "key": "lon",
+      "value": ""
+    },
+    {
       "key": "limit",
       "value": "200"
+    },
+    {
+      "key": "impiantoId",
+      "value": "1001"
     }
   ]
 }

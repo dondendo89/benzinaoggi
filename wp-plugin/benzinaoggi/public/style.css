@@ -2,5 +2,7 @@
 .benzinaoggi-wrap .filters{display:flex;gap:8px;align-items:center}
 .benzinaoggi-wrap #bo_list{list-style:none;margin:0;padding:0}
 .benzinaoggi-wrap #bo_list li{padding:6px 4px;border-bottom:1px solid #edf2f7}
+.benzinaoggi-wrap #bo_list li button.bo_item{background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:6px 8px;width:100%;text-align:left;cursor:pointer}
+.bo-detail{margin-top:12px;padding:12px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc}
 
 

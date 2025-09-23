@@ -103,6 +103,21 @@ class BenzinaOggiPlugin {
                     <option>Metano</option>
                     <option>HiQ Diesel</option>
                 </select>
+                <select id="bo_brand">
+                    <option value="">Tutte le bandiere</option>
+                    <option>Agip Eni</option>
+                    <option>Q8</option>
+                    <option>Api-Ip</option>
+                    <option>Esso</option>
+                    <option>Pompe Bianche</option>
+                    <option>Giap</option>
+                </select>
+                <select id="bo_sort">
+                    <option value="">Ordina</option>
+                    <option value="nearest">Più vicino</option>
+                    <option value="cheapest">Più economico</option>
+                </select>
+                <button id="bo_geo">Usa mia posizione</button>
                 <button id="bo_search">Cerca</button>
             </div>
             <div id="bo_map" style="height: 420px; margin: 12px 0;"></div>

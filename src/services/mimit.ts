@@ -1,5 +1,5 @@
 import { prisma } from "../lib/db";
-import { fetchText, parseCsv } from "./csv";
+import { fetchText, fetchCsvText, parseCsv } from "./csv";
 
 const ANAGRAFICA_URL = "https://www.mimit.gov.it/images/exportCSV/anagrafica_impianti_attivi.csv";
 const PREZZI_URL = "https://www.mimit.gov.it/images/exportCSV/prezzo_alle_8.csv";
@@ -23,10 +23,17 @@ type PrezzoRow = {
   'dtComu': string; // 2024-01-01 08:00:00
 };
 
-function normalizeFloatEU(value: string | null | undefined): number | null {
+function normalizeNumber(value: string | null | undefined): number | null {
   if (!value) return null;
-  const v = value.replace(".", "").replace(",", ".");
-  const n = Number(v);
+  const trimmed = value.trim();
+  if (trimmed.includes(",") && !trimmed.includes(".")) {
+    // European comma decimal
+    const v = trimmed.replace(".", "").replace(",", ".");
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  // Standard dot decimal
+  const n = Number(trimmed);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -34,35 +41,91 @@ function normalizeBoolean01(value: string | null | undefined): boolean {
   return value === "1" || value?.toLowerCase() === "true";
 }
 
-export async function updateAnagrafica(): Promise<{ updated: number }>
+export async function updateAnagrafica(): Promise<{ updated: number; total: number; skippedNoId: number }>
 {
-  const text = await fetchText(ANAGRAFICA_URL);
-  const rows = await parseCsv<AnagraficaRow>(text, { delimiter: ";", columns: true });
+  const raw = await fetchCsvText(ANAGRAFICA_URL);
+  // Normalizza newline e riparti dalla riga header che contiene idImpianto
+  const norm = raw.replace(/\r\n?/g, "\n");
+  const lines = norm.split("\n");
+  const headerIndex = lines.findIndex((l) => l.toLowerCase().includes('idimpianto'));
+  const text = headerIndex >= 0 ? lines.slice(headerIndex).join('\n') : norm;
+  const header = (headerIndex >= 0 ? lines[headerIndex] : lines[0]) || '';
+  const delimiter = ';'; // confermato dal debug
+  let rows = await parseCsv<AnagraficaRow>(text, {
+    delimiter,
+    columns: true,
+    bom: true,
+    recordDelimiter: 'auto',
+    relaxQuotes: true,
+    skipRecordsWithError: true,
+    trim: true,
+  });
+  if (!rows || rows.length === 0) {
+    // Fallback manual parsing if csv-parse returned nothing
+    const allLines = text.split('\n').filter((l) => l.trim().length > 0);
+    const header = (allLines.shift() || '').split(delimiter).map((s) => s.trim());
+    const hIdx = (name: string) => header.findIndex((h) => h.toLowerCase() === name.toLowerCase());
+    const idxId = hIdx('idImpianto');
+    const idxGestore = hIdx('Gestore');
+    const idxBandiera = hIdx('Bandiera');
+    const idxComune = hIdx('Comune');
+    const idxProvincia = hIdx('Provincia');
+    const idxIndirizzo = hIdx('Indirizzo');
+    const idxLat = hIdx('Latitudine');
+    const idxLon = hIdx('Longitudine');
+    rows = allLines.map((line) => {
+      const parts = line.split(delimiter);
+      return {
+        idImpianto: parts[idxId] || '',
+        Gestore: parts[idxGestore] || '',
+        Bandiera: parts[idxBandiera] || '',
+        Comune: parts[idxComune] || '',
+        Provincia: parts[idxProvincia] || '',
+        Indirizzo: parts[idxIndirizzo] || '',
+        Latitudine: parts[idxLat] || '',
+        Longitudine: parts[idxLon] || '',
+      } as AnagraficaRow;
+    }).filter((r) => (r.idImpianto || '').trim().length > 0);
+  }
 
   let updated = 0;
+  let skippedNoId = 0;
+  const get = (obj: Record<string, any>, keys: string[]): string | undefined => {
+    for (const k of keys) {
+      const hit = Object.keys(obj).find((kk) => kk.toLowerCase() === k.toLowerCase());
+      if (hit) return (obj as any)[hit];
+    }
+    return undefined;
+  };
   for (const r of rows) {
-    const impiantoId = Number(r.idImpianto);
-    if (!Number.isFinite(impiantoId)) continue;
-    const lat = normalizeFloatEU(r.Latitudine);
-    const lon = normalizeFloatEU(r.Longitudine);
+    const idStr = get(r as any, ['idImpianto', 'idimpianto', 'IDImpianto']);
+    const impiantoId = Number(idStr);
+    if (!Number.isFinite(impiantoId)) { skippedNoId += 1; continue; }
+    const lat = normalizeNumber(get(r as any, ['Latitudine', 'Latitudine (WGS84)', 'latitudine']));
+    const lon = normalizeNumber(get(r as any, ['Longitudine', 'Longitudine (WGS84)', 'longitudine']));
+    const gestore = get(r as any, ['Gestore']) || null;
+    const bandiera = get(r as any, ['Bandiera']) || null;
+    const comune = get(r as any, ['Comune']) || null;
+    const provincia = get(r as any, ['Provincia']) || null;
+    const indirizzo = get(r as any, ['Indirizzo']) || null;
     await prisma.distributor.upsert({
       where: { impiantoId },
       create: {
         impiantoId,
-        gestore: r.Gestore || null,
-        bandiera: r.Bandiera || null,
-        comune: r.Comune || null,
-        provincia: r.Provincia || null,
-        indirizzo: r.Indirizzo || null,
+        gestore,
+        bandiera,
+        comune,
+        provincia,
+        indirizzo,
         latitudine: lat ?? null,
         longitudine: lon ?? null,
       },
       update: {
-        gestore: r.Gestore || null,
-        bandiera: r.Bandiera || null,
-        comune: r.Comune || null,
-        provincia: r.Provincia || null,
-        indirizzo: r.Indirizzo || null,
+        gestore,
+        bandiera,
+        comune,
+        provincia,
+        indirizzo,
         latitudine: lat ?? null,
         longitudine: lon ?? null,
       },
@@ -70,15 +133,45 @@ export async function updateAnagrafica(): Promise<{ updated: number }>
     updated += 1;
   }
 
-  return { updated };
+  return { updated, total: rows.length, skippedNoId };
 }
 
-export async function updatePrezzi(): Promise<{ inserted: number; day: string }>
+export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: number; day: string; total?: number; skippedUnknownDistributor?: number; skippedNoPrice?: number; skippedBadDate?: number; sampleRow?: any }>
 {
-  const text = await fetchText(PREZZI_URL);
-  const rows = await parseCsv<PrezzoRow>(text, { delimiter: ";", columns: true });
+  const raw = await fetchCsvText(PREZZI_URL);
+  const norm = raw.replace(/\r\n?/g, "\n");
+  const lines = norm.split("\n");
+  const headerIndex = lines.findIndex((l) => l.toLowerCase().includes('idimpianto'));
+  const text = headerIndex >= 0 ? lines.slice(headerIndex).join('\n') : norm;
+  const header = (headerIndex >= 0 ? lines[headerIndex] : lines[0]) || '';
+  const delimiter = header.includes('\t') ? '\t' : (header.includes(';') ? ';' : ';');
+  let rows = await parseCsv<PrezzoRow>(text, { delimiter, columns: true, bom: true, skipRecordsWithError: true, recordDelimiter: 'auto', relaxQuotes: true, trim: true });
+  if (!rows || rows.length === 0) {
+    // Fallback manual parse
+    const allLines = text.split('\n').filter((l) => l.trim().length > 0);
+    const header = (allLines.shift() || '').split(delimiter).map((s) => s.trim());
+    const hIdx = (name: string) => header.findIndex((h) => h.toLowerCase() === name.toLowerCase());
+    const idxId = hIdx('idImpianto');
+    const idxDesc = hIdx('descCarburante') >= 0 ? hIdx('descCarburante') : hIdx('carburante');
+    const idxPrezzo = hIdx('prezzo');
+    const idxIsSelf = hIdx('isSelf');
+    const idxDt = hIdx('dtComu');
+    rows = allLines.map((line) => {
+      const parts = line.split(delimiter);
+      return {
+        idImpianto: parts[idxId] || '',
+        descCarburante: parts[idxDesc] || '',
+        prezzo: parts[idxPrezzo] || '',
+        isSelf: parts[idxIsSelf] || '',
+        dtComu: parts[idxDt] || '',
+      } as PrezzoRow;
+    }).filter((r) => (r.idImpianto || '').trim().length > 0 && (r.prezzo || '').trim().length > 0);
+  }
 
   let inserted = 0;
+  let skippedUnknownDistributor = 0;
+  let skippedNoPrice = 0;
+  let skippedBadDate = 0;
   // Determine the "day" from dtComu; normalize to YYYY-MM-DD
   const parseItalianDateTime = (s: string): Date => {
     // Expected format: DD/MM/YYYY HH:mm:ss
@@ -90,20 +183,34 @@ export async function updatePrezzi(): Promise<{ inserted: number; day: string }>
     return d;
   };
   const getDay = (s: string) => parseItalianDateTime(s).toISOString().slice(0, 10);
-  const today = rows[0] ? getDay(rows[0].dtComu) : new Date().toISOString().slice(0, 10);
+  const today = rows[0] && (rows[0] as any).dtComu ? getDay((rows[0] as any).dtComu as string) : new Date().toISOString().slice(0, 10);
   const dayDate = new Date(`${today}T00:00:00.000Z`);
 
-  for (const r of rows) {
-    const impiantoId = Number(r.idImpianto);
-    if (!Number.isFinite(impiantoId)) continue;
-    const distributor = await prisma.distributor.findUnique({ where: { impiantoId } });
-    if (!distributor) continue; // skip unknown
+  const get = (obj: Record<string, any>, keys: string[]): string | undefined => {
+    for (const k of keys) {
+      const hit = Object.keys(obj).find((kk) => kk.toLowerCase() === k.toLowerCase());
+      if (hit) return (obj as any)[hit];
+    }
+    return undefined;
+  };
 
-    const price = normalizeFloatEU(r.prezzo);
-    if (price == null) continue;
-    const isSelf = normalizeBoolean01(r.isSelf);
-    const communicatedAt = parseItalianDateTime(r.dtComu);
-    const fuelType = r.descCarburante.trim();
+  for (const r of rows) {
+    const idStr = get(r as any, ['idImpianto', 'idimpianto']);
+    const impiantoId = Number(idStr);
+    if (!Number.isFinite(impiantoId)) { skippedUnknownDistributor += 1; continue; }
+    const distributor = await prisma.distributor.findUnique({ where: { impiantoId } });
+    if (!distributor) { skippedUnknownDistributor += 1; continue; }
+
+    const prezzoStr = get(r as any, ['prezzo']);
+    const price = normalizeNumber(prezzoStr);
+    if (price == null) { skippedNoPrice += 1; continue; }
+    const isSelf = normalizeBoolean01(get(r as any, ['isSelf', 'isSelfService', 'self']));
+    const dtComu = get(r as any, ['dtComu', 'dtcomu']);
+    if (!dtComu) { skippedBadDate += 1; continue; }
+    const communicatedAt = parseItalianDateTime(dtComu);
+    const desc = get(r as any, ['descCarburante', 'desccarburante', 'carburante']);
+    if (!desc) continue;
+    const fuelType = String(desc).trim();
 
     try {
       await prisma.price.upsert({
@@ -134,7 +241,9 @@ export async function updatePrezzi(): Promise<{ inserted: number; day: string }>
     }
   }
 
-  return { inserted, day: today };
+  const total = rows.length;
+  const sampleRow = debug ? rows[0] : undefined;
+  return { inserted, day: today, total, skippedUnknownDistributor, skippedNoPrice, skippedBadDate, sampleRow };
 }
 
 export async function checkVariation() {
