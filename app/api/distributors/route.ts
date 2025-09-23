@@ -16,8 +16,8 @@ export async function GET(req: NextRequest) {
 
     const distributors = await prisma.distributor.findMany({
       where: {
-        comune: city ? { contains: city } : undefined,
-        bandiera: brand ? { contains: brand } : undefined,
+        comune: city ? { contains: city, mode: 'insensitive' } : undefined,
+        bandiera: brand ? { contains: brand, mode: 'insensitive' } : undefined,
       },
       take: limit,
     });
@@ -40,10 +40,8 @@ export async function GET(req: NextRequest) {
       byDistributor.set(p.distributorId, arr);
     }
 
-    // Apply case-insensitive city filter client-side for SQLite
-    const filtered = city
-      ? distributors.filter((d) => (d.comune || '').toLowerCase().includes(city.toLowerCase()))
-      : distributors;
+    // PostgreSQL handles case-insensitive filtering natively
+    const filtered = distributors;
 
     function haversine(lat1?: number | null, lon1?: number | null, lat2?: number, lon2?: number) {
       if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return undefined as number | undefined;

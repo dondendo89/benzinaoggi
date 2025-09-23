@@ -263,6 +263,12 @@ class BenzinaOggiPlugin {
         // Leaflet
         wp_enqueue_style('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', [], '1.9.4');
         wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', [], '1.9.4', true);
+        
+        // OneSignal SDK
+        $opts = $this->get_options();
+        if (!empty($opts['onesignal_app_id'])) {
+            wp_enqueue_script('onesignal', 'https://cdn.onesignal.com/sdks/OneSignalSDK.js', [], null, true);
+        }
         // App
         wp_register_script('benzinaoggi-app', plugins_url('public/app.js', __FILE__), ['leaflet'], '1.0.0', true);
         $opts = $this->get_options();

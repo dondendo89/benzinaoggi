@@ -24,7 +24,7 @@
     }
 
     var pricesCard = createEl('div','bo-card');
-    pricesCard.innerHTML = '<h3>Prezzi</h3>';
+    pricesCard.innerHTML = '<h3>Prezzi</h3><p style="font-size: 0.9em; color: #666; margin-bottom: 1em;">💡 <strong>Notifiche:</strong> Abilita le notifiche del browser per ricevere avvisi quando i prezzi scendono. Clicca su "quando scende" per ogni carburante.</p>';
     var table = createEl('table','bo-table');
     table.innerHTML = '<thead><tr><th>Carburante</th><th>Prezzo</th><th>Servizio</th><th>Notifica</th></tr></thead><tbody></tbody>';
     var tbody = table.querySelector('tbody');
@@ -34,7 +34,7 @@
       tr.innerHTML = '<td><span class="bo-badge">'+p.fuelType+'</span></td>'+
         '<td>'+fmt(p.price)+'</td>'+
         '<td>'+(p.isSelfService ? 'Self' : 'Servito')+'</td>'+
-        '<td><label><input type="checkbox" id="'+id+'" data-fuel="'+p.fuelType+'"/> quando scende</label></td>';
+        '<td><label><input type="checkbox" id="'+id+'" data-fuel="'+p.fuelType+'"/> <span class="notif-label">quando scende</span> <span class="notif-status" style="display:none; color: #28a745; font-size: 0.9em;">✓ Attivato</span></label></td>';
       tbody.appendChild(tr);
     });
 
@@ -44,15 +44,75 @@
     wrap.appendChild(pricesCard);
     pricesCard.appendChild(table);
 
-    if(window.BenzinaOggi && BenzinaOggi.onesignalAppId){
-      var OneSignal = window.OneSignal = window.OneSignal || [];
-      OneSignal.push(function(){ OneSignal.init({ appId: BenzinaOggi.onesignalAppId }); });
+    if(window.BenzinaOggi && BenzinaOggi.onesignalAppId && window.OneSignal){
+      // Initialize OneSignal if not already done
+      if (!window.OneSignal.initialized) {
+        window.OneSignal.init({ appId: BenzinaOggi.onesignalAppId });
+        window.OneSignal.initialized = true;
+      }
+      
+      // Check if user has granted notification permission
+      window.OneSignal.getNotificationPermission().then(function(permission) {
+        if (permission === 'granted') {
+          console.log('Notifications already granted');
+        } else {
+          console.log('Notifications not granted, permission:', permission);
+          // Show a message to enable notifications
+          var notifMsg = createEl('div', 'bo-notif-warning');
+          notifMsg.innerHTML = '<p style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 4px; margin: 10px 0; color: #856404;">🔔 <strong>Abilita le notifiche:</strong> Per ricevere avvisi sui prezzi, clicca su "Consenti" quando il browser te lo chiede.</p><button id="bo-enable-notifications" style="background: #007cba; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 5px;">Abilita Notifiche</button>';
+          wrap.insertBefore(notifMsg, wrap.firstChild);
+          
+          // Add click handler for enable notifications button
+          var enableBtn = notifMsg.querySelector('#bo-enable-notifications');
+          if (enableBtn) {
+            enableBtn.addEventListener('click', function() {
+              window.OneSignal.showNativePrompt().then(function() {
+                console.log('Notification prompt shown');
+                notifMsg.style.display = 'none';
+              }).catch(function(err) {
+                console.error('Error showing notification prompt:', err);
+              });
+            });
+          }
+        }
+      });
+      
       qsa('input[type=checkbox][data-fuel]', wrap).forEach(function(cb){
         cb.addEventListener('change', function(){
           var fuel = this.getAttribute('data-fuel');
           var tagKey = 'price_drop_'+fuel;
-          if(this.checked){ OneSignal.push(function(){ OneSignal.sendTag(tagKey, '1'); }); }
-          else { OneSignal.push(function(){ OneSignal.deleteTag(tagKey); }); }
+          var statusEl = this.parentNode.querySelector('.notif-status');
+          var labelEl = this.parentNode.querySelector('.notif-label');
+          
+          if(this.checked){ 
+            window.OneSignal.sendTag(tagKey, '1').then(function() {
+              console.log('Tag '+tagKey+' set successfully');
+              if(statusEl) {
+                statusEl.textContent = '✓ Attivato';
+                statusEl.style.display = 'inline';
+                statusEl.style.color = '#28a745';
+              }
+            }).catch(function(err) {
+              console.error('Error setting tag '+tagKey+':', err);
+              if(statusEl) {
+                statusEl.textContent = '✗ Errore';
+                statusEl.style.display = 'inline';
+                statusEl.style.color = '#dc3545';
+              }
+            });
+          } else { 
+            window.OneSignal.deleteTag(tagKey).then(function() {
+              console.log('Tag '+tagKey+' deleted successfully');
+              if(statusEl) statusEl.style.display = 'none';
+            }).catch(function(err) {
+              console.error('Error deleting tag '+tagKey+':', err);
+              if(statusEl) {
+                statusEl.textContent = '✗ Errore';
+                statusEl.style.display = 'inline';
+                statusEl.style.color = '#dc3545';
+              }
+            });
+          }
         });
       });
     }
