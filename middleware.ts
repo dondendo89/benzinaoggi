@@ -28,9 +28,11 @@ export function middleware(req: NextRequest) {
       const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
       const expected = process.env.API_SECRET || '';
       if (!expected || token !== expected) {
+        const errorHeaders = new Headers();
+        resHeaders.forEach((value, key) => errorHeaders.set(key, value));
         return new NextResponse(
           JSON.stringify({ ok: false, error: 'Unauthorized' }),
-          { status: 401, headers: new Headers({ ...Object.fromEntries(resHeaders) }) }
+          { status: 401, headers: errorHeaders }
         );
       }
     }
