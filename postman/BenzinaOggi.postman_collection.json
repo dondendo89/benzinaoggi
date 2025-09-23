@@ -1,0 +1,116 @@
+{
+  "info": {
+    "_postman_id": "3a2d3f2e-9b5a-4f3a-9f2a-3f9a2b5c7d8e",
+    "name": "BenzinaOggi API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Collection per gestire import anagrafica, prezzi e variazioni."
+  },
+  "item": [
+    {
+      "name": "Update Anagrafica",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/update-anagrafica",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "update-anagrafica"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Update Prezzi",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/update-prezzi",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "update-prezzi"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Check Variation",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/check-variation",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "check-variation"
+          ]
+        }
+      }
+    },
+    {
+      "name": "List Distributors",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/distributors?city={{city}}&fuel={{fuel}}&limit={{limit}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "distributors"
+          ],
+          "query": [
+            {
+              "key": "city",
+              "value": "{{city}}",
+              "description": "Filtro per città (opzionale)"
+            },
+            {
+              "key": "fuel",
+              "value": "{{fuel}}",
+              "description": "Filtro per carburante (opzionale)"
+            },
+            {
+              "key": "limit",
+              "value": "{{limit}}",
+              "description": "Numero massimo risultati (default 200)"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "event": [],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "city",
+      "value": ""
+    },
+    {
+      "key": "fuel",
+      "value": ""
+    },
+    {
+      "key": "limit",
+      "value": "200"
+    }
+  ]
+}
+
+

@@ -1,0 +1,6 @@
+.benzinaoggi-wrap{border:1px solid #e2e8f0;padding:12px;border-radius:8px}
+.benzinaoggi-wrap .filters{display:flex;gap:8px;align-items:center}
+.benzinaoggi-wrap #bo_list{list-style:none;margin:0;padding:0}
+.benzinaoggi-wrap #bo_list li{padding:6px 4px;border-bottom:1px solid #edf2f7}
+
+

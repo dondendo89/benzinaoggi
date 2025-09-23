@@ -1,0 +1,42 @@
+{
+  "name": "benzinaoggi",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init",
+    "test": "echo \"No tests\" && exit 0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dondendo89/benzinaoggi.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/dondendo89/benzinaoggi/issues"
+  },
+  "homepage": "https://github.com/dondendo89/benzinaoggi#readme",
+  "dependencies": {
+    "@prisma/client": "^6.16.2",
+    "csv-parse": "^6.1.0",
+    "next": "^14.2.32",
+    "node-fetch": "^3.3.2",
+    "prisma": "^6.16.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "typescript": "^5.9.2"
+  }
+}

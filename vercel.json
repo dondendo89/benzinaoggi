@@ -1,0 +1,8 @@
+{
+  "crons": [
+    { "path": "/api/update-anagrafica", "schedule": "0 3 * * *" },
+    { "path": "/api/update-prezzi", "schedule": "15 3 * * *" }
+  ]
+}
+
+

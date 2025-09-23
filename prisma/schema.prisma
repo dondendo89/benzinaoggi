@@ -1,0 +1,50 @@
+// Prisma schema for distributors and daily fuel prices
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Distributor {
+  id                 Int       @id @default(autoincrement())
+  impiantoId         Int       @unique
+  gestore            String?
+  bandiera           String?
+  comune             String?
+  provincia          String?
+  indirizzo          String?
+  latitudine         Float?
+  longitudine        Float?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  prices             Price[]
+
+  @@index([comune])
+  @@index([provincia])
+  @@index([bandiera])
+}
+
+model Price {
+  id             Int        @id @default(autoincrement())
+  distributorId  Int
+  fuelType       String
+  price          Float
+  isSelfService  Boolean    @default(false)
+  communicatedAt DateTime
+  day            DateTime
+  createdAt      DateTime   @default(now())
+
+  distributor    Distributor @relation(fields: [distributorId], references: [id])
+
+  @@index([day])
+  @@index([fuelType, day])
+  @@unique([distributorId, fuelType, day, isSelfService])
+}
+
+
+
