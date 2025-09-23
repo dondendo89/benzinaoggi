@@ -5,4 +5,18 @@
 .benzinaoggi-wrap #bo_list li button.bo_item{background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:6px 8px;width:100%;text-align:left;cursor:pointer}
 .bo-detail{margin-top:12px;padding:12px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc}
 
+/* Distributor detail page */
+.bo-h{margin-bottom:8px}
+.bo-h h2{margin:0 0 4px 0;font-size:20px}
+.bo-card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin:10px 0}
+.bo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.bo-label{color:#64748b;font-size:12px}
+.bo-value{font-weight:600}
+.bo-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.bo-actions a,.bo-actions button{background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:8px 10px;text-decoration:none;cursor:pointer}
+.bo-prices{list-style:none;margin:0;padding:0}
+.bo-table{width:100%;border-collapse:collapse;margin-top:8px}
+.bo-table th,.bo-table td{border-bottom:1px solid #e2e8f0;padding:8px;text-align:left}
+.bo-badge{display:inline-block;background:#e2e8f0;border-radius:999px;padding:2px 8px;font-size:12px}
+
 

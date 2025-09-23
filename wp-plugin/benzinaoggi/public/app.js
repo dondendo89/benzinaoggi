@@ -20,6 +20,12 @@
         .replace(/-+/g,'-');
     }
 
+    function buildPageUrl(d){
+      var title = ((d.bandiera||'Distributore') + ' ' + (d.comune||'')).trim();
+      var slug = slugify(title + '-' + (d.impiantoId||''));
+      return (window.location.origin || '') + '/' + slug + '/';
+    }
+
     function openDetail(api, d){
       fetch(api + '/api/distributor/' + d.impiantoId).then(function(r){ return r.json(); }).then(function(det){
         if(!det || !det.ok) return;
@@ -56,7 +62,10 @@
             markers.push(m);
             var prices = (d.prices || []).map(function(p){ return p.fuelType + ': ' + p.price.toFixed(3); }).join('<br/>');
             m.bindPopup('<strong>' + (d.bandiera || '') + '</strong><br/>' + (d.indirizzo || '') + '<br/>' + prices);
-            m.on('click', function(){ openDetail(api, d); });
+            m.on('click', function(){
+              var url = buildPageUrl(d);
+              window.location.href = url;
+            });
           }
           var li = createEl('li');
           var pricesText = (d.prices || []).map(function(p){ return p.fuelType + ' ' + p.price.toFixed(3); }).join(' · ');
@@ -68,7 +77,8 @@
           btn.addEventListener('click', function(){
             var imp = this.getAttribute('data-impianto'); if(!imp) return;
             var d = data.distributors.find(function(x){ return String(x.impiantoId) === String(imp); }) || { impiantoId: imp };
-            openDetail(api, d);
+            var url = buildPageUrl(d);
+            window.location.href = url;
           });
         });
       }).catch(function(err){ console.error(err); });
@@ -84,8 +94,14 @@
         return '<li>'+p.fuelType+': <strong>'+p.price.toFixed(3)+'</strong> '+(p.isSelfService?'(Self)':'')+
           ' <label style="margin-left:8px"><input type="checkbox" data-fuel="'+p.fuelType+'" id="'+id+'"/> Notifiche</label></li>';
       }).join('');
+      var pageUrl = (function(){
+        var title = ((d.bandiera||'Distributore') + ' ' + (d.comune||'')).trim();
+        var slug = slugify(title + '-' + (d.impiantoId||''));
+        return (window.location.origin || '') + '/' + slug + '/';
+      })();
       panel.innerHTML = '<h3>Distributore '+(d.impiantoId||'')+'</h3>'+
         '<div>'+(d.bandiera||'')+' — '+(d.indirizzo||'')+', '+(d.comune||'')+'</div>'+
+        '<div style="margin:8px 0"><a href="'+pageUrl+'" target="_blank" rel="noopener">Apri pagina dettaglio</a></div>'+
         '<ul>'+prices+'</ul>';
 
       // OneSignal per-fuel opt-in via tags

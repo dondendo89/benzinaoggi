@@ -44,3 +44,4 @@ dev-test.db-journal
 
 # WordPress plugin builds
 wp-plugin/benzinaoggi/*.zip
+prisma/dev.db

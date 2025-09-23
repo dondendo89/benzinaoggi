@@ -24,6 +24,23 @@
       }
     },
     {
+      "name": "List All Distributors",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/distributors-all",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "distributors-all"
+          ]
+        }
+      }
+    },
+    {
       "name": "Update Prezzi",
       "request": {
         "method": "GET",
