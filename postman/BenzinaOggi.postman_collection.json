@@ -10,7 +10,9 @@
       "name": "Update Anagrafica",
       "request": {
         "method": "GET",
-        "header": [],
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
+        ],
         "url": {
           "raw": "{{baseUrl}}/api/update-anagrafica",
           "host": [
@@ -27,7 +29,9 @@
       "name": "List All Distributors",
       "request": {
         "method": "GET",
-        "header": [],
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
+        ],
         "url": {
           "raw": "{{baseUrl}}/api/distributors-all",
           "host": [
@@ -44,7 +48,9 @@
       "name": "Update Prezzi",
       "request": {
         "method": "GET",
-        "header": [],
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
+        ],
         "url": {
           "raw": "{{baseUrl}}/api/update-prezzi",
           "host": [
@@ -61,7 +67,9 @@
       "name": "Check Variation",
       "request": {
         "method": "GET",
-        "header": [],
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
+        ],
         "url": {
           "raw": "{{baseUrl}}/api/check-variation",
           "host": [
@@ -89,41 +97,13 @@
             "distributors"
           ],
           "query": [
-            {
-              "key": "city",
-              "value": "{{city}}",
-              "description": "Filtro per città (opzionale, case-insensitive)"
-            },
-            {
-              "key": "fuel",
-              "value": "{{fuel}}",
-              "description": "Filtro per carburante (opzionale)"
-            },
-            {
-              "key": "brand",
-              "value": "{{brand}}",
-              "description": "Filtro per bandiera (opzionale)"
-            },
-            {
-              "key": "sort",
-              "value": "{{sort}}",
-              "description": "Ordina: nearest (richiede lat/lon) o cheapest"
-            },
-            {
-              "key": "lat",
-              "value": "{{lat}}",
-              "description": "Latitudine utente per sort=nearest"
-            },
-            {
-              "key": "lon",
-              "value": "{{lon}}",
-              "description": "Longitudine utente per sort=nearest"
-            },
-            {
-              "key": "limit",
-              "value": "{{limit}}",
-              "description": "Numero massimo risultati (default 200)"
-            }
+            { "key": "city", "value": "{{city}}", "description": "Filtro per città (opzionale, case-insensitive)" },
+            { "key": "fuel", "value": "{{fuel}}", "description": "Filtro per carburante (opzionale)" },
+            { "key": "brand", "value": "{{brand}}", "description": "Filtro per bandiera (opzionale)" },
+            { "key": "sort", "value": "{{sort}}", "description": "Ordina: nearest (richiede lat/lon) o cheapest" },
+            { "key": "lat", "value": "{{lat}}", "description": "Latitudine utente per sort=nearest" },
+            { "key": "lon", "value": "{{lon}}", "description": "Longitudine utente per sort=nearest" },
+            { "key": "limit", "value": "{{limit}}", "description": "Numero massimo risultati (default 200)" }
           ]
         }
       }
@@ -149,46 +129,17 @@
   ],
   "event": [],
   "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://localhost:3000"
-    },
-    {
-      "key": "scope",
-      "value": "active"
-    },
-    {
-      "key": "city",
-      "value": ""
-    },
-    {
-      "key": "fuel",
-      "value": ""
-    },
-    {
-      "key": "brand",
-      "value": ""
-    },
-    {
-      "key": "sort",
-      "value": ""
-    },
-    {
-      "key": "lat",
-      "value": ""
-    },
-    {
-      "key": "lon",
-      "value": ""
-    },
-    {
-      "key": "limit",
-      "value": "200"
-    },
-    {
-      "key": "impiantoId",
-      "value": "1001"
-    }
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "apiSecret", "value": "" },
+    { "key": "scope", "value": "active" },
+    { "key": "city", "value": "" },
+    { "key": "fuel", "value": "" },
+    { "key": "brand", "value": "" },
+    { "key": "sort", "value": "" },
+    { "key": "lat", "value": "" },
+    { "key": "lon", "value": "" },
+    { "key": "limit", "value": "200" },
+    { "key": "impiantoId", "value": "1001" }
   ]
 }
 

@@ -62,6 +62,7 @@ class BenzinaOggiPlugin {
         add_settings_field('onesignal_app_id', 'OneSignal App ID', [$this, 'field_onesignal_app_id'], 'benzinaoggi', 'benzinaoggi_section');
         add_settings_field('onesignal_api_key', 'OneSignal REST API Key', [$this, 'field_onesignal_api_key'], 'benzinaoggi', 'benzinaoggi_section');
         add_settings_field('webhook_secret', 'Webhook Secret', [$this, 'field_webhook_secret'], 'benzinaoggi', 'benzinaoggi_section');
+        add_settings_field('api_secret', 'API Bearer Secret', [$this, 'field_api_secret'], 'benzinaoggi', 'benzinaoggi_section');
 
         // pulsante import ora reso come form separato fuori dall'options form
     }
@@ -71,7 +72,8 @@ class BenzinaOggiPlugin {
             'api_base' => '',
             'onesignal_app_id' => '',
             'onesignal_api_key' => '',
-            'webhook_secret' => ''
+            'webhook_secret' => '',
+            'api_secret' => ''
         ];
         $opts = get_option(self::OPTION_NAME, []);
         return wp_parse_args($opts, $defaults);
@@ -92,6 +94,10 @@ class BenzinaOggiPlugin {
     public function field_webhook_secret() {
         $opts = $this->get_options();
         echo '<input type="text" name="'.self::OPTION_NAME.'[webhook_secret]" value="'.esc_attr($opts['webhook_secret']).'" class="regular-text" placeholder="chiave segreta webhook" />';
+    }
+    public function field_api_secret() {
+        $opts = $this->get_options();
+        echo '<input type="text" name="'.self::OPTION_NAME.'[api_secret]" value="'.esc_attr($opts['api_secret']).'" class="regular-text" placeholder="Bearer per API Vercel" />';
     }
 
     public function options_page() {
@@ -162,7 +168,10 @@ class BenzinaOggiPlugin {
         @ignore_user_abort(true);
         @set_time_limit(900);
         $this->log_progress('Inizio sync: scarico elenco distributori…');
-        $res2 = wp_remote_get($base.'/api/distributors-all', ['timeout' => 300]);
+        $headers = [];
+        $optsCfg = $this->get_options();
+        if (!empty($optsCfg['api_secret'])) { $headers['Authorization'] = 'Bearer '.$optsCfg['api_secret']; }
+        $res2 = wp_remote_get($base.'/api/distributors-all', ['timeout' => 300, 'headers' => $headers]);
         if (is_wp_error($res2)) return;
         $data = json_decode(wp_remote_retrieve_body($res2), true);
         $created = 0; $skipped = 0; $errors = 0;
@@ -170,7 +179,9 @@ class BenzinaOggiPlugin {
             $total = count($data['distributors']);
             $this->log_progress('Totale da processare: '.$total);
             foreach ($data['distributors'] as $i => $d) {
-                $title = trim(($d['bandiera']?:'Distributore').' '.$d['comune'].' '.$d['impiantoId']);
+                $rawTitle = trim(($d['bandiera'] ?: 'Distributore').' '.($d['comune'] ?: ''));
+                $title = trim(preg_replace('/\s+/', ' ', $rawTitle));
+                if ($title === '' || empty($d['impiantoId'])) { $skipped++; continue; }
                 $slug = sanitize_title($title.'-'.$d['impiantoId']);
                 $existingByTitle = get_page_by_title($title, OBJECT, 'page');
                 $existingBySlug  = get_page_by_path($slug, OBJECT, 'page');
@@ -220,7 +231,9 @@ class BenzinaOggiPlugin {
                 // Run import + page creation
                 $res1 = wp_remote_get($apiBase.'/api/update-anagrafica');
                 if (is_wp_error($res1)) return new WP_REST_Response(['ok'=>false,'error'=>'update-anagrafica failed'], 500);
-                $res2 = wp_remote_get($apiBase.'/api/distributors-all');
+        $headers = [];
+        if (!empty($opts['api_secret'])) { $headers['Authorization'] = 'Bearer '.$opts['api_secret']; }
+        $res2 = wp_remote_get($apiBase.'/api/distributors-all', ['headers' => $headers]);
                 if (is_wp_error($res2)) return new WP_REST_Response(['ok'=>false,'error'=>'distributors-all failed'], 500);
                 $data = json_decode(wp_remote_retrieve_body($res2), true);
                 $count = 0;

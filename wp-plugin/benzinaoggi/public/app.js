@@ -11,6 +11,7 @@
     }).addTo(map);
 
     var markers = [];
+    var userMarker = null;
     function clearMarkers(){ markers.forEach(function(m){ map.removeLayer(m); }); markers = []; }
 
     function slugify(text){
@@ -56,6 +57,7 @@
         clearMarkers();
         if(!data || !data.distributors){ return; }
         var list = qs('bo_list'); if(list) list.innerHTML = '';
+        var bounds = L.latLngBounds([]);
         data.distributors.forEach(function(d){
           if(d.latitudine && d.longitudine){
             var m = L.marker([d.latitudine, d.longitudine]).addTo(map);
@@ -66,12 +68,20 @@
               var url = buildPageUrl(d);
               window.location.href = url;
             });
+            bounds.extend([d.latitudine, d.longitudine]);
           }
           var li = createEl('li');
           var pricesText = (d.prices || []).map(function(p){ return p.fuelType + ' ' + p.price.toFixed(3); }).join(' · ');
           li.innerHTML = '<button data-impianto="'+d.impiantoId+'" class="bo_item"><strong>' + (d.bandiera || '') + '</strong> — ' + (d.comune || '') + ' — ' + pricesText + '</button>';
           if(list) list.appendChild(li);
         });
+        // Fit map to markers (and user position if set)
+        if (window._bo_lat != null && window._bo_lon != null) {
+          bounds.extend([window._bo_lat, window._bo_lon]);
+        }
+        if (bounds.isValid()) {
+          map.fitBounds(bounds.pad(0.2));
+        }
         // bind click for details
         list && list.querySelectorAll('button.bo_item').forEach(function(btn){
           btn.addEventListener('click', function(){
@@ -141,8 +151,12 @@
         if(navigator.geolocation){
           navigator.geolocation.getCurrentPosition(function(pos){
             window._bo_lat = pos.coords.latitude; window._bo_lon = pos.coords.longitude;
+            // show user position and center map immediately
+            if (userMarker) { try { map.removeLayer(userMarker); } catch (e){} }
+            userMarker = L.circle([window._bo_lat, window._bo_lon], { radius: 200, color: '#0ea5e9' }).addTo(map);
+            map.setView([window._bo_lat, window._bo_lon], 12);
             fetchData();
-          });
+          }, function(){ fetchData(); }, { enableHighAccuracy: true, timeout: 8000 });
         }
       }
     });

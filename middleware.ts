@@ -14,6 +14,30 @@ export function middleware(req: NextRequest) {
     return new NextResponse(null, { status: 204, headers: resHeaders });
   }
 
+  // Bearer auth for protected API routes
+  try {
+    const pathname = req.nextUrl.pathname;
+    const protectedPaths = new Set([
+      '/api/update-anagrafica',
+      '/api/update-prezzi',
+      '/api/distributors-all',
+      '/api/check-variation',
+    ]);
+    if (protectedPaths.has(pathname)) {
+      const auth = req.headers.get('authorization') || '';
+      const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+      const expected = process.env.API_SECRET || '';
+      if (!expected || token !== expected) {
+        return new NextResponse(
+          JSON.stringify({ ok: false, error: 'Unauthorized' }),
+          { status: 401, headers: new Headers({ ...Object.fromEntries(resHeaders) }) }
+        );
+      }
+    }
+  } catch {
+    // fallthrough; default to next() which will likely 500 if misconfigured
+  }
+
   const res = NextResponse.next();
   res.headers.set('Access-Control-Allow-Origin', origin);
   res.headers.set('Vary', 'Origin');
