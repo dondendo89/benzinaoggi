@@ -1,0 +1,12 @@
+wp-plugin/
+postman/
+README.md
+*.log
+coverage/
+*.zip
+*.tgz
+prisma/dev.db*
+dev*.db*
+**/.DS_Store
+.vscode/
+.idea/
