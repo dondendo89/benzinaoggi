@@ -88,21 +88,21 @@
       // Start initialization
       initOneSignal();
       
-      // Wait for OneSignal to be ready, then check notification permission
-      var checkPermission = function() {
-        try {
-          if (window.OneSignal && window.OneSignal.getNotificationPermission) {
-            window.OneSignal.getNotificationPermission().then(function(permission) {
-              if (permission === 'granted') {
-                console.log('Notifications already granted');
-              } else {
-                console.log('Notifications not granted, permission:', permission);
-                // Show a message to enable notifications
+      // Wait for OneSignal to be completely ready
+      var waitForOneSignal = function() {
+        if (window.OneSignal && window.OneSignal.isPushNotificationsEnabled && window.OneSignal.getNotificationPermission) {
+          console.log('OneSignal is ready, checking permissions...');
+          
+          // Use a more reliable method to check permissions
+          try {
+            window.OneSignal.isPushNotificationsEnabled().then(function(isEnabled) {
+              console.log('Push notifications enabled:', isEnabled);
+              if (!isEnabled) {
+                // Show message to enable notifications
                 var notifMsg = createEl('div', 'bo-notif-warning');
                 notifMsg.innerHTML = '<p style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 4px; margin: 10px 0; color: #856404;">🔔 <strong>Abilita le notifiche:</strong> Per ricevere avvisi sui prezzi, clicca su "Consenti" quando il browser te lo chiede.</p><button id="bo-enable-notifications" style="background: #007cba; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 5px;">Abilita Notifiche</button>';
                 wrap.insertBefore(notifMsg, wrap.firstChild);
                 
-                // Add click handler for enable notifications button
                 var enableBtn = notifMsg.querySelector('#bo-enable-notifications');
                 if (enableBtn) {
                   enableBtn.addEventListener('click', function() {
@@ -112,14 +112,6 @@
                         notifMsg.style.display = 'none';
                       }).catch(function(err) {
                         console.error('Error showing notification prompt:', err);
-                        // Fallback to browser notification API
-                        if (Notification.permission === 'default') {
-                          Notification.requestPermission().then(function(permission) {
-                            if (permission === 'granted') {
-                              notifMsg.style.display = 'none';
-                            }
-                          });
-                        }
                       });
                     } catch (err) {
                       console.error('Error requesting notifications:', err);
@@ -128,19 +120,19 @@
                 }
               }
             }).catch(function(err) {
-              console.error('Error checking notification permission:', err);
+              console.error('Error checking push notifications:', err);
             });
-          } else {
-            // OneSignal not ready, try again in 500ms
-            setTimeout(checkPermission, 500);
+          } catch (err) {
+            console.error('OneSignal permission check error:', err);
           }
-        } catch (err) {
-          console.error('OneSignal permission check error:', err);
+        } else {
+          // OneSignal not ready, try again
+          setTimeout(waitForOneSignal, 1000);
         }
       };
       
-      // Start checking after a short delay
-      setTimeout(checkPermission, 1000);
+      // Start checking after OneSignal is initialized
+      setTimeout(waitForOneSignal, 2000);
       
       qsa('input[type=checkbox][data-fuel]', wrap).forEach(function(cb){
         cb.addEventListener('change', function(){
@@ -152,15 +144,22 @@
           var setTag = function() {
             if (window.OneSignal && window.OneSignal.sendTag) {
               try {
-                window.OneSignal.sendTag(tagKey, '1').then(function() {
-                  console.log('Tag '+tagKey+' set successfully');
+                // Set multiple tags for better targeting
+                var tags = {
+                  'price_drop_notifications': '1',
+                  'fuel_type': fuel,
+                  'notify_' + fuel.toLowerCase().replace(/\s+/g, '_'): '1'
+                };
+                
+                window.OneSignal.sendTags(tags).then(function() {
+                  console.log('Tags set successfully for fuel:', fuel);
                   if(statusEl) {
-                    statusEl.textContent = '✓ Attivato';
+                    statusEl.textContent = '✓ Attivato per ' + fuel;
                     statusEl.style.display = 'inline';
                     statusEl.style.color = '#28a745';
                   }
                 }).catch(function(err) {
-                  console.error('Error setting tag '+tagKey+':', err);
+                  console.error('Error setting tags for fuel:', fuel, err);
                   if(statusEl) {
                     statusEl.textContent = '✗ Errore';
                     statusEl.style.display = 'inline';
@@ -168,7 +167,7 @@
                   }
                 });
               } catch (err) {
-                console.error('OneSignal sendTag error:', err);
+                console.error('OneSignal sendTags error:', err);
                 if(statusEl) {
                   statusEl.textContent = '✗ Errore';
                   statusEl.style.display = 'inline';
@@ -177,18 +176,20 @@
               }
             } else {
               // OneSignal not ready, try again
-              setTimeout(setTag, 500);
+              setTimeout(setTag, 1000);
             }
           };
           
           var deleteTag = function() {
             if (window.OneSignal && window.OneSignal.deleteTag) {
               try {
-                window.OneSignal.deleteTag(tagKey).then(function() {
-                  console.log('Tag '+tagKey+' deleted successfully');
+                // Delete specific fuel notification tag
+                var tagToDelete = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
+                window.OneSignal.deleteTag(tagToDelete).then(function() {
+                  console.log('Tag deleted successfully for fuel:', fuel);
                   if(statusEl) statusEl.style.display = 'none';
                 }).catch(function(err) {
-                  console.error('Error deleting tag '+tagKey+':', err);
+                  console.error('Error deleting tag for fuel:', fuel, err);
                   if(statusEl) {
                     statusEl.textContent = '✗ Errore';
                     statusEl.style.display = 'inline';
@@ -205,7 +206,7 @@
               }
             } else {
               // OneSignal not ready, try again
-              setTimeout(deleteTag, 500);
+              setTimeout(deleteTag, 1000);
             }
           };
           

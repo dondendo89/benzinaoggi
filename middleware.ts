@@ -22,6 +22,7 @@ export function middleware(req: NextRequest) {
       '/api/update-prezzi',
       '/api/distributors-all',
       '/api/check-variation',
+      '/api/send-notification',
     ]);
     if (protectedPaths.has(pathname)) {
       const auth = req.headers.get('authorization') || '';

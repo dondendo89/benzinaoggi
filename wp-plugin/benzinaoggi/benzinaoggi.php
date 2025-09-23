@@ -373,37 +373,95 @@ class BenzinaOggiPlugin {
         $opts = $this->get_options();
         $base = rtrim($opts['api_base'], '/');
         if (!$base) return;
+        
+        // Use Bearer auth for protected endpoint
+        $headers = [];
+        if (!empty($opts['api_secret'])) {
+            $headers['Authorization'] = 'Bearer ' . $opts['api_secret'];
+        }
+        
         $url = $base . '/api/check-variation';
-        $resp = wp_remote_get($url, [ 'timeout' => 20 ]);
-        if (is_wp_error($resp)) return;
+        $resp = wp_remote_get($url, [ 
+            'timeout' => 20,
+            'headers' => $headers
+        ]);
+        if (is_wp_error($resp)) {
+            $this->log_progress('Error checking variations: ' . $resp->get_error_message());
+            return;
+        }
         $code = wp_remote_retrieve_response_code($resp);
-        if ($code !== 200) return;
+        if ($code !== 200) {
+            $this->log_progress('API returned code: ' . $code);
+            return;
+        }
         $data = json_decode(wp_remote_retrieve_body($resp), true);
-        if (!isset($data['variations'])) return;
+        if (!isset($data['variations'])) {
+            $this->log_progress('No variations data in response');
+            return;
+        }
         $vars = $data['variations'];
-        if (empty($vars)) return;
+        if (empty($vars)) {
+            $this->log_progress('No price variations detected');
+            return;
+        }
 
-        // Send OneSignal notification (generic broadcast with count)
+        $this->log_progress('Found ' . count($vars) . ' price variations');
+
+        // Send specific notifications for each price drop
+        foreach ($vars as $variation) {
+            if ($variation['type'] === 'decrease') {
+                $this->send_price_drop_notification($variation, $opts);
+            }
+        }
+    }
+    
+    private function send_price_drop_notification($variation, $opts) {
         $app_id = $opts['onesignal_app_id'];
         $api_key = $opts['onesignal_api_key'];
         if (!$app_id || !$api_key) return;
-        $title = 'Aggiornamento prezzi carburanti';
-        $msg = count($vars) . ' distributori con variazioni oggi';
+
+        $fuelType = $variation['fuelType'] ?? 'Carburante';
+        $distributorName = $variation['distributorName'] ?? 'Distributore';
+        $oldPrice = $variation['oldPrice'] ?? 0;
+        $newPrice = $variation['newPrice'] ?? 0;
+        $priceDiff = $oldPrice - $newPrice;
+        $percentageDiff = $oldPrice > 0 ? (($priceDiff / $oldPrice) * 100) : 0;
+
+        $title = "💰 Prezzo $fuelType sceso!";
+        $message = "$distributorName: $fuelType da €" . number_format($oldPrice, 3) . " a €" . number_format($newPrice, 3) . " (-" . number_format($percentageDiff, 1) . "%)";
+
         $payload = [
             'app_id' => $app_id,
-            'included_segments' => ['All'],
-            'headings' => ['it' => $title],
-            'contents' => ['it' => $msg],
-            'url' => home_url('/'),
-        ];
-        wp_remote_post('https://onesignal.com/api/v1/notifications', [
-            'headers' => [
-                'Content-Type' => 'application/json; charset=utf-8',
-                'Authorization' => 'Basic ' . $api_key,
+            'filters' => [
+                ['field' => 'tag', 'key' => 'price_drop_notifications', 'relation' => '=', 'value' => '1'],
+                ['field' => 'tag', 'key' => 'fuel_type', 'relation' => '=', 'value' => $fuelType]
             ],
-            'body' => wp_json_encode($payload),
-            'timeout' => 20,
+            'headings' => ['it' => $title],
+            'contents' => ['it' => $message],
+            'data' => [
+                'fuelType' => $fuelType,
+                'distributorId' => $variation['distributorId'] ?? '',
+                'oldPrice' => $oldPrice,
+                'newPrice' => $newPrice,
+                'priceDiff' => $priceDiff,
+                'percentageDiff' => $percentageDiff
+            ],
+            'url' => home_url('/distributore-' . ($variation['distributorId'] ?? '')),
+        ];
+
+        $response = wp_remote_post('https://onesignal.com/api/v1/notifications', [
+            'headers' => [
+                'Authorization' => 'Basic ' . $api_key, 
+                'Content-Type' => 'application/json'
+            ],
+            'body' => json_encode($payload),
         ]);
+
+        if (is_wp_error($response)) {
+            $this->log_progress('OneSignal error for ' . $fuelType . ': ' . $response->get_error_message());
+        } else {
+            $this->log_progress('Notification sent for ' . $fuelType . ' at ' . $distributorName);
+        }
     }
 }
 
