@@ -20,7 +20,7 @@ export default function NotificationsPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_API_SECRET || 'GqVQvjTbIb9UoDPECzQyQLySZkAdvKk+Xep4YCmzf9HFlnudt703FRH7M7Lnwz3s'}`
+          ...(process.env.NEXT_PUBLIC_API_SECRET ? { 'Authorization': `Bearer ${process.env.NEXT_PUBLIC_API_SECRET}` } : {})
         },
         body: JSON.stringify({
           fuelType: 'Benzina',
