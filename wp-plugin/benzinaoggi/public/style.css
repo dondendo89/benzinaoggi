@@ -19,4 +19,15 @@
 .bo-table th,.bo-table td{border-bottom:1px solid #e2e8f0;padding:8px;text-align:left}
 .bo-badge{display:inline-block;background:#e2e8f0;border-radius:999px;padding:2px 8px;font-size:12px}
 
+/* Loader */
+.bo-loader{position:relative;min-height:80px}
+.bo-loader::before{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.7);backdrop-filter:saturate(120%) blur(1px);display:none;align-items:center;justify-content:center;z-index:20}
+.bo-loader.active::before{display:flex}
+.bo-spinner{width:28px;height:28px;border:3px solid #e2e8f0;border-top-color:#0ea5e9;border-radius:50%;animation:bo-spin .8s linear infinite;margin:0 auto}
+@keyframes bo-spin{to{transform:rotate(360deg)}}
+
+/* Notify button */
+.bo-notify-btn{background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:8px 12px;cursor:pointer}
+.bo-notify-btn:hover{background:#0284c7}
+
 

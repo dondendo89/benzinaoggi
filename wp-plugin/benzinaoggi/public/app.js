@@ -4,6 +4,10 @@
 
   function render(){
     var mapEl = qs('bo_map'); if(!mapEl) return;
+    // Wrap container for loader overlay
+    var wrap = document.querySelector('.benzinaoggi-wrap');
+    if(wrap && !wrap.classList.contains('bo-loader')){ wrap.classList.add('bo-loader'); }
+
     var map = L.map('bo_map').setView([41.8719, 12.5674], 6);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
@@ -39,9 +43,29 @@
       });
     }
 
+    function setLoading(active){
+      var w = document.querySelector('.benzinaoggi-wrap');
+      if(!w) return;
+      if(active){
+        w.classList.add('active');
+        // simple spinner element if not present
+        if(!w.querySelector('.bo-spinner')){
+          var sp = createEl('div','bo-spinner'); sp.setAttribute('aria-label','Loading');
+          // place spinner near map/list area
+          var list = qs('bo_list');
+          if(list && list.parentNode){ list.parentNode.insertBefore(sp, list); }
+          else { w.appendChild(sp); }
+        }
+      } else {
+        w.classList.remove('active');
+        var spn = w.querySelector('.bo-spinner'); if(spn && spn.parentNode) spn.parentNode.removeChild(spn);
+      }
+    }
+
     function fetchData(){
       var api = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
       if(!api){ return; }
+      setLoading(true);
       var city = (qs('bo_city') && qs('bo_city').value) || '';
       var fuel = (qs('bo_fuel') && qs('bo_fuel').value) || '';
       var brand = (qs('bo_brand') && qs('bo_brand').value) || '';
@@ -91,7 +115,8 @@
             window.location.href = url;
           });
         });
-      }).catch(function(err){ console.error(err); });
+      }).catch(function(err){ console.error(err); })
+      .finally(function(){ setLoading(false); });
     }
 
     function renderDetail(data){
@@ -134,14 +159,34 @@
     qs('bo_search') && qs('bo_search').addEventListener('click', function(){ fetchData(); });
     fetchData();
 
-    // OneSignal web SDK bootstrap (optional)
-    if(window.BenzinaOggi && BenzinaOggi.onesignalAppId){
+    // OneSignal: add a single unified subscribe button in plugin UI
+    (function addNotifyButton(){
+      // remove any pre-existing custom buttons
+      var old = document.getElementById('bo_notify_btn'); if(old && old.parentNode) old.parentNode.removeChild(old);
+      if(!(window.BenzinaOggi && BenzinaOggi.onesignalAppId)) return;
+      // ensure OneSignal array exists; actual SDK inclusion is handled by WP/plugin
       window.OneSignal = window.OneSignal || [];
-      OneSignal.push(function() { OneSignal.init({ appId: BenzinaOggi.onesignalAppId }); });
-      var btn = createEl('button'); btn.textContent = 'Attiva notifiche price-change';
-      btn.onclick = function(){ OneSignal.push(function(){ OneSignal.registerForPushNotifications(); }); };
-      var sub = qs('bo_subscribe'); if(sub){ sub.appendChild(btn); }
-    }
+      var container = document.getElementById('bo_subscribe') || document.querySelector('.benzinaoggi-wrap');
+      if(!container) return;
+      var btn = createEl('button');
+      btn.id = 'bo_notify_btn';
+      btn.className = 'bo-notify-btn';
+      btn.type = 'button';
+      btn.textContent = '🔔 Attiva notifiche';
+      btn.addEventListener('click', function(){
+        try {
+          OneSignal.push(function(){
+            // Prefer native prompt; fallback to registerForPushNotifications
+            if (OneSignal.showNativePrompt) {
+              OneSignal.showNativePrompt();
+            } else if (OneSignal.registerForPushNotifications) {
+              OneSignal.registerForPushNotifications();
+            }
+          });
+        } catch(e){ console.warn('OneSignal prompt error', e); }
+      });
+      container.appendChild(btn);
+    })();
   }
 
     if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render); else render();
