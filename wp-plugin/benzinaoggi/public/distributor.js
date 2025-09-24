@@ -31,16 +31,28 @@
     actions.appendChild(distNotifWrap);
 
     var pricesCard = createEl('div','bo-card');
-    pricesCard.innerHTML = '<h3>Prezzi</h3><p style="font-size: 0.9em; color: #666; margin-bottom: 1em;">💡 <strong>Notifiche:</strong> Abilita le notifiche del browser per ricevere avvisi quando i prezzi scendono. Clicca su "quando scende" per ogni carburante.</p>';
+    var dayTxt = data.day ? new Date(data.day).toLocaleDateString() : '';
+    var prevTxt = data.previousDay ? new Date(data.previousDay).toLocaleDateString() : null;
+    var subtitle = dayTxt ? ('<div style="margin-top:-6px; color:#666; font-size:0.9em;">Aggiornato al ' + dayTxt + (prevTxt ? ' (confronto con ' + prevTxt + ')' : '') + '</div>') : '';
+    pricesCard.innerHTML = '<h3>Prezzi</h3>' + subtitle + '<p style="font-size: 0.9em; color: #666; margin-bottom: 1em;">💡 <strong>Notifiche:</strong> Abilita le notifiche del browser per ricevere avvisi quando i prezzi scendono. Clicca su "quando scende" per ogni carburante.</p>';
     var table = createEl('table','bo-table');
-    table.innerHTML = '<thead><tr><th>Carburante</th><th>Prezzo</th><th>Servizio</th><th>Notifica</th></tr></thead><tbody></tbody>';
+    table.innerHTML = '<thead><tr><th>Carburante</th><th>Prezzo</th><th>Servizio</th><th>Variazione</th><th>Notifica</th></tr></thead><tbody></tbody>';
     var tbody = table.querySelector('tbody');
     (data.prices||[]).forEach(function(p){
       var tr = createEl('tr');
       var id='notif_'+p.fuelType.replace(/[^a-z0-9]/gi,'_');
+      var arrow = '';
+      var deltaTxt = '';
+      if (typeof p.delta === 'number' && p.variation) {
+        if (p.variation === 'down') { arrow = '⬇️'; }
+        else if (p.variation === 'up') { arrow = '⬆️'; }
+        else { arrow = '⟷'; }
+        deltaTxt = (p.delta > 0 ? '+' : '') + fmt(Math.abs(p.delta));
+      }
       tr.innerHTML = '<td><span class="bo-badge">'+p.fuelType+'</span></td>'+
         '<td>'+fmt(p.price)+'</td>'+
         '<td>'+(p.isSelfService ? 'Self' : 'Servito')+'</td>'+
+        '<td>'+(arrow ? (arrow+' '+deltaTxt) : '-')+'</td>'+
         '<td><label><input type="checkbox" id="'+id+'" data-fuel="'+p.fuelType+'"/> <span class="notif-label">quando scende</span> <span class="notif-status" style="display:none; color: #28a745; font-size: 0.9em;">✓ Attivato</span></label></td>';
       tbody.appendChild(tr);
     });
