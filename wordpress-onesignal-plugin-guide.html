@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Guida Plugin OneSignal per WordPress</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .step { background: #f4f4f4; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .code { background: #2d3748; color: #e2e8f0; padding: 10px; border-radius: 5px; font-family: monospace; }
+        .warning { background: #fed7d7; border-left: 4px solid #e53e3e; padding: 10px; margin: 10px 0; }
+        .success { background: #c6f6d5; border-left: 4px solid #38a169; padding: 10px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Guida Completa: Plugin OneSignal per WordPress</h1>
+    
+    <div class="success">
+        <h2>✅ Vantaggi del Plugin Ufficiale:</h2>
+        <ul>
+            <li><strong>Configurazione automatica</strong> del Service Worker</li>
+            <li><strong>Nessun errore 404</strong> - tutto gestito automaticamente</li>
+            <li><strong>Interfaccia WordPress</strong> familiare e intuitiva</li>
+            <li><strong>Aggiornamenti automatici</strong> e supporto ufficiale</li>
+            <li><strong>Compatibilità garantita</strong> con WordPress</li>
+        </ul>
+    </div>
+
+    <h2>📋 Passo 1: Installazione del Plugin</h2>
+    <div class="step">
+        <h3>Metodo 1: Dal Pannello WordPress</h3>
+        <ol>
+            <li>Accedi al <strong>pannello amministrativo WordPress</strong></li>
+            <li>Vai su <strong>"Plugin" → "Aggiungi nuovo"</strong></li>
+            <li>Cerca <strong>"OneSignal – Web Push Notifications"</strong></li>
+            <li>Clicca <strong>"Installa ora"</strong> e poi <strong>"Attiva"</strong></li>
+        </ol>
+    </div>
+
+    <div class="step">
+        <h3>Metodo 2: Upload Manuale</h3>
+        <ol>
+            <li>Scarica il plugin da <a href="https://wordpress.org/plugins/onesignal-free-web-push-notifications/">WordPress.org</a></li>
+            <li>Vai su <strong>"Plugin" → "Aggiungi nuovo" → "Carica plugin"</strong></li>
+            <li>Carica il file ZIP e attiva</li>
+        </ol>
+    </div>
+
+    <h2>⚙️ Passo 2: Configurazione OneSignal Dashboard</h2>
+    <div class="step">
+        <h3>2.1 Crea Account OneSignal</h3>
+        <ol>
+            <li>Vai su <a href="https://onesignal.com">OneSignal.com</a></li>
+            <li>Crea un account gratuito</li>
+            <li>Crea una nuova app per il tuo sito WordPress</li>
+        </ol>
+    </div>
+
+    <div class="step">
+        <h3>2.2 Ottieni le Chiavi API</h3>
+        <ol>
+            <li>Nella dashboard OneSignal, vai su <strong>"Settings" → "Keys & IDs"</strong></li>
+            <li>Copia <strong>"OneSignal App ID"</strong></li>
+            <li>Copia <strong>"REST API Key"</strong></li>
+        </ol>
+    </div>
+
+    <h2>🔧 Passo 3: Configurazione Plugin WordPress</h2>
+    <div class="step">
+        <h3>3.1 Configurazione Base</h3>
+        <ol>
+            <li>Nel pannello WordPress, vai su <strong>"OneSignal Push"</strong></li>
+            <li>Inserisci l'<strong>App ID</strong> di OneSignal</li>
+            <li>Inserisci la <strong>REST API Key</strong></li>
+            <li>Salva le impostazioni</li>
+        </ol>
+    </div>
+
+    <div class="step">
+        <h3>3.2 Configurazione Avanzata</h3>
+        <div class="code">
+            <strong>Impostazioni Raccomandate:</strong><br>
+            ✅ Auto-register: Abilitato<br>
+            ✅ Prompt personalizzato: Configura<br>
+            ✅ Notifiche automatiche: Abilita per nuovi post<br>
+            ✅ HTTPS: Obbligatorio<br>
+            ✅ Service Worker: Gestito automaticamente dal plugin
+        </div>
+    </div>
+
+    <h2>🔗 Passo 4: Integrazione con l'API</h2>
+    <div class="step">
+        <h3>4.1 Aggiorna le Variabili d'Ambiente</h3>
+        <div class="code">
+            # Nel file .env.local del progetto Next.js<br>
+            ONESIGNAL_APP_ID="fbcac040-1f81-466f-bf58-238a594af041"<br>
+            ONESIGNAL_API_KEY="[NUOVA_REST_API_KEY_DAL_PLUGIN]"
+        </div>
+    </div>
+
+    <div class="step">
+        <h3>4.2 Test dell'Integrazione</h3>
+        <div class="code">
+            # Test endpoint con le nuove credenziali<br>
+            curl -X POST http://localhost:3000/api/send-notification \<br>
+            -H "Authorization: Bearer GqVQvjTbIb9UoDPECzQyQLySZkAdvKk+Xep4YCmzf9HFlnudt703FRH7M7Lnwz3s" \<br>
+            -H "Content-Type: application/json" \<br>
+            -d '{"fuelType":"Benzina","distributorId":"1001","oldPrice":1.500,"newPrice":1.450,"distributorName":"Test"}'
+        </div>
+    </div>
+
+    <h2>🎯 Passo 5: Configurazione Specifica per BenzinaOggi</h2>
+    <div class="step">
+        <h3>5.1 Impostazioni Notifiche Carburante</h3>
+        <div class="code">
+            <strong>Nel plugin OneSignal WordPress:</strong><br>
+            • Segmenti: Crea segmenti per tipo carburante (Benzina, Diesel, GPL)<br>
+            • Tag: Aggiungi tag per distributori<br>
+            • Template: Personalizza messaggi per cali prezzi<br>
+            • Timing: Configura quando inviare notifiche
+        </div>
+    </div>
+
+    <div class="step">
+        <h3>5.2 Integrazione con l'API Next.js</h3>
+        <div class="code">
+            <strong>L'API Next.js invierà notifiche a:</strong><br>
+            • Tutti gli utenti iscritti (broadcast)<br>
+            • Utenti con tag specifici (distributore, carburante)<br>
+            • Segmenti personalizzati (area geografica, preferenze)
+        </div>
+    </div>
+
+    <h2>🚨 Risoluzione Problemi</h2>
+    <div class="warning">
+        <h3>❌ Problemi Comuni:</h3>
+        <ul>
+            <li><strong>Service Worker 404:</strong> Risolto automaticamente dal plugin</li>
+            <li><strong>HTTPS richiesto:</strong> Assicurati che il sito usi HTTPS</li>
+            <li><strong>Permessi browser:</strong> Gli utenti devono accettare le notifiche</li>
+            <li><strong>API Key errata:</strong> Verifica le credenziali nel plugin</li>
+        </ul>
+    </div>
+
+    <div class="success">
+        <h3>✅ Vantaggi del Plugin vs Configurazione Manuale:</h3>
+        <ul>
+            <li><strong>Zero errori 404</strong> - Service Worker gestito automaticamente</li>
+            <li><strong>Configurazione guidata</strong> - Interfaccia WordPress familiare</li>
+            <li><strong>Aggiornamenti automatici</strong> - Sempre aggiornato</li>
+            <li><strong>Supporto ufficiale</strong> - Documentazione e community</li>
+            <li><strong>Compatibilità garantita</strong> - Testato con WordPress</li>
+        </ul>
+    </div>
+
+    <h2>📞 Supporto</h2>
+    <div class="step">
+        <h3>Risorse Utili:</h3>
+        <ul>
+            <li><a href="https://wordpress.org/plugins/onesignal-free-web-push-notifications/">Plugin WordPress</a></li>
+            <li><a href="https://documentation.onesignal.com/docs/wordpress-sdk">Documentazione OneSignal</a></li>
+            <li><a href="https://onesignal.com/blog/wordpress-6-0-push-notifications/">Guida WordPress 6.0</a></li>
+        </ul>
+    </div>
+
+    <div class="success">
+        <h2>🎉 Risultato Finale:</h2>
+        <p>Con il plugin OneSignal per WordPress, avrai:</p>
+        <ul>
+            <li>✅ <strong>Nessun errore Service Worker 404</strong></li>
+            <li>✅ <strong>Configurazione automatica</strong> di tutto il necessario</li>
+            <li>✅ <strong>Interfaccia WordPress</strong> per gestire le notifiche</li>
+            <li>✅ <strong>Integrazione perfetta</strong> con l'API Next.js</li>
+            <li>✅ <strong>Notifiche push funzionanti</strong> per cali prezzi carburante</li>
+        </ul>
+    </div>
+</body>
+</html>

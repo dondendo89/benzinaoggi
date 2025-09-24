@@ -12,6 +12,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Check OneSignal configuration
+    if (!process.env.ONESIGNAL_APP_ID || !process.env.ONESIGNAL_API_KEY) {
+      console.error('OneSignal configuration missing:', {
+        appId: !!process.env.ONESIGNAL_APP_ID,
+        apiKey: !!process.env.ONESIGNAL_API_KEY
+      });
+      return NextResponse.json(
+        { ok: false, error: "OneSignal not configured" },
+        { status: 500 }
+      );
+    }
+
     // Check if price actually decreased
     if (newPrice >= oldPrice) {
       return NextResponse.json(
@@ -61,9 +73,13 @@ export async function POST(req: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OneSignal API error:', errorText);
+      console.error('OneSignal API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText
+      });
       return NextResponse.json(
-        { ok: false, error: "Failed to send notification" },
+        { ok: false, error: `OneSignal API error: ${response.status} - ${errorText}` },
         { status: 500 }
       );
     }

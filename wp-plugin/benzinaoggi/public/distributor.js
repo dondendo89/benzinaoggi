@@ -24,7 +24,7 @@
     }
 
     var pricesCard = createEl('div','bo-card');
-    pricesCard.innerHTML = '<h3>Prezzi</h3><p style="font-size: 0.9em; color: #666; margin-bottom: 1em;">💡 <strong>Notifiche:</strong> Abilita le notifiche del browser per ricevere avvisi quando i prezzi scendono. Clicca su "quando scende" per ogni carburante.</p>';
+    pricesCard.innerHTML = '<h3>Prezzi</h3><p style="font-size: 0.9em; color: #666; margin-bottom: 1em;">💡 <strong>Notifiche:</strong> Abilita le notifiche del browser per ricevere avvisi quando i prezzi scendono. Clicca su "quando scende" per ogni carburante.</p><button id="bo-manual-notifications" style="background: #007cba; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-bottom: 1em;">🔔 Abilita Notifiche</button>';
     var table = createEl('table','bo-table');
     table.innerHTML = '<thead><tr><th>Carburante</th><th>Prezzo</th><th>Servizio</th><th>Notifica</th></tr></thead><tbody></tbody>';
     var tbody = table.querySelector('tbody');
@@ -48,6 +48,15 @@
     var useOneSignal = window.BenzinaOggi && BenzinaOggi.onesignalAppId && window.OneSignal;
     var useBrowserNotifications = !useOneSignal && 'Notification' in window;
     
+    console.log('OneSignal check:', {
+      hasBenzinaOggi: !!window.BenzinaOggi,
+      hasAppId: !!(window.BenzinaOggi && BenzinaOggi.onesignalAppId),
+      hasOneSignal: !!window.OneSignal,
+      appId: window.BenzinaOggi ? BenzinaOggi.onesignalAppId : 'undefined',
+      useOneSignal: useOneSignal,
+      useBrowserNotifications: useBrowserNotifications
+    });
+    
     if(useOneSignal){
       // Initialize OneSignal with better error handling
       var initOneSignal = function() {
@@ -56,7 +65,7 @@
             window.OneSignal.init({ 
               appId: BenzinaOggi.onesignalAppId,
               allowLocalhostAsSecureOrigin: true,
-              autoRegister: false,
+              autoRegister: true,
               notifyButton: {
                 enable: false
               },
@@ -64,7 +73,7 @@
               promptOptions: {
                 slidedown: {
                   enabled: true,
-                  autoPrompt: false,
+                  autoPrompt: true,
                   timeDelay: 0,
                   pageViews: 1,
                   actionMessage: "Ricevi notifiche sui prezzi carburanti",
@@ -73,6 +82,23 @@
                 }
               }
             });
+            
+            // Force prompt after initialization if needed
+            setTimeout(function() {
+              window.OneSignal.isPushNotificationsEnabled().then(function(isEnabled) {
+                console.log('Push notifications enabled:', isEnabled);
+                if (!isEnabled) {
+                  console.log('Notifications not enabled, showing prompt...');
+                  window.OneSignal.showNativePrompt().then(function() {
+                    console.log('Native prompt shown');
+                  }).catch(function(err) {
+                    console.error('Error showing native prompt:', err);
+                  });
+                }
+              }).catch(function(err) {
+                console.error('Error checking notification status:', err);
+              });
+            }, 2000);
             window.OneSignal.initialized = true;
             console.log('OneSignal initialized successfully');
           } catch (err) {
@@ -134,6 +160,38 @@
       // Start checking after OneSignal is initialized
       setTimeout(waitForOneSignal, 2000);
       
+      // Add manual notification button handler
+      var manualBtn = wrap.querySelector('#bo-manual-notifications');
+      if (manualBtn) {
+        manualBtn.addEventListener('click', function() {
+          console.log('Manual notification button clicked');
+          if (window.OneSignal) {
+            window.OneSignal.showNativePrompt().then(function() {
+              console.log('Manual prompt shown');
+              manualBtn.textContent = '✅ Notifiche Abilitate';
+              manualBtn.style.background = '#28a745';
+            }).catch(function(err) {
+              console.error('Error showing manual prompt:', err);
+              manualBtn.textContent = '❌ Errore';
+              manualBtn.style.background = '#dc3545';
+            });
+          } else if ('Notification' in window) {
+            Notification.requestPermission().then(function(permission) {
+              if (permission === 'granted') {
+                manualBtn.textContent = '✅ Notifiche Abilitate';
+                manualBtn.style.background = '#28a745';
+              } else {
+                manualBtn.textContent = '❌ Negato';
+                manualBtn.style.background = '#dc3545';
+              }
+            });
+          } else {
+            manualBtn.textContent = '❌ Non Supportato';
+            manualBtn.style.background = '#dc3545';
+          }
+        });
+      }
+      
       qsa('input[type=checkbox][data-fuel]', wrap).forEach(function(cb){
         cb.addEventListener('change', function(){
           var fuel = this.getAttribute('data-fuel');
@@ -141,31 +199,95 @@
           var statusEl = this.parentNode.querySelector('.notif-status');
           var labelEl = this.parentNode.querySelector('.notif-label');
           
+          console.log('Checkbox changed for fuel:', fuel, 'Element:', this);
+          
           var setTag = function() {
-            if (window.OneSignal && window.OneSignal.sendTag) {
+            if (window.OneSignal && (window.OneSignal.sendTags || window.OneSignal.sendTag)) {
               try {
-                // Set multiple tags for better targeting
-                var tags = {
-                  'price_drop_notifications': '1',
-                  'fuel_type': fuel,
-                  'notify_' + fuel.toLowerCase().replace(/\s+/g, '_'): '1'
-                };
-                
-                window.OneSignal.sendTags(tags).then(function() {
-                  console.log('Tags set successfully for fuel:', fuel);
+                // Validate fuel type
+                if (!fuel || fuel.trim() === '') {
+                  console.error('Invalid fuel type:', fuel);
                   if(statusEl) {
-                    statusEl.textContent = '✓ Attivato per ' + fuel;
+                    statusEl.textContent = '✗ Errore: Tipo carburante non valido';
                     statusEl.style.display = 'inline';
-                    statusEl.style.color = '#28a745';
+                    statusEl.style.color = '#dc3545';
                   }
+                  return;
+                }
+                
+                // Check if notifications are enabled, if not request permission
+                window.OneSignal.isPushNotificationsEnabled().then(function(isEnabled) {
+                  if (!isEnabled) {
+                    console.log('Notifications not enabled, requesting permission...');
+                    return window.OneSignal.showNativePrompt();
+                  }
+                  return Promise.resolve();
+                }).then(function() {
+                  // Proceed with setting tags
+                  return setTagsAfterPermission();
                 }).catch(function(err) {
-                  console.error('Error setting tags for fuel:', fuel, err);
+                  console.error('Error requesting notification permission:', err);
                   if(statusEl) {
-                    statusEl.textContent = '✗ Errore';
+                    statusEl.textContent = '✗ Errore: Autorizzazione negata';
                     statusEl.style.display = 'inline';
                     statusEl.style.color = '#dc3545';
                   }
                 });
+                
+                function setTagsAfterPermission() {
+                  // Set multiple tags for better targeting
+                  var tags = {
+                    'price_drop_notifications': '1',
+                    'fuel_type': fuel.trim()
+                  };
+                  // Add dynamic tag for specific fuel type
+                  var fuelTag = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
+                  tags[fuelTag] = '1';
+                  
+                  console.log('Sending tags for fuel:', fuel, 'Tags:', tags);
+                  
+                  // Use sendTags if available, otherwise fallback to individual sendTag calls
+                  if (window.OneSignal.sendTags) {
+                    window.OneSignal.sendTags(tags).then(function() {
+                      console.log('Tags set successfully for fuel:', fuel);
+                      if(statusEl) {
+                        statusEl.textContent = '✓ Attivato per ' + fuel;
+                        statusEl.style.display = 'inline';
+                        statusEl.style.color = '#28a745';
+                      }
+                    }).catch(function(err) {
+                      console.error('Error setting tags for fuel:', fuel, err);
+                      if(statusEl) {
+                        statusEl.textContent = '✗ Errore: ' + (err.message || 'Unknown error');
+                        statusEl.style.display = 'inline';
+                        statusEl.style.color = '#dc3545';
+                      }
+                    });
+                  } else {
+                    // Fallback to individual sendTag calls
+                    var promises = [];
+                    for (var key in tags) {
+                      if (tags.hasOwnProperty(key)) {
+                        promises.push(window.OneSignal.sendTag(key, tags[key]));
+                      }
+                    }
+                    Promise.all(promises).then(function() {
+                      console.log('Tags set successfully for fuel:', fuel);
+                      if(statusEl) {
+                        statusEl.textContent = '✓ Attivato per ' + fuel;
+                        statusEl.style.display = 'inline';
+                        statusEl.style.color = '#28a745';
+                      }
+                    }).catch(function(err) {
+                      console.error('Error setting tags for fuel:', fuel, err);
+                      if(statusEl) {
+                        statusEl.textContent = '✗ Errore: ' + (err.message || 'Unknown error');
+                        statusEl.style.display = 'inline';
+                        statusEl.style.color = '#dc3545';
+                      }
+                    });
+                  }
+                }
               } catch (err) {
                 console.error('OneSignal sendTags error:', err);
                 if(statusEl) {

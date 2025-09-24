@@ -3,7 +3,7 @@
     "_postman_id": "3a2d3f2e-9b5a-4f3a-9f2a-3f9a2b5c7d8e",
     "name": "BenzinaOggi API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection per gestire import anagrafica, prezzi e variazioni."
+    "description": "Collection completa per BenzinaOggi API: import anagrafica, prezzi, variazioni, distributori, dettagli e notifiche OneSignal. Include autenticazione Bearer token per endpoint protetti."
   },
   "item": [
     {
@@ -23,7 +23,8 @@
             "update-anagrafica"
           ]
         }
-      }
+      },
+      "description": "Importa tutti i distributori dal CSV MISE. Aggiorna il database con anagrafica completa."
     },
     {
       "name": "List All Distributors",
@@ -42,7 +43,8 @@
             "distributors-all"
           ]
         }
-      }
+      },
+      "description": "Lista tutti i distributori (id, bandiera, comune) per creazione pagine WordPress."
     },
     {
       "name": "Update Prezzi",
@@ -61,7 +63,8 @@
             "update-prezzi"
           ]
         }
-      }
+      },
+      "description": "Importa prezzi carburanti dal CSV MISE. Aggiorna prezzi giornalieri per tutti i distributori."
     },
     {
       "name": "Check Variation",
@@ -80,7 +83,8 @@
             "check-variation"
           ]
         }
-      }
+      },
+      "description": "Controlla variazioni prezzi tra oggi e ieri. Restituisce distributori con cali/aumenti prezzi."
     },
     {
       "name": "List Distributors",
@@ -106,7 +110,8 @@
             { "key": "limit", "value": "{{limit}}", "description": "Numero massimo risultati (default 200)" }
           ]
         }
-      }
+      },
+      "description": "Lista distributori con filtri avanzati (città, carburante, bandiera) e ordinamento (più vicino, più economico)."
     },
     {
       "name": "Distributor Detail",
@@ -124,6 +129,57 @@
             "{{impiantoId}}"
           ]
         }
+      },
+      "description": "Dettagli completi di un distributore specifico con prezzi aggiornati. Usato per pagine WordPress."
+    },
+    {
+      "name": "Send Notification",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fuelType\": \"Benzina\",\n  \"distributorId\": \"1001\",\n  \"oldPrice\": 1.500,\n  \"newPrice\": 1.450,\n  \"distributorName\": \"Esempio Distributore\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/send-notification",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "send-notification"
+          ]
+        },
+        "description": "Invia notifica OneSignal per calo prezzo carburante. Richiede: fuelType, distributorId, oldPrice, newPrice, distributorName"
+      }
+    },
+    {
+      "name": "Test Notification",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fuelType\": \"Benzina\",\n  \"distributorId\": \"1001\",\n  \"oldPrice\": 1.500,\n  \"newPrice\": 1.450,\n  \"distributorName\": \"Test Distributore\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/test-notification",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "test-notification"
+          ]
+        },
+        "description": "Test endpoint per verificare la preparazione delle notifiche senza inviare effettivamente via OneSignal. SOLUZIONE: Usa il plugin ufficiale OneSignal per WordPress per risolvere automaticamente il Service Worker 404"
       }
     }
   ],
@@ -139,7 +195,12 @@
     { "key": "lat", "value": "" },
     { "key": "lon", "value": "" },
     { "key": "limit", "value": "200" },
-    { "key": "impiantoId", "value": "1001" }
+    { "key": "impiantoId", "value": "1001" },
+    { "key": "fuelType", "value": "Benzina" },
+    { "key": "distributorId", "value": "1001" },
+    { "key": "oldPrice", "value": "1.500" },
+    { "key": "newPrice", "value": "1.450" },
+    { "key": "distributorName", "value": "Esempio Distributore" }
   ]
 }
 
