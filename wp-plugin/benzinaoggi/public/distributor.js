@@ -22,6 +22,13 @@
     if(d.latitudine && d.longitudine){
       var a = createEl('a'); a.href = mapsUrl(d.latitudine, d.longitudine); a.target='_blank'; a.rel='noopener'; a.textContent='Apri in Google Maps'; actions.appendChild(a);
     }
+    
+    // Add notification button
+    var notifyBtn = createEl('button');
+    notifyBtn.id = 'bo-enable-notifications';
+    notifyBtn.textContent = '🔔 Abilita Notifiche';
+    notifyBtn.style.cssText = 'background: #007cba; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin: 8px 0;';
+    actions.appendChild(notifyBtn);
 
     // Per-distributor notification opt-in
     var distNotifWrap = createEl('div');
@@ -63,499 +70,245 @@
     wrap.appendChild(pricesCard);
     pricesCard.appendChild(table);
 
-    // OneSignal helpers (work with both v15 and v16)
-    function osExec(cb){
-      try {
-        if (!window.OneSignal) return;
-        // v16: execute immediately; v15: use push queue
-        if (typeof window.OneSignal.push === 'function') { window.OneSignal.push(cb); }
-        else { cb(window.OneSignal); }
-      } catch(e){}
-    }
-    function osIsEnabled(){
-      return new Promise(function(resolve){
-        osExec(function(){
-          if (OneSignal && typeof OneSignal.isPushNotificationsEnabled === 'function') {
-            OneSignal.isPushNotificationsEnabled().then(function(v){ resolve(!!v); }).catch(function(){ resolve(false); });
-          } else { resolve(false); }
-        });
-      });
-    }
-    function osSetTags(tags){
-      return new Promise(function(resolve, reject){
-        try {
-          if (window.OneSignal && OneSignal.User && typeof OneSignal.User.addTags === 'function') {
-            OneSignal.User.addTags(tags).then(resolve).catch(reject);
-          } else if (window.OneSignal && typeof OneSignal.sendTags === 'function') {
-            OneSignal.sendTags(tags).then(resolve).catch(reject);
-          } else if (window.OneSignal && typeof OneSignal.sendTag === 'function') {
-            var ps=[]; Object.keys(tags).forEach(function(k){ ps.push(OneSignal.sendTag(k, tags[k])); });
-            Promise.all(ps).then(resolve).catch(reject);
-          } else {
-            reject(new Error('No tag API available'));
-          }
-        } catch(e){ reject(e); }
-      });
-    }
-    function osDeleteTag(key){
-      return new Promise(function(resolve, reject){
-        try {
-          if (window.OneSignal && OneSignal.User && typeof OneSignal.User.removeTag === 'function') {
-            OneSignal.User.removeTag(key).then(resolve).catch(reject);
-          } else if (window.OneSignal && typeof OneSignal.deleteTag === 'function') {
-            OneSignal.deleteTag(key).then(resolve).catch(reject);
-          } else { reject(new Error('No deleteTag API available')); }
-        } catch(e){ reject(e); }
-      });
-    }
-    function osPrompt(){
-      return new Promise(function(resolve, reject){
-        osExec(async function(){
-          try {
-            var perm = (OneSignal && OneSignal.Notifications && OneSignal.Notifications.permission) || (window.Notification && Notification.permission) || 'default';
-            if (typeof perm === 'function') { try { perm = await OneSignal.Notifications.permission(); } catch(_){} }
-            if (perm === 'granted') { resolve('granted'); return; }
-            if (perm === 'denied') { reject(new Error('permission-denied')); return; }
-
-            if (OneSignal && OneSignal.Notifications && typeof OneSignal.Notifications.requestPermission === 'function') {
-              try {
-                const r = await OneSignal.Notifications.requestPermission();
-                resolve(r);
-                return;
-              } catch (e) { reject(e); return; }
-            }
-            if (OneSignal && typeof OneSignal.showNativePrompt === 'function') {
-              OneSignal.showNativePrompt().then(resolve).catch(reject);
-              return;
-            }
-            if (OneSignal && typeof OneSignal.registerForPushNotifications === 'function') {
-              OneSignal.registerForPushNotifications().then(resolve).catch(reject);
-              return;
-            }
-            if (window.Notification && typeof Notification.requestPermission === 'function') {
-              try {
-                const r2 = await Notification.requestPermission();
-                if (r2 === 'granted') { resolve(r2); } else { reject(new Error(r2)); }
-                return;
-              } catch (e2) { reject(e2); return; }
-            }
-            reject(new Error('Prompt not available'));
-          } catch (e) { reject(e); }
-        });
-      });
-    }
-
-    // Check if OneSignal is available, otherwise use browser notifications
-    var useOneSignal = window.BenzinaOggi && BenzinaOggi.onesignalAppId && window.OneSignal;
-    var useBrowserNotifications = !useOneSignal && 'Notification' in window;
+    // Simple notification system using browser notifications + localStorage
+    var hasNotificationSupport = 'Notification' in window;
+    var permission = hasNotificationSupport ? Notification.permission : 'denied';
     
-    console.log('OneSignal check:', {
-      hasBenzinaOggi: !!window.BenzinaOggi,
-      hasAppId: !!(window.BenzinaOggi && BenzinaOggi.onesignalAppId),
-      hasOneSignal: !!window.OneSignal,
-      appId: window.BenzinaOggi ? BenzinaOggi.onesignalAppId : 'undefined',
-      useOneSignal: useOneSignal,
-      useBrowserNotifications: useBrowserNotifications
-    });
+    console.log('Notification support:', hasNotificationSupport, 'Permission:', permission);
     
-    if(useOneSignal){
-      // Rely on global v16 init done in PHP header; do not re-initialize here
-      
-      // Wait for OneSignal to be completely ready
-      var waitForOneSignal = function() {
-        var readyV16 = !!(window.OneSignal && OneSignal.Notifications && typeof OneSignal.Notifications.requestPermission === 'function');
-        var readyV15 = !!(window.OneSignal && typeof OneSignal.isPushNotificationsEnabled === 'function');
-        if (readyV16 || readyV15) {
-          console.log('OneSignal is ready (', readyV16 ? 'v16' : 'v15', '), checking permissions...');
-          
-          // Use a more reliable method to check permissions
-          try {
-            osIsEnabled().then(function(isEnabled) {
-              console.log('Push notifications enabled:', isEnabled);
-              if (!isEnabled) {
-                // Show message to enable notifications
-                var notifMsg = createEl('div', 'bo-notif-warning');
-                notifMsg.innerHTML = '<p style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 4px; margin: 10px 0; color: #856404;">🔔 <strong>Abilita le notifiche:</strong> Per ricevere avvisi sui prezzi, clicca su "Consenti" quando il browser te lo chiede.</p><button id="bo-enable-notifications" style="background: #007cba; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 5px;">Abilita Notifiche</button>';
-                wrap.insertBefore(notifMsg, wrap.firstChild);
-                
-                var enableBtn = notifMsg.querySelector('#bo-enable-notifications');
-                if (enableBtn) {
-                  enableBtn.addEventListener('click', function() {
-                    try {
-                      osPrompt().then(function() {
-                        console.log('Notification prompt shown');
-                        notifMsg.style.display = 'none';
-                      }).catch(function(err) {
-                        console.error('Error showing notification prompt:', err);
-                      });
-                    } catch (err) {
-                      console.error('Error requesting notifications:', err);
-                    }
-                  });
-                }
-              }
-            }).catch(function(err) {
-              console.error('Error checking push notifications:', err);
-            });
-          } catch (err) {
-            console.error('OneSignal permission check error:', err);
-          }
-        } else {
-          // OneSignal not ready, try again
-          setTimeout(waitForOneSignal, 1000);
+    // Handle notification button
+    var enableBtn = document.getElementById('bo-enable-notifications');
+    if (enableBtn) {
+      enableBtn.addEventListener('click', function() {
+        if (!hasNotificationSupport) {
+          alert('Il tuo browser non supporta le notifiche');
+          return;
         }
-      };
-      
-      // Start checking shortly after page load
-      setTimeout(waitForOneSignal, 1500);
-
-      // Ensure subscribe helper for v16 before setting tags
-      function osEnsureSubscribed(){
-        return new Promise(function(resolve, reject){
-          try {
-            osExec(async function(){
-              try {
-                if (OneSignal && OneSignal.Notifications && OneSignal.User && OneSignal.User.PushSubscription) {
-                  const perm = await OneSignal.Notifications.permission;
-                  if (perm !== 'granted') {
-                    await OneSignal.Notifications.requestPermission();
-                  }
-                  if (OneSignal.User.PushSubscription && OneSignal.User.PushSubscription.optIn) {
-                    try { await OneSignal.User.PushSubscription.optIn(); } catch(_e){}
-                  }
-                  // wait until we have a subscription id
-                  var tries = 0;
-                  while (tries < 10) { // ~5s max
-                    try {
-                      const sid = await (OneSignal.User.PushSubscription.getId ? OneSignal.User.PushSubscription.getId() : OneSignal.User.pushSubscriptionId);
-                      if (sid) break;
-                    } catch(_ee){}
-                    await new Promise(r => setTimeout(r, 500));
-                    tries++;
-                  }
-                  resolve(true);
-                } else {
-                  resolve(true);
-                }
-              } catch (e) { reject(e); }
-            });
-          } catch(e){ reject(e); }
-        });
-      }
-      
-      // Add manual notification button handler
-      var manualBtn = wrap.querySelector('#bo-manual-notifications');
-      if (manualBtn) {
-        manualBtn.addEventListener('click', function() {
-          console.log('Manual notification button clicked');
-        if (window.OneSignal) {
-            osPrompt().then(function() {
-              console.log('Manual prompt shown');
-              manualBtn.textContent = '✅ Notifiche Abilitate';
-              manualBtn.style.background = '#28a745';
-            }).catch(function(err) {
-              console.error('Error showing manual prompt:', err);
-              manualBtn.textContent = '❌ Errore';
-              manualBtn.style.background = '#dc3545';
-            });
-          } else if ('Notification' in window) {
-            Notification.requestPermission().then(function(permission) {
-              if (permission === 'granted') {
-                manualBtn.textContent = '✅ Notifiche Abilitate';
-                manualBtn.style.background = '#28a745';
-              } else {
-                manualBtn.textContent = '❌ Negato';
-                manualBtn.style.background = '#dc3545';
-              }
-            });
-          } else {
-            manualBtn.textContent = '❌ Non Supportato';
-            manualBtn.style.background = '#dc3545';
-          }
-        });
-      }
-      
-      // Handle per-distributor checkbox (notify_distributor_<impiantoId>)
-      try {
-        var distCb = document.getElementById(distChkId);
-        if (distCb && d.impiantoId) {
-          // Sync initial state from existing tags
-          try {
-            osExec(async function(){
-              try {
-                var tagNameInit = 'notify_distributor_' + String(d.impiantoId);
-                var tagsInit = null;
-                if (OneSignal && OneSignal.User && OneSignal.User.getTags) {
-                  tagsInit = await OneSignal.User.getTags();
-                } else if (OneSignal && OneSignal.getTags) {
-                  tagsInit = await OneSignal.getTags();
-                }
-                if (tagsInit && (tagsInit[tagNameInit] === '1' || tagsInit[tagNameInit] === 1)) {
-                  distCb.checked = true;
-                }
-              } catch(_ignore){}
-            });
-          } catch(_e){}
-
-          distCb.addEventListener('change', function(){
-            var tagName = 'notify_distributor_' + String(d.impiantoId);
-            if (this.checked) {
-              var self = this;
-              osIsEnabled().then(function(isEnabled){
-                var ensurePermission = isEnabled ? osEnsureSubscribed() : (osPrompt().then(osEnsureSubscribed));
-                return ensurePermission.then(function(){
-                  return osIsEnabled();
-                }).then(function(enabledAfter){
-                  if (!enabledAfter) {
-                    self.checked = false;
-                    throw new Error('permission-denied');
-                  }
-                  return osSetTags((function(){ var t={}; t[tagName]='1'; if(d&&d.impiantoId){ t['impianto_id']=String(d.impiantoId); } return t; })()).then(async function(){
-                    try {
-                      // verify tag was set; retry once if missing
-                      var ok = false;
-                      if (OneSignal.User && OneSignal.User.getTags) {
-                        var tg = await OneSignal.User.getTags();
-                        ok = tg && (tg[tagName] === '1' || tg[tagName] === 1);
-                      }
-                      if (!ok) {
-                        await osSetTags((function(){ var t={}; t[tagName]='1'; if(d&&d.impiantoId){ t['impianto_id']=String(d.impiantoId); } return t; })());
-                      }
-                    } catch(_v){}
-                    self.checked = true;
-                  });
-                });
-              }).then(function(){
-                console.log('Distributor tag set ok:', tagName);
-              }).catch(function(err){
-                console.warn('Distributor tag opt-in error', err);
-              });
-            } else {
-              osDeleteTag(tagName).catch(function(err){ console.warn('Distributor tag delete error', err); });
-            }
-          });
-        }
-      } catch(e) { console.warn('Distributor checkbox setup error', e); }
-
-      // Pre-sync fuel checkboxes from existing tags (v16 or v15)
-      try {
-        osExec(async function(){
-          try {
-            var tagsInit2 = null;
-            if (OneSignal && OneSignal.User && OneSignal.User.getTags) tagsInit2 = await OneSignal.User.getTags();
-            else if (OneSignal && OneSignal.getTags) tagsInit2 = await OneSignal.getTags();
-            if (tagsInit2) {
-              qsa('input[type=checkbox][data-fuel]', wrap).forEach(function(cbSync){
-                var fSync = cbSync.getAttribute('data-fuel') || '';
-                var norm = fSync.toLowerCase().replace(/\s+/g, '_');
-                var tagFuel = 'notify_' + norm;
-                var combo = (d && d.impiantoId) ? ('notify_distributor_' + String(d.impiantoId) + '_' + norm) : null;
-                if ((tagsInit2[tagFuel] === '1' || tagsInit2[tagFuel] === 1) || (combo && (tagsInit2[combo] === '1' || tagsInit2[combo] === 1))) {
-                  cbSync.checked = true;
-                  var stSync = cbSync.parentNode.querySelector('.notif-status');
-                  if (stSync) { stSync.textContent = '✓ Attivato per ' + fSync; stSync.style.display='inline'; stSync.style.color = '#28a745'; }
-                }
-              });
-            }
-          } catch (_ee) {}
-        });
-      } catch (_e) {}
-
-      qsa('input[type=checkbox][data-fuel]', wrap).forEach(function(cb){
-        cb.addEventListener('change', function(){
-          var fuel = this.getAttribute('data-fuel');
-          var tagKey = 'price_drop_'+fuel;
-          var statusEl = this.parentNode.querySelector('.notif-status');
-          var labelEl = this.parentNode.querySelector('.notif-label');
-          
-          console.log('Checkbox changed for fuel:', fuel, 'Element:', this);
-          
-          var setTag = function() {
-            if (window.OneSignal && (window.OneSignal.sendTags || window.OneSignal.sendTag)) {
-              try {
-                // Validate fuel type
-                if (!fuel || fuel.trim() === '') {
-                  console.error('Invalid fuel type:', fuel);
-                  if(statusEl) {
-                    statusEl.textContent = '✗ Errore: Tipo carburante non valido';
-                    statusEl.style.display = 'inline';
-                    statusEl.style.color = '#dc3545';
-                  }
-                  return;
-                }
-                
-                // Check if notifications are enabled, if not request permission
-                osIsEnabled().then(function(isEnabled) {
-                  var p = isEnabled ? osEnsureSubscribed() : (osPrompt().then(osEnsureSubscribed));
-                  return p.then(function(){ return osIsEnabled(); });
-                }).then(function(enabledAfter){
-                  if (!enabledAfter) { throw new Error('permission-denied'); }
-                  return setTagsAfterPermission();
-                }).catch(function(err) {
-                  console.error('Error requesting notification permission:', err);
-                  if(statusEl) {
-                    statusEl.textContent = '✗ Errore: Autorizzazione negata';
-                    statusEl.style.display = 'inline';
-                    statusEl.style.color = '#dc3545';
-                  }
-                });
-                
-                function setTagsAfterPermission() {
-                  // Set multiple tags for better targeting
-                  var tags = {
-                    'price_drop_notifications': '1',
-                    'fuel_type': fuel.trim()
-                  };
-                  // Add dynamic tag for specific fuel type
-                  var fuelTag = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
-                  tags[fuelTag] = '1';
-                  // Add combined distributor+fuel tag so we can target that exact pair
-                  try {
-                    if (d && d.impiantoId) {
-                      var fuelNorm = fuel.toLowerCase().replace(/\s+/g, '_');
-                      var combo = 'notify_distributor_' + String(d.impiantoId) + '_' + fuelNorm;
-                      tags[combo] = '1';
-                      tags['impianto_id'] = String(d.impiantoId);
-                    }
-                  } catch(_){}
-                  
-                  console.log('Sending tags for fuel:', fuel, 'Tags:', tags);
-                  
-                  osSetTags(tags).then(function(){
-                    console.log('Tags set successfully for fuel:', fuel, tags);
-                    if(statusEl) {
-                      statusEl.textContent = '✓ Attivato per ' + fuel;
-                      statusEl.style.display = 'inline';
-                      statusEl.style.color = '#28a745';
-                    }
-                    cb.checked = true;
-                  }).catch(function(err){
-                    console.error('Error setting tags for fuel:', fuel, err);
-                    if(statusEl) {
-                      statusEl.textContent = '✗ Errore: ' + (err.message || 'Unknown error');
-                      statusEl.style.display = 'inline';
-                      statusEl.style.color = '#dc3545';
-                    }
-                    cb.checked = false;
-                  });
-                }
-              } catch (err) {
-                console.error('OneSignal sendTags error:', err);
-                if(statusEl) {
-                  statusEl.textContent = '✗ Errore';
-                  statusEl.style.display = 'inline';
-                  statusEl.style.color = '#dc3545';
-                }
-              }
-            } else {
-              // OneSignal not ready, try again
-              setTimeout(setTag, 1000);
-            }
-          };
-          
-          var deleteTag = function() {
-            if (window.OneSignal) {
-              try {
-                // Delete specific fuel notification tag
-                var tagToDelete = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
-                osDeleteTag(tagToDelete).then(function(){
-                  console.log('Tag deleted successfully for fuel:', fuel);
-                  if(statusEl) statusEl.style.display = 'none';
-                }).catch(function(err){
-                  console.error('Error deleting tag for fuel:', fuel, err);
-                  if(statusEl) {
-                    statusEl.textContent = '✗ Errore';
-                    statusEl.style.display = 'inline';
-                    statusEl.style.color = '#dc3545';
-                  }
-                });
-                // Delete combined distributor+fuel tag too
-                try {
-                  if (d && d.impiantoId) {
-                    var fuelNorm2 = fuel.toLowerCase().replace(/\s+/g, '_');
-                    var comboDel = 'notify_distributor_' + String(d.impiantoId) + '_' + fuelNorm2;
-                    osDeleteTag(comboDel).catch(function(e){ console.warn('Delete combo tag error', e); });
-                  }
-                } catch(__){}
-              } catch (err) {
-                console.error('OneSignal deleteTag error:', err);
-                if(statusEl) {
-                  statusEl.textContent = '✗ Errore';
-                  statusEl.style.display = 'inline';
-                  statusEl.style.color = '#dc3545';
-                }
-              }
-            } else {
-              // OneSignal not ready, try again
-              setTimeout(deleteTag, 1000);
-            }
-          };
-          
-          if(this.checked){ 
-            setTag();
-          } else { 
-            deleteTag();
-          }
-        });
-      });
-    } else if (useBrowserNotifications) {
-      // Fallback to browser notifications
-      console.log('Using browser notifications as fallback');
-      
-      // Check notification permission
-      if (Notification.permission === 'granted') {
-        console.log('Browser notifications already granted');
-      } else if (Notification.permission === 'default') {
-        // Show message to enable notifications
-        var notifMsg = createEl('div', 'bo-notif-warning');
-        notifMsg.innerHTML = '<p style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 4px; margin: 10px 0; color: #856404;">🔔 <strong>Abilita le notifiche:</strong> Per ricevere avvisi sui prezzi, clicca su "Consenti" quando il browser te lo chiede.</p><button id="bo-enable-notifications" style="background: #007cba; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 5px;">Abilita Notifiche</button>';
-        wrap.insertBefore(notifMsg, wrap.firstChild);
         
-        var enableBtn = notifMsg.querySelector('#bo-enable-notifications');
-        if (enableBtn) {
-          enableBtn.addEventListener('click', function() {
-            Notification.requestPermission().then(function(permission) {
-              if (permission === 'granted') {
-                notifMsg.style.display = 'none';
-                console.log('Browser notifications enabled');
-              }
-            });
-          });
+        if (permission === 'granted') {
+          alert('Le notifiche sono già abilitate!');
+          return;
         }
-      }
-      
-      // Handle checkbox changes for browser notifications
-      qsa('input[type=checkbox][data-fuel]', wrap).forEach(function(cb){
-        cb.addEventListener('change', function(){
-          var fuel = this.getAttribute('data-fuel');
-          var statusEl = this.parentNode.querySelector('.notif-status');
-          
-          if(this.checked){ 
-            if (Notification.permission === 'granted') {
-              if(statusEl) {
-                statusEl.textContent = '✓ Attivato (Browser)';
-                statusEl.style.display = 'inline';
-                statusEl.style.color = '#28a745';
-              }
-              // Store preference in localStorage
-              localStorage.setItem('notify_' + fuel, '1');
-            } else {
-              this.checked = false;
-              alert('Abilita prima le notifiche del browser');
-            }
-          } else { 
-            if(statusEl) statusEl.style.display = 'none';
-            localStorage.removeItem('notify_' + fuel);
+        
+        Notification.requestPermission().then(function(perm) {
+          permission = perm;
+          if (perm === 'granted') {
+            enableBtn.textContent = '✅ Notifiche Abilitate';
+            enableBtn.style.background = '#28a745';
+            console.log('Notifications enabled');
+            
+            // Initialize FCM if available
+            initializeFCM();
+          } else {
+            alert('Notifiche negate. Puoi abilitarle dalle impostazioni del browser.');
           }
         });
       });
-    } else {
-      // No notification support
-      console.log('No notification support available');
-      var notifMsg = createEl('div', 'bo-notif-warning');
-      notifMsg.innerHTML = '<p style="background: #f8d7da; border: 1px solid #f5c6cb; padding: 10px; border-radius: 4px; margin: 10px 0; color: #721c24;">⚠️ <strong>Notifiche non supportate:</strong> Il tuo browser non supporta le notifiche push.</p>';
-      wrap.insertBefore(notifMsg, wrap.firstChild);
     }
+    
+    // Handle distributor checkbox
+    var distCb = document.getElementById(distChkId);
+    if (distCb && d.impiantoId) {
+      // Check localStorage for distributor preference
+      var distKey = 'notify_distributor_' + String(d.impiantoId);
+      var isDistEnabled = localStorage.getItem(distKey) === '1';
+      if (isDistEnabled) {
+        distCb.checked = true;
+      }
+      
+      distCb.addEventListener('change', function() {
+        var distKey = 'notify_distributor_' + String(d.impiantoId);
+        if (this.checked) {
+          if (permission !== 'granted') {
+            alert('Abilita prima le notifiche del browser cliccando il pulsante sopra');
+            this.checked = false;
+            return;
+          }
+          localStorage.setItem(distKey, '1');
+          console.log('Distributor notifications enabled for:', d.impiantoId);
+          
+          // Save preference to server
+          saveNotificationPreference('distributor', d.impiantoId, true);
+        } else {
+          localStorage.removeItem(distKey);
+          console.log('Distributor notifications disabled for:', d.impiantoId);
+          
+          // Remove preference from server
+          saveNotificationPreference('distributor', d.impiantoId, false);
+        }
+      });
+    }
+    
+    // Pre-sync fuel checkboxes from localStorage
+    qsa('input[type=checkbox][data-fuel]', wrap).forEach(function(cbSync){
+      var fSync = cbSync.getAttribute('data-fuel') || '';
+      var storageKey = 'notify_' + fSync.toLowerCase().replace(/\s+/g, '_');
+      var isEnabled = localStorage.getItem(storageKey) === '1';
+      console.log('Checking localStorage for:', fSync, 'key:', storageKey, 'value:', isEnabled);
+      if (isEnabled) {
+        cbSync.checked = true;
+        var stSync = cbSync.parentNode.querySelector('.notif-status');
+        if (stSync) { 
+          stSync.textContent = '✓ Attivato per ' + fSync; 
+          stSync.style.display='inline'; 
+          stSync.style.color = '#28a745'; 
+        }
+      }
+    });
+
+    // Handle fuel checkboxes
+    qsa('input[type=checkbox][data-fuel]', wrap).forEach(function(cb){
+      cb.addEventListener('change', function(){
+        var fuel = this.getAttribute('data-fuel');
+        var statusEl = this.parentNode.querySelector('.notif-status');
+        
+        console.log('Checkbox changed for fuel:', fuel);
+        
+        if(this.checked){ 
+          if (permission !== 'granted') {
+            alert('Abilita prima le notifiche del browser cliccando il pulsante sopra');
+            this.checked = false;
+            return;
+          }
+          
+          var storageKey = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
+          localStorage.setItem(storageKey, '1');
+          console.log('Fuel notifications enabled for:', fuel);
+          
+          // Save preference to server
+          saveNotificationPreference('fuel', fuel, true);
+          
+          if(statusEl) {
+            statusEl.textContent = '✓ Attivato per ' + fuel;
+            statusEl.style.display = 'inline';
+            statusEl.style.color = '#28a745';
+          }
+        } else { 
+          var storageKey = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
+          localStorage.removeItem(storageKey);
+          console.log('Fuel notifications disabled for:', fuel);
+          
+          // Remove preference from server
+          saveNotificationPreference('fuel', fuel, false);
+          
+          if(statusEl) {
+            statusEl.style.display = 'none';
+          }
+        }
+      });
+    });
+  }
+
+  function saveNotificationPreference(type, identifier, enabled) {
+    var base = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
+    if (!base) {
+      console.warn('API base not configured, cannot save preference');
+      return;
+    }
+    
+    var userId = 'user_' + Date.now(); // Simple user ID for demo
+    var preferences = {
+      userId: userId,
+      preferences: {
+        enabled: enabled,
+        type: type,
+        identifier: identifier,
+        timestamp: new Date().toISOString()
+      },
+      fcmToken: getFCMTokenFromStorage() // Get FCM token if available
+    };
+    
+    fetch(base + '/api/notifications/preferences', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(preferences)
+    }).then(function(response) {
+      return response.json();
+    }).then(function(data) {
+      console.log('Preference saved:', data);
+    }).catch(function(error) {
+      console.error('Error saving preference:', error);
+    });
+  }
+
+  function getFCMTokenFromStorage() {
+    return localStorage.getItem('fcm_token') || null;
+  }
+
+  function saveFCMToken(token) {
+    localStorage.setItem('fcm_token', token);
+  }
+
+  function initializeFCM() {
+    // Check if Firebase is available
+    if (typeof firebase === 'undefined') {
+      console.log('Firebase not loaded, using browser notifications only');
+      return;
+    }
+
+    try {
+      // Initialize Firebase Messaging
+      var messaging = firebase.messaging();
+      
+      // Get FCM token
+      messaging.getToken({ vapidKey: 'YOUR_VAPID_KEY' }).then(function(currentToken) {
+        if (currentToken) {
+          console.log('FCM Token:', currentToken);
+          saveFCMToken(currentToken);
+          
+          // Subscribe to price drops topic
+          subscribeToTopic(currentToken, 'price_drops');
+        } else {
+          console.log('No FCM token available');
+        }
+      }).catch(function(err) {
+        console.log('Error getting FCM token:', err);
+      });
+
+      // Handle foreground messages
+      messaging.onMessage(function(payload) {
+        console.log('Message received in foreground:', payload);
+        
+        // Show notification
+        if (payload.notification) {
+          new Notification(payload.notification.title, {
+            body: payload.notification.body,
+            icon: payload.notification.icon || '/favicon.ico',
+            data: payload.data
+          });
+        }
+      });
+
+    } catch (error) {
+      console.error('Error initializing FCM:', error);
+    }
+  }
+
+  function subscribeToTopic(token, topic) {
+    var base = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
+    if (!base) {
+      console.warn('API base not configured, cannot subscribe to topic');
+      return;
+    }
+
+    fetch(base + '/api/notifications/subscribe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        token: token,
+        topic: topic
+      })
+    }).then(function(response) {
+      return response.json();
+    }).then(function(data) {
+      console.log('Subscribed to topic:', topic, data);
+    }).catch(function(error) {
+      console.error('Error subscribing to topic:', error);
+    });
   }
 
   function load(){
@@ -570,4 +323,3 @@
 
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', load); else load();
 })();
-

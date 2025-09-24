@@ -273,6 +273,7 @@ export async function checkVariation() {
   type Variation = {
     distributorId: number;
     impiantoId: number;
+    distributorName: string;
     fuelType: string;
     isSelfService: boolean;
     oldPrice: number;
@@ -290,6 +291,7 @@ export async function checkVariation() {
       variations.push({
         distributorId: p.distributorId,
         impiantoId: distributor.impiantoId,
+        distributorName: distributor.bandiera || distributor.gestore || `Distributore ${distributor.impiantoId}`,
         fuelType: p.fuelType,
         isSelfService: p.isSelfService,
         oldPrice: y.price,

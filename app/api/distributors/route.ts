@@ -40,8 +40,6 @@ export async function GET(req: NextRequest) {
       byDistributor.set(p.distributorId, arr);
     }
 
-    const filtered = distributors;
-
     function haversine(lat1?: number | null, lon1?: number | null, lat2?: number, lon2?: number) {
       if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return undefined;
       const toRad = (v: number) => (v * Math.PI) / 180;
@@ -55,20 +53,39 @@ export async function GET(req: NextRequest) {
       return R * c;
     }
 
-    const enriched = filtered.map(d => {
-      const dPrices = byDistributor.get(d.id) || [];
-      const distance = (userLat != null && userLon != null) ? haversine(d.latitudine, d.longitudine, userLat, userLon) : undefined;
-      return { ...d, prices: dPrices, distance };
+    const mapped = distributors.map((d) => {
+      const distKm = userLat != null && userLon != null ? haversine(d.latitudine, d.longitudine, userLat, userLon) : undefined;
+      const priceList = byDistributor.get(d.id) || [];
+      const cheapestPrice = priceList.length
+        ? (fuel
+            ? priceList.filter((p: any) => p.fuelType === fuel).map((p: any) => p.price).sort((a: number, b: number) => a - b)[0]
+            : priceList.map((p: any) => p.price).sort((a: number, b: number) => a - b)[0])
+        : undefined;
+      return {
+        id: d.id,
+        impiantoId: d.impiantoId,
+        gestore: d.gestore,
+        bandiera: d.bandiera,
+        comune: d.comune,
+        provincia: d.provincia,
+        indirizzo: d.indirizzo,
+        latitudine: d.latitudine,
+        longitudine: d.longitudine,
+        prices: priceList,
+        distanceKm: distKm,
+        cheapestPrice,
+      };
     });
 
-    let result = enriched;
-    if (sort === 'distance' && userLat != null && userLon != null) {
-      result = [...enriched].sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
+    let sorted = mapped;
+    if (sort === 'nearest' && userLat != null && userLon != null) {
+      sorted = [...mapped].sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
+    } else if (sort === 'cheapest') {
+      sorted = [...mapped].sort((a, b) => (a.cheapestPrice ?? Infinity) - (b.cheapestPrice ?? Infinity));
     }
 
-    return NextResponse.json({ ok: true, day, count: result.length, distributors: result });
+    return NextResponse.json({ ok: true, day, count: sorted.length, distributors: sorted });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
   }
 }
-

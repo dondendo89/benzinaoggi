@@ -34,12 +34,7 @@ class BenzinaOggiPlugin {
             }
         });
         
-        // Handle OneSignal Service Worker
-        add_action('init', [$this, 'handle_onesignal_worker']);
-        // Add rewrites to expose SW at root
-        add_action('init', [$this, 'register_sw_rewrites']);
-        register_activation_hook(__FILE__, [$this, 'activate_flush_rewrites']);
-        register_deactivation_hook(__FILE__, [$this, 'deactivate_flush_rewrites']);
+        // FCM will be implemented here
     }
 
     private function log_progress($message) {
@@ -59,13 +54,12 @@ class BenzinaOggiPlugin {
     public function settings_init() {
         register_setting(self::OPTION_GROUP, self::OPTION_NAME);
 
-        add_settings_section('benzinaoggi_section', __('Configurazione API e OneSignal', 'benzinaoggi'), function() {
-            echo '<p>'.esc_html__('Imposta l\'URL base delle API (Vercel) e le credenziali OneSignal.', 'benzinaoggi').'</p>';
+        add_settings_section('benzinaoggi_section', __('Configurazione API e Notifiche', 'benzinaoggi'), function() {
+            echo '<p>'.esc_html__('Imposta l\'URL base delle API (Vercel) e la configurazione Firebase per le notifiche.', 'benzinaoggi').'</p>';
         }, 'benzinaoggi');
 
         add_settings_field('api_base', 'API Base URL', [$this, 'field_api_base'], 'benzinaoggi', 'benzinaoggi_section');
-        add_settings_field('onesignal_app_id', 'OneSignal App ID', [$this, 'field_onesignal_app_id'], 'benzinaoggi', 'benzinaoggi_section');
-        add_settings_field('onesignal_api_key', 'OneSignal REST API Key', [$this, 'field_onesignal_api_key'], 'benzinaoggi', 'benzinaoggi_section');
+        add_settings_field('fcm_config', 'Firebase Config JSON', [$this, 'field_fcm_config'], 'benzinaoggi', 'benzinaoggi_section');
         add_settings_field('webhook_secret', 'Webhook Secret', [$this, 'field_webhook_secret'], 'benzinaoggi', 'benzinaoggi_section');
         add_settings_field('api_secret', 'API Bearer Secret', [$this, 'field_api_secret'], 'benzinaoggi', 'benzinaoggi_section');
 
@@ -75,8 +69,7 @@ class BenzinaOggiPlugin {
     public function get_options() {
         $defaults = [
             'api_base' => '',
-            'onesignal_app_id' => '',
-            'onesignal_api_key' => '',
+            'fcm_config' => '',
             'webhook_secret' => '',
             'api_secret' => ''
         ];
@@ -88,13 +81,10 @@ class BenzinaOggiPlugin {
         $opts = $this->get_options();
         echo '<input type="url" name="'.self::OPTION_NAME.'[api_base]" value="'.esc_attr($opts['api_base']).'" class="regular-text" placeholder="https://your-vercel-app.vercel.app" />';
     }
-    public function field_onesignal_app_id() {
+    public function field_fcm_config() {
         $opts = $this->get_options();
-        echo '<input type="text" name="'.self::OPTION_NAME.'[onesignal_app_id]" value="'.esc_attr($opts['onesignal_app_id']).'" class="regular-text" />';
-    }
-    public function field_onesignal_api_key() {
-        $opts = $this->get_options();
-        echo '<input type="password" name="'.self::OPTION_NAME.'[onesignal_api_key]" value="'.esc_attr($opts['onesignal_api_key']).'" class="regular-text" />';
+        echo '<textarea name="'.self::OPTION_NAME.'[fcm_config]" rows="8" cols="50" class="large-text" placeholder=\'{"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}\'>'.esc_textarea($opts['fcm_config']).'</textarea>';
+        echo '<p class="description">Incolla qui la configurazione Firebase del tuo progetto (Project Settings > General > Your apps > Web app)</p>';
     }
     public function field_webhook_secret() {
         $opts = $this->get_options();
@@ -221,35 +211,7 @@ class BenzinaOggiPlugin {
         return $five;
     }
     
-    public function handle_onesignal_worker() {
-        if (isset($_GET['onesignal_worker']) && $_GET['onesignal_worker'] === '1') {
-            $worker_path = plugin_dir_path(__FILE__) . 'public/OneSignalSDKWorker.js';
-            if (file_exists($worker_path)) {
-                header('Content-Type: application/javascript');
-                header('Cache-Control: public, max-age=31536000');
-                readfile($worker_path);
-                exit;
-            }
-        }
-    }
-
-    public function register_sw_rewrites() {
-        add_rewrite_rule('^OneSignalSDKWorker\.js$', 'index.php?onesignal_sw=1', 'top');
-        add_rewrite_rule('^OneSignalSDKUpdaterWorker\.js$', 'index.php?onesignal_sw_updater=1', 'top');
-        add_filter('query_vars', function($vars){ $vars[]='onesignal_sw'; $vars[]='onesignal_sw_updater'; return $vars; });
-        add_action('template_redirect', function(){
-            if (get_query_var('onesignal_sw')) {
-                header('Content-Type: application/javascript; charset=UTF-8');
-                echo "importScripts('https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js');";
-                exit;
-            }
-            if (get_query_var('onesignal_sw_updater')) {
-                header('Content-Type: application/javascript; charset=UTF-8');
-                echo "importScripts('https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js');";
-                exit;
-            }
-        });
-    }
+    // FCM methods will be implemented here
 
     public function ensure_hourly_variations_cron() {
         if (!wp_next_scheduled('benzinaoggi_check_variations')) {
@@ -259,14 +221,7 @@ class BenzinaOggiPlugin {
         }
     }
 
-    public function activate_flush_rewrites() {
-        $this->register_sw_rewrites();
-        flush_rewrite_rules();
-    }
-
-    public function deactivate_flush_rewrites() {
-        flush_rewrite_rules();
-    }
+    // FCM activation methods will be implemented here
 
     public function register_rest() {
         register_rest_route('benzinaoggi/v1', '/sync', [
@@ -322,25 +277,31 @@ class BenzinaOggiPlugin {
         wp_enqueue_style('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', [], '1.9.4');
         wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', [], '1.9.4', true);
         
-        // OneSignal SDK v16 (only if official plugin NOT active)
+        // Firebase Cloud Messaging (FCM)
         $opts = $this->get_options();
-        if (!$onesignal_official && !empty($opts['onesignal_app_id'])) {
-            $handle = 'onesignal-v16';
-            // enqueue v16 page SDK in header
-            wp_enqueue_script($handle, 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js', [], null, false);
-            // inline init BEFORE the SDK loads using OneSignalDeferred
-            $appId = esc_js($opts['onesignal_app_id']);
-            $init = "(function(){ if (window.OneSignal && window.OneSignal.VERSION && String(window.OneSignal.VERSION).indexOf('16')===0) { return; } window.OneSignalDeferred = window.OneSignalDeferred || []; window.OneSignal = window.OneSignal || {}; window.OneSignalDeferred.push(function(OneSignal){ try { OneSignal.init({ appId: '".$appId."', serviceWorkerPath: '/?onesignal_worker=1', serviceWorkerUpdaterPath: '/?onesignal_worker=1', serviceWorkerScope: '/', allowLocalhostAsSecureOrigin: true }); } catch(e) { console.warn('OneSignal v16 init error', e); } }); })();";
-            wp_add_inline_script($handle, $init, 'before');
+        if (!empty($opts['fcm_config'])) {
+            $fcmConfig = json_decode($opts['fcm_config'], true);
+            if ($fcmConfig) {
+                add_action('wp_head', function() use ($fcmConfig) {
+                    echo '<script>
+                    // Firebase configuration
+                    const firebaseConfig = ' . json_encode($fcmConfig) . ';
+                    </script>
+                    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+                    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
+                    <script>
+                    // Initialize Firebase
+                    firebase.initializeApp(firebaseConfig);
+                    </script>';
+                });
+            }
         }
         // App
         wp_register_script('benzinaoggi-app', plugins_url('public/app.js', __FILE__), ['leaflet'], '1.0.0', true);
         $opts = $this->get_options();
         wp_localize_script('benzinaoggi-app', 'BenzinaOggi', [
             'apiBase' => rtrim($opts['api_base'], '/'),
-            'onesignalAppId' => $opts['onesignal_app_id'],
-            'onesignalOfficial' => $onesignal_official,
-            'useOwnOneSignal' => !$onesignal_official,
+            'fcmConfig' => $opts['fcm_config'],
         ]);
         wp_enqueue_script('benzinaoggi-app');
         wp_enqueue_style('benzinaoggi-style', plugins_url('public/style.css', __FILE__), [], '1.0.0');
@@ -351,13 +312,7 @@ class BenzinaOggiPlugin {
             wp_register_script('benzinaoggi-distributor', plugins_url('public/distributor.js', __FILE__), [], '1.0.1', true);
             wp_localize_script('benzinaoggi-distributor', 'BenzinaOggi', [
                 'apiBase' => rtrim($opts['api_base'], '/'),
-                'onesignalAppId' => $opts['onesignal_app_id'],
-                'onesignalOfficial' => $onesignal_official,
-                'useOwnOneSignal' => !$onesignal_official,
-                'workerPath' => plugins_url('public/OneSignalSDKWorker.js', __FILE__),
-                'workerUpdaterPath' => plugins_url('public/OneSignalSDKUpdaterWorker.js', __FILE__),
-                'rootWorkerPath' => home_url('/OneSignalSDKWorker.js'),
-                'rootWorkerUpdaterPath' => home_url('/OneSignalSDKUpdaterWorker.js')
+                'fcmConfig' => $opts['fcm_config'],
             ]);
             wp_enqueue_script('benzinaoggi-distributor');
         }
@@ -466,60 +421,68 @@ class BenzinaOggiPlugin {
     }
     
     private function send_price_drop_notification($variation, $opts) {
-        $app_id = $opts['onesignal_app_id'];
-        $api_key = $opts['onesignal_api_key'];
-        if (!$app_id || !$api_key) return;
-
+        // Log the variation for debugging
         $fuelType = isset($variation['fuelType']) ? $variation['fuelType'] : 'Carburante';
         $distributorName = isset($variation['distributorName']) ? $variation['distributorName'] : 'Distributore';
         $oldPrice = isset($variation['oldPrice']) ? $variation['oldPrice'] : 0;
         $newPrice = isset($variation['newPrice']) ? $variation['newPrice'] : 0;
+        $direction = isset($variation['direction']) ? $variation['direction'] : 'down';
+        $impiantoId = isset($variation['impiantoId']) ? $variation['impiantoId'] : '';
+        $distributorId = isset($variation['distributorId']) ? $variation['distributorId'] : '';
+        
+        // Only send notifications for price drops
+        if ($direction !== 'down') {
+            $this->log_progress("Skipping notification for $fuelType at $distributorName (price went up)");
+            return;
+        }
+        
         $priceDiff = $oldPrice - $newPrice;
         $percentageDiff = $oldPrice > 0 ? (($priceDiff / $oldPrice) * 100) : 0;
-
+        
         $title = "💰 Prezzo $fuelType sceso!";
         $message = "$distributorName: $fuelType da €" . number_format($oldPrice, 3) . " a €" . number_format($newPrice, 3) . " (-" . number_format($percentageDiff, 1) . "%)";
-
-        // Prefer exact distributor+fuel targeting; fallback to per-distributor or per-fuel
-        $fuel_key_norm = strtolower(str_replace(' ', '_', $fuelType));
-        $dist_fuel_tag = 'notify_distributor_' . (isset($variation['distributorId']) ? $variation['distributorId'] : '') . '_' . $fuel_key_norm;
-
-        $payload = array(
-            'app_id' => $app_id,
-            // Target either specific distributor subscribers or generic fuel-type subscribers
-            'filters' => array(
-                array('field' => 'tag', 'key' => $dist_fuel_tag, 'relation' => '=', 'value' => '1'),
-                array('operator' => 'OR'),
-                array('field' => 'tag', 'key' => 'notify_distributor_' . (isset($variation['distributorId']) ? $variation['distributorId'] : ''), 'relation' => '=', 'value' => '1'),
-                array('operator' => 'OR'),
-                array('field' => 'tag', 'key' => 'price_drop_notifications', 'relation' => '=', 'value' => '1'),
-                array('field' => 'tag', 'key' => 'fuel_type', 'relation' => '=', 'value' => $fuelType)
-            ),
-            'headings' => array('it' => $title),
-            'contents' => array('it' => $message),
-            'data' => array(
-                'fuelType' => $fuelType,
-                'distributorId' => (isset($variation['distributorId']) ? $variation['distributorId'] : ''),
-                'oldPrice' => $oldPrice,
-                'newPrice' => $newPrice,
-                'priceDiff' => $priceDiff,
-                'percentageDiff' => $percentageDiff
-            ),
-            'url' => home_url('/distributore-' . (isset($variation['distributorId']) ? $variation['distributorId'] : ''))
-        );
-
-        $response = wp_remote_post('https://onesignal.com/api/v1/notifications', [
-            'headers' => [
-                'Authorization' => 'Basic ' . $api_key, 
-                'Content-Type' => 'application/json'
-            ],
+        
+        $this->log_progress("Price drop detected: $fuelType at $distributorName - $oldPrice to $newPrice");
+        
+        // Send notification via API
+        $this->send_notification_via_api($variation, $opts);
+    }
+    
+    private function send_notification_via_api($variation, $opts) {
+        $base = rtrim($opts['api_base'], '/');
+        if (!$base) {
+            $this->log_progress('API base not configured, skipping notification');
+            return;
+        }
+        
+        $url = $base . '/api/notifications/send';
+        $payload = [
+            'impiantoId' => $variation['impiantoId'],
+            'distributorId' => $variation['distributorId'],
+            'fuelType' => $variation['fuelType'],
+            'distributorName' => $variation['distributorName'],
+            'oldPrice' => $variation['oldPrice'],
+            'newPrice' => $variation['newPrice'],
+            'direction' => $variation['direction']
+        ];
+        
+        $headers = ['Content-Type' => 'application/json'];
+        if (!empty($opts['api_secret'])) {
+            $headers['Authorization'] = 'Bearer ' . $opts['api_secret'];
+        }
+        
+        $response = wp_remote_post($url, [
+            'headers' => $headers,
             'body' => json_encode($payload),
+            'timeout' => 10
         ]);
-
+        
         if (is_wp_error($response)) {
-            $this->log_progress('OneSignal error for ' . $fuelType . ': ' . $response->get_error_message());
+            $this->log_progress('Notification API error: ' . $response->get_error_message());
         } else {
-            $this->log_progress('Notification sent for ' . $fuelType . ' at ' . $distributorName);
+            $code = wp_remote_retrieve_response_code($response);
+            $body = wp_remote_retrieve_body($response);
+            $this->log_progress("Notification API response ($code): $body");
         }
     }
 }
