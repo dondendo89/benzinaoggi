@@ -107,13 +107,32 @@ export function useOneSignal(appId: string) {
     }
   };
 
+  const sendTags = async (
+    tags: Record<string, string | number | boolean>
+  ) => {
+    try {
+      if (window.OneSignal) {
+        await window.OneSignal.sendTags(tags);
+      }
+    } catch (err) {
+      console.error('Errore invio tags:', err);
+      setError('Errore invio tags');
+    }
+  };
+
+  const sendTag = async (key: string, value: string | number | boolean) => {
+    return sendTags({ [key]: value });
+  };
+
   return {
     user,
     isLoading,
     error,
     subscribe,
     unsubscribe,
-    sendTestNotification
+    sendTestNotification,
+    sendTags,
+    sendTag
   };
 }
 

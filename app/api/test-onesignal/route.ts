@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
         wordpressUrl: hasWordPressUrl,
         appId: process.env.ONESIGNAL_APP_ID ? 'Set' : 'Missing',
         apiKey: process.env.ONESIGNAL_API_KEY ? 'Set' : 'Missing',
-        wordpressUrl: process.env.WORDPRESS_URL || 'Missing'
+        wordpressUrlValue: process.env.WORDPRESS_URL || 'Missing'
       }
     });
 

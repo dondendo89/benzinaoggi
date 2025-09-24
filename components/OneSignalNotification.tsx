@@ -5,11 +5,13 @@ import { useEffect, useState } from 'react';
 interface OneSignalNotificationProps {
   appId: string;
   onSubscriptionChange?: (isSubscribed: boolean) => void;
+  defaultTags?: Record<string, string | number | boolean>;
 }
 
-export default function OneSignalNotification({ 
-  appId, 
-  onSubscriptionChange 
+export default function OneSignalNotification({
+  appId,
+  onSubscriptionChange,
+  defaultTags
 }: OneSignalNotificationProps) {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -54,6 +56,13 @@ export default function OneSignalNotification({
               setIsSubscribed(!!userId);
               setIsLoading(false);
               onSubscriptionChange?.(!!userId);
+
+              // Invia i tag di default se presenti e utente registrato
+              if (userId && defaultTags && Object.keys(defaultTags).length > 0) {
+                window.OneSignal.sendTags(defaultTags).catch((e: any) => {
+                  console.warn('Invio tag OneSignal fallito:', e);
+                });
+              }
             });
 
             // Listener per cambiamenti sottoscrizione
