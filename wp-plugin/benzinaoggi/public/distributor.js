@@ -63,7 +63,7 @@
     wrap.appendChild(pricesCard);
     pricesCard.appendChild(table);
 
-    // OneSignal helpers (work with official plugin too)
+    // OneSignal helpers (work with both v15 and v16)
     function osExec(cb){ try { if (window.OneSignal && window.OneSignal.push) { window.OneSignal.push(cb); } } catch(e){} }
     function osIsEnabled(){
       return new Promise(function(resolve){
@@ -72,6 +72,33 @@
             OneSignal.isPushNotificationsEnabled().then(function(v){ resolve(!!v); }).catch(function(){ resolve(false); });
           } else { resolve(false); }
         });
+      });
+    }
+    function osSetTags(tags){
+      return new Promise(function(resolve, reject){
+        try {
+          if (window.OneSignal && OneSignal.User && typeof OneSignal.User.addTags === 'function') {
+            OneSignal.User.addTags(tags).then(resolve).catch(reject);
+          } else if (window.OneSignal && typeof OneSignal.sendTags === 'function') {
+            OneSignal.sendTags(tags).then(resolve).catch(reject);
+          } else if (window.OneSignal && typeof OneSignal.sendTag === 'function') {
+            var ps=[]; Object.keys(tags).forEach(function(k){ ps.push(OneSignal.sendTag(k, tags[k])); });
+            Promise.all(ps).then(resolve).catch(reject);
+          } else {
+            reject(new Error('No tag API available'));
+          }
+        } catch(e){ reject(e); }
+      });
+    }
+    function osDeleteTag(key){
+      return new Promise(function(resolve, reject){
+        try {
+          if (window.OneSignal && OneSignal.User && typeof OneSignal.User.removeTag === 'function') {
+            OneSignal.User.removeTag(key).then(resolve).catch(reject);
+          } else if (window.OneSignal && typeof OneSignal.deleteTag === 'function') {
+            OneSignal.deleteTag(key).then(resolve).catch(reject);
+          } else { reject(new Error('No deleteTag API available')); }
+        } catch(e){ reject(e); }
       });
     }
     function osPrompt(){
@@ -254,17 +281,12 @@
                   alert('Abilita prima le notifiche dal pulsante OneSignal, poi riattiva questa opzione.');
                   return Promise.reject(new Error('not-enabled'));
                 }
-                if (window.OneSignal && window.OneSignal.sendTag) {
-                  window.OneSignal.sendTag(tagName, '1');
-                  if (d && d.impiantoId) {
-                    try { window.OneSignal.sendTag('impianto_id', String(d.impiantoId)); } catch(_e){}
-                  }
-                }
+                osSetTags((function(){ var t={}; t[tagName]='1'; if(d&&d.impiantoId){ t['impianto_id']=String(d.impiantoId); } return t; })())
+                  .then(function(){ console.log('Distributor tag set ok:', tagName); })
+                  .catch(function(err){ console.error('Distributor tag set failed:', err); });
               }).catch(function(err){ console.warn('Distributor tag opt-in error', err); });
             } else {
-              if (window.OneSignal && window.OneSignal.deleteTag) {
-                window.OneSignal.deleteTag(tagName).catch(function(err){ console.warn('Distributor tag delete error', err); });
-              }
+              osDeleteTag(tagName).catch(function(err){ console.warn('Distributor tag delete error', err); });
             }
           });
         }
@@ -332,47 +354,21 @@
                   
                   console.log('Sending tags for fuel:', fuel, 'Tags:', tags);
                   
-                  // Use sendTags if available, otherwise fallback to individual sendTag calls
-                  if (window.OneSignal.sendTags) {
-                    window.OneSignal.sendTags(tags).then(function() {
-                      console.log('Tags set successfully for fuel:', fuel);
-                      if(statusEl) {
-                        statusEl.textContent = '✓ Attivato per ' + fuel;
-                        statusEl.style.display = 'inline';
-                        statusEl.style.color = '#28a745';
-                      }
-                    }).catch(function(err) {
-                      console.error('Error setting tags for fuel:', fuel, err);
-                      if(statusEl) {
-                        statusEl.textContent = '✗ Errore: ' + (err.message || 'Unknown error');
-                        statusEl.style.display = 'inline';
-                        statusEl.style.color = '#dc3545';
-                      }
-                    });
-                  } else {
-                    // Fallback to individual sendTag calls
-                    var promises = [];
-                    for (var key in tags) {
-                      if (tags.hasOwnProperty(key)) {
-                        promises.push(window.OneSignal.sendTag(key, tags[key]));
-                      }
+                  osSetTags(tags).then(function(){
+                    console.log('Tags set successfully for fuel:', fuel, tags);
+                    if(statusEl) {
+                      statusEl.textContent = '✓ Attivato per ' + fuel;
+                      statusEl.style.display = 'inline';
+                      statusEl.style.color = '#28a745';
                     }
-                    Promise.all(promises).then(function() {
-                      console.log('Tags set successfully for fuel:', fuel);
-                      if(statusEl) {
-                        statusEl.textContent = '✓ Attivato per ' + fuel;
-                        statusEl.style.display = 'inline';
-                        statusEl.style.color = '#28a745';
-                      }
-                    }).catch(function(err) {
-                      console.error('Error setting tags for fuel:', fuel, err);
-                      if(statusEl) {
-                        statusEl.textContent = '✗ Errore: ' + (err.message || 'Unknown error');
-                        statusEl.style.display = 'inline';
-                        statusEl.style.color = '#dc3545';
-                      }
-                    });
-                  }
+                  }).catch(function(err){
+                    console.error('Error setting tags for fuel:', fuel, err);
+                    if(statusEl) {
+                      statusEl.textContent = '✗ Errore: ' + (err.message || 'Unknown error');
+                      statusEl.style.display = 'inline';
+                      statusEl.style.color = '#dc3545';
+                    }
+                  });
                 }
               } catch (err) {
                 console.error('OneSignal sendTags error:', err);
@@ -389,14 +385,14 @@
           };
           
           var deleteTag = function() {
-            if (window.OneSignal && window.OneSignal.deleteTag) {
+            if (window.OneSignal) {
               try {
                 // Delete specific fuel notification tag
                 var tagToDelete = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
-                window.OneSignal.deleteTag(tagToDelete).then(function() {
+                osDeleteTag(tagToDelete).then(function(){
                   console.log('Tag deleted successfully for fuel:', fuel);
                   if(statusEl) statusEl.style.display = 'none';
-                }).catch(function(err) {
+                }).catch(function(err){
                   console.error('Error deleting tag for fuel:', fuel, err);
                   if(statusEl) {
                     statusEl.textContent = '✗ Errore';
@@ -409,7 +405,7 @@
                   if (d && d.impiantoId) {
                     var fuelNorm2 = fuel.toLowerCase().replace(/\s+/g, '_');
                     var comboDel = 'notify_distributor_' + String(d.impiantoId) + '_' + fuelNorm2;
-                    window.OneSignal.deleteTag(comboDel).catch(function(e){ console.warn('Delete combo tag error', e); });
+                    osDeleteTag(comboDel).catch(function(e){ console.warn('Delete combo tag error', e); });
                   }
                 } catch(__){}
               } catch (err) {
