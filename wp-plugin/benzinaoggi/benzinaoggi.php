@@ -38,6 +38,10 @@ class BenzinaOggiPlugin {
         
         // Handle OneSignal Service Worker
         add_action('init', [$this, 'handle_onesignal_worker']);
+        // Add rewrites to expose SW at root
+        add_action('init', [$this, 'register_sw_rewrites']);
+        register_activation_hook(__FILE__, [$this, 'activate_flush_rewrites']);
+        register_deactivation_hook(__FILE__, [$this, 'deactivate_flush_rewrites']);
     }
 
     private function log_progress($message) {
@@ -229,6 +233,33 @@ class BenzinaOggiPlugin {
                 exit;
             }
         }
+    }
+
+    public function register_sw_rewrites() {
+        add_rewrite_rule('^OneSignalSDKWorker\.js$', 'index.php?onesignal_sw=1', 'top');
+        add_rewrite_rule('^OneSignalSDKUpdaterWorker\.js$', 'index.php?onesignal_sw_updater=1', 'top');
+        add_filter('query_vars', function($vars){ $vars[]='onesignal_sw'; $vars[]='onesignal_sw_updater'; return $vars; });
+        add_action('template_redirect', function(){
+            if (get_query_var('onesignal_sw')) {
+                header('Content-Type: application/javascript; charset=UTF-8');
+                echo "importScripts('https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js');";
+                exit;
+            }
+            if (get_query_var('onesignal_sw_updater')) {
+                header('Content-Type: application/javascript; charset=UTF-8');
+                echo "importScripts('https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js');";
+                exit;
+            }
+        });
+    }
+
+    public function activate_flush_rewrites() {
+        $this->register_sw_rewrites();
+        flush_rewrite_rules();
+    }
+
+    public function deactivate_flush_rewrites() {
+        flush_rewrite_rules();
     }
 
     public function register_rest() {
