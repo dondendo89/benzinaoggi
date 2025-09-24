@@ -159,26 +159,12 @@
     qs('bo_search') && qs('bo_search').addEventListener('click', function(){ fetchData(); });
     fetchData();
 
-    // OneSignal: add a single unified subscribe button in plugin UI
+    // OneSignal: add a single unified subscribe button in plugin UI (use global v16 init from PHP)
     (function addNotifyButton(){
       // remove any pre-existing custom buttons
       var old = document.getElementById('bo_notify_btn'); if(old && old.parentNode) old.parentNode.removeChild(old);
       if(!(window.BenzinaOggi && BenzinaOggi.onesignalAppId)) return;
-      // ensure OneSignal array exists; actual SDK inclusion is handled by WP/plugin
-      window.OneSignal = window.OneSignal || [];
-      // Initialize OneSignal with explicit SW paths that work even without filesystem root write access
-      OneSignal.push(function(){
-        try {
-          OneSignal.init({
-            appId: BenzinaOggi.onesignalAppId,
-            // Force query-based worker to avoid root 404s
-            serviceWorkerPath: '/?onesignal_worker=1',
-            serviceWorkerUpdaterPath: '/?onesignal_worker=1',
-            serviceWorkerScope: '/',
-            allowLocalhostAsSecureOrigin: true
-          });
-        } catch(e){ console.warn('OneSignal init error', e); }
-      });
+      // rely on OneSignal v16 already initialized in header
       var container = document.getElementById('bo_subscribe') || document.querySelector('.benzinaoggi-wrap');
       if(!container) return;
       var btn = createEl('button');
@@ -188,14 +174,13 @@
       btn.textContent = '🔔 Attiva notifiche';
       btn.addEventListener('click', function(){
         try {
-          OneSignal.push(function(){
-            // Prefer native prompt; fallback to registerForPushNotifications
-            if (OneSignal.showNativePrompt) {
-              OneSignal.showNativePrompt();
-            } else if (OneSignal.registerForPushNotifications) {
-              OneSignal.registerForPushNotifications();
-            }
-          });
+          if (window.OneSignal && OneSignal.Notifications && OneSignal.Notifications.requestPermission) {
+            OneSignal.Notifications.requestPermission();
+          } else if (window.OneSignal && OneSignal.showNativePrompt) {
+            OneSignal.showNativePrompt();
+          } else if (window.OneSignal && OneSignal.registerForPushNotifications) {
+            OneSignal.registerForPushNotifications();
+          }
         } catch(e){ console.warn('OneSignal prompt error', e); }
       });
       container.appendChild(btn);
@@ -230,5 +215,4 @@
       }
     } catch(e) {}
 })();
-
 

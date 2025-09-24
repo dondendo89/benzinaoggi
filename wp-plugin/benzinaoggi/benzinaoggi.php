@@ -322,25 +322,16 @@ class BenzinaOggiPlugin {
         wp_enqueue_style('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', [], '1.9.4');
         wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', [], '1.9.4', true);
         
-        // OneSignal SDK (only if official plugin NOT active)
+        // OneSignal SDK v16 (only if official plugin NOT active)
         $opts = $this->get_options();
         if (!$onesignal_official && !empty($opts['onesignal_app_id'])) {
-            wp_enqueue_script('onesignal', 'https://cdn.onesignal.com/sdks/OneSignalSDK.js', [], null, true);
-        }
-        
-        // Add OneSignal Service Worker to head
-        if (!$onesignal_official && !empty($opts['onesignal_app_id'])) {
-            add_action('wp_head', function() use ($opts) {
-                $root = home_url('/');
-                $pathQuery = home_url('/?onesignal_worker=1');
-                $appId = esc_js($opts['onesignal_app_id']);
-                echo '<script>'
-                    . 'window.OneSignal = window.OneSignal || [];' 
-                    . 'window.OneSignal.SERVICE_WORKER_PARAM = { scope: "/" };'
-                    . 'window.OneSignal.SERVICE_WORKER_PATH = "' . esc_js($pathQuery) . '";'
-                    . 'window.OneSignal.SERVICE_WORKER_UPDATER_PATH = "' . esc_js($pathQuery) . '";'
-                    . '</script>';
-            });
+            $handle = 'onesignal-v16';
+            // enqueue v16 page SDK in header
+            wp_enqueue_script($handle, 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js', [], null, false);
+            // inline init BEFORE the SDK loads using OneSignalDeferred
+            $appId = esc_js($opts['onesignal_app_id']);
+            $init = "(function(){ if (window.OneSignal && window.OneSignal.VERSION && String(window.OneSignal.VERSION).indexOf('16')===0) { return; } window.OneSignalDeferred = window.OneSignalDeferred || []; window.OneSignal = window.OneSignal || {}; window.OneSignalDeferred.push(function(OneSignal){ try { OneSignal.init({ appId: '".$appId."', serviceWorkerPath: '/?onesignal_worker=1', serviceWorkerUpdaterPath: '/?onesignal_worker=1', serviceWorkerScope: '/', allowLocalhostAsSecureOrigin: true }); } catch(e) { console.warn('OneSignal v16 init error', e); } }); })();";
+            wp_add_inline_script($handle, $init, 'before');
         }
         // App
         wp_register_script('benzinaoggi-app', plugins_url('public/app.js', __FILE__), ['leaflet'], '1.0.0', true);
@@ -534,5 +525,4 @@ class BenzinaOggiPlugin {
 }
 
 new BenzinaOggiPlugin();
-
 

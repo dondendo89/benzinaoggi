@@ -64,7 +64,14 @@
     pricesCard.appendChild(table);
 
     // OneSignal helpers (work with both v15 and v16)
-    function osExec(cb){ try { if (window.OneSignal && window.OneSignal.push) { window.OneSignal.push(cb); } } catch(e){} }
+    function osExec(cb){
+      try {
+        if (!window.OneSignal) return;
+        // v16: execute immediately; v15: use push queue
+        if (typeof window.OneSignal.push === 'function') { window.OneSignal.push(cb); }
+        else { cb(window.OneSignal); }
+      } catch(e){}
+    }
     function osIsEnabled(){
       return new Promise(function(resolve){
         osExec(function(){
@@ -103,12 +110,37 @@
     }
     function osPrompt(){
       return new Promise(function(resolve, reject){
-        osExec(function(){
-          if (OneSignal && typeof OneSignal.showNativePrompt === 'function') {
-            OneSignal.showNativePrompt().then(resolve).catch(reject);
-          } else if (OneSignal && typeof OneSignal.registerForPushNotifications === 'function') {
-            OneSignal.registerForPushNotifications().then(resolve).catch(reject);
-          } else { reject(new Error('Prompt not available')); }
+        osExec(async function(){
+          try {
+            var perm = (OneSignal && OneSignal.Notifications && OneSignal.Notifications.permission) || (window.Notification && Notification.permission) || 'default';
+            if (typeof perm === 'function') { try { perm = await OneSignal.Notifications.permission(); } catch(_){} }
+            if (perm === 'granted') { resolve('granted'); return; }
+            if (perm === 'denied') { reject(new Error('permission-denied')); return; }
+
+            if (OneSignal && OneSignal.Notifications && typeof OneSignal.Notifications.requestPermission === 'function') {
+              try {
+                const r = await OneSignal.Notifications.requestPermission();
+                resolve(r);
+                return;
+              } catch (e) { reject(e); return; }
+            }
+            if (OneSignal && typeof OneSignal.showNativePrompt === 'function') {
+              OneSignal.showNativePrompt().then(resolve).catch(reject);
+              return;
+            }
+            if (OneSignal && typeof OneSignal.registerForPushNotifications === 'function') {
+              OneSignal.registerForPushNotifications().then(resolve).catch(reject);
+              return;
+            }
+            if (window.Notification && typeof Notification.requestPermission === 'function') {
+              try {
+                const r2 = await Notification.requestPermission();
+                if (r2 === 'granted') { resolve(r2); } else { reject(new Error(r2)); }
+                return;
+              } catch (e2) { reject(e2); return; }
+            }
+            reject(new Error('Prompt not available'));
+          } catch (e) { reject(e); }
         });
       });
     }
@@ -127,71 +159,14 @@
     });
     
     if(useOneSignal){
-      // Initialize OneSignal with better error handling
-      var initOneSignal = function() {
-        // If official plugin manages OS, or already initialized, skip
-        if (window.BenzinaOggi && BenzinaOggi.onesignalOfficial) { return; }
-        if (window.OneSignal && (window.OneSignal.initialized || window.OneSignal._initialized)) { return; }
-        if (window.OneSignal && window.OneSignal.init && !window.OneSignal.initialized) {
-          try {
-            // Pre-register SW at /wp-content to avoid root 404s
-            if ('serviceWorker' in navigator) {
-              try {
-                var swPlugin = (window.BenzinaOggi && BenzinaOggi.workerPath) || '/wp-content/plugins/benzinaoggi/public/OneSignalSDKWorker.js';
-                var scopePlugin = '/wp-content/plugins/benzinaoggi/public/';
-                navigator.serviceWorker.register(swPlugin, { scope: scopePlugin })
-                  .then(function(reg){
-                    console.log('Manual SW registered:', reg && reg.scope);
-                    try { window.OneSignal = window.OneSignal || []; window.OneSignal.SERVICE_WORKER_REGISTRATION = reg; } catch(e){}
-                  })
-                .catch(function(err){ console.warn('Manual SW registration failed:', err); });
-              } catch (e) { console.warn('Manual SW registration threw:', e); }
-            }
-            window.OneSignal.init({ 
-              appId: BenzinaOggi.onesignalAppId,
-              allowLocalhostAsSecureOrigin: true,
-              autoRegister: true,
-              notifyButton: {
-                enable: false
-              },
-              // Prefer query route (root scope) for SW paths
-              serviceWorkerPath: '/?onesignal_worker=1',
-              serviceWorkerUpdaterPath: '/?onesignal_worker=1',
-              serviceWorkerScope: '/',
-              serviceWorkerParam: { scope: '/' },
-              promptOptions: {
-                slidedown: {
-                  enabled: true,
-                  autoPrompt: true,
-                  timeDelay: 0,
-                  pageViews: 1,
-                  actionMessage: "Ricevi notifiche sui prezzi carburanti",
-                  acceptButtonText: "Consenti",
-                  cancelButtonText: "Non ora"
-                }
-              }
-            });
-            
-            // Do NOT auto-prompt: prompt must be triggered by a user gesture
-            window.OneSignal.initialized = true;
-            console.log('OneSignal initialized successfully');
-          } catch (err) {
-            console.error('OneSignal initialization error:', err);
-            return;
-          }
-        } else if (!window.OneSignal) {
-          // OneSignal not loaded yet, try again
-          setTimeout(initOneSignal, 500);
-        }
-      };
-      
-      // Start initialization
-      initOneSignal();
+      // Rely on global v16 init done in PHP header; do not re-initialize here
       
       // Wait for OneSignal to be completely ready
       var waitForOneSignal = function() {
-        if (window.OneSignal && window.OneSignal.isPushNotificationsEnabled && window.OneSignal.getNotificationPermission) {
-          console.log('OneSignal is ready, checking permissions...');
+        var readyV16 = !!(window.OneSignal && OneSignal.Notifications && typeof OneSignal.Notifications.requestPermission === 'function');
+        var readyV15 = !!(window.OneSignal && typeof OneSignal.isPushNotificationsEnabled === 'function');
+        if (readyV16 || readyV15) {
+          console.log('OneSignal is ready (', readyV16 ? 'v16' : 'v15', '), checking permissions...');
           
           // Use a more reliable method to check permissions
           try {
@@ -231,15 +206,49 @@
         }
       };
       
-      // Start checking after OneSignal is initialized
-      setTimeout(waitForOneSignal, 2000);
+      // Start checking shortly after page load
+      setTimeout(waitForOneSignal, 1500);
+
+      // Ensure subscribe helper for v16 before setting tags
+      function osEnsureSubscribed(){
+        return new Promise(function(resolve, reject){
+          try {
+            osExec(async function(){
+              try {
+                if (OneSignal && OneSignal.Notifications && OneSignal.User && OneSignal.User.PushSubscription) {
+                  const perm = await OneSignal.Notifications.permission;
+                  if (perm !== 'granted') {
+                    await OneSignal.Notifications.requestPermission();
+                  }
+                  if (OneSignal.User.PushSubscription && OneSignal.User.PushSubscription.optIn) {
+                    try { await OneSignal.User.PushSubscription.optIn(); } catch(_e){}
+                  }
+                  // wait until we have a subscription id
+                  var tries = 0;
+                  while (tries < 10) { // ~5s max
+                    try {
+                      const sid = await (OneSignal.User.PushSubscription.getId ? OneSignal.User.PushSubscription.getId() : OneSignal.User.pushSubscriptionId);
+                      if (sid) break;
+                    } catch(_ee){}
+                    await new Promise(r => setTimeout(r, 500));
+                    tries++;
+                  }
+                  resolve(true);
+                } else {
+                  resolve(true);
+                }
+              } catch (e) { reject(e); }
+            });
+          } catch(e){ reject(e); }
+        });
+      }
       
       // Add manual notification button handler
       var manualBtn = wrap.querySelector('#bo-manual-notifications');
       if (manualBtn) {
         manualBtn.addEventListener('click', function() {
           console.log('Manual notification button clicked');
-          if (window.OneSignal) {
+        if (window.OneSignal) {
             osPrompt().then(function() {
               console.log('Manual prompt shown');
               manualBtn.textContent = '✅ Notifiche Abilitate';
@@ -270,27 +279,87 @@
       try {
         var distCb = document.getElementById(distChkId);
         if (distCb && d.impiantoId) {
+          // Sync initial state from existing tags
+          try {
+            osExec(async function(){
+              try {
+                var tagNameInit = 'notify_distributor_' + String(d.impiantoId);
+                var tagsInit = null;
+                if (OneSignal && OneSignal.User && OneSignal.User.getTags) {
+                  tagsInit = await OneSignal.User.getTags();
+                } else if (OneSignal && OneSignal.getTags) {
+                  tagsInit = await OneSignal.getTags();
+                }
+                if (tagsInit && (tagsInit[tagNameInit] === '1' || tagsInit[tagNameInit] === 1)) {
+                  distCb.checked = true;
+                }
+              } catch(_ignore){}
+            });
+          } catch(_e){}
+
           distCb.addEventListener('change', function(){
             var tagName = 'notify_distributor_' + String(d.impiantoId);
             if (this.checked) {
               var self = this;
               osIsEnabled().then(function(isEnabled){
-                if (!isEnabled) {
-                  console.warn('Notifications not enabled; prompt handled by official plugin.');
-                  self.checked = false;
-                  alert('Abilita prima le notifiche dal pulsante OneSignal, poi riattiva questa opzione.');
-                  return Promise.reject(new Error('not-enabled'));
-                }
-                osSetTags((function(){ var t={}; t[tagName]='1'; if(d&&d.impiantoId){ t['impianto_id']=String(d.impiantoId); } return t; })())
-                  .then(function(){ console.log('Distributor tag set ok:', tagName); })
-                  .catch(function(err){ console.error('Distributor tag set failed:', err); });
-              }).catch(function(err){ console.warn('Distributor tag opt-in error', err); });
+                var ensurePermission = isEnabled ? osEnsureSubscribed() : (osPrompt().then(osEnsureSubscribed));
+                return ensurePermission.then(function(){
+                  return osIsEnabled();
+                }).then(function(enabledAfter){
+                  if (!enabledAfter) {
+                    self.checked = false;
+                    throw new Error('permission-denied');
+                  }
+                  return osSetTags((function(){ var t={}; t[tagName]='1'; if(d&&d.impiantoId){ t['impianto_id']=String(d.impiantoId); } return t; })()).then(async function(){
+                    try {
+                      // verify tag was set; retry once if missing
+                      var ok = false;
+                      if (OneSignal.User && OneSignal.User.getTags) {
+                        var tg = await OneSignal.User.getTags();
+                        ok = tg && (tg[tagName] === '1' || tg[tagName] === 1);
+                      }
+                      if (!ok) {
+                        await osSetTags((function(){ var t={}; t[tagName]='1'; if(d&&d.impiantoId){ t['impianto_id']=String(d.impiantoId); } return t; })());
+                      }
+                    } catch(_v){}
+                    self.checked = true;
+                  });
+                });
+              }).then(function(){
+                console.log('Distributor tag set ok:', tagName);
+              }).catch(function(err){
+                console.warn('Distributor tag opt-in error', err);
+              });
             } else {
               osDeleteTag(tagName).catch(function(err){ console.warn('Distributor tag delete error', err); });
             }
           });
         }
       } catch(e) { console.warn('Distributor checkbox setup error', e); }
+
+      // Pre-sync fuel checkboxes from existing tags (v16 or v15)
+      try {
+        osExec(async function(){
+          try {
+            var tagsInit2 = null;
+            if (OneSignal && OneSignal.User && OneSignal.User.getTags) tagsInit2 = await OneSignal.User.getTags();
+            else if (OneSignal && OneSignal.getTags) tagsInit2 = await OneSignal.getTags();
+            if (tagsInit2) {
+              qsa('input[type=checkbox][data-fuel]', wrap).forEach(function(cbSync){
+                var fSync = cbSync.getAttribute('data-fuel') || '';
+                var norm = fSync.toLowerCase().replace(/\s+/g, '_');
+                var tagFuel = 'notify_' + norm;
+                var combo = (d && d.impiantoId) ? ('notify_distributor_' + String(d.impiantoId) + '_' + norm) : null;
+                if ((tagsInit2[tagFuel] === '1' || tagsInit2[tagFuel] === 1) || (combo && (tagsInit2[combo] === '1' || tagsInit2[combo] === 1))) {
+                  cbSync.checked = true;
+                  var stSync = cbSync.parentNode.querySelector('.notif-status');
+                  if (stSync) { stSync.textContent = '✓ Attivato per ' + fSync; stSync.style.display='inline'; stSync.style.color = '#28a745'; }
+                }
+              });
+            }
+          } catch (_ee) {}
+        });
+      } catch (_e) {}
 
       qsa('input[type=checkbox][data-fuel]', wrap).forEach(function(cb){
         cb.addEventListener('change', function(){
@@ -317,12 +386,10 @@
                 
                 // Check if notifications are enabled, if not request permission
                 osIsEnabled().then(function(isEnabled) {
-                  if (!isEnabled) {
-                    alert('Abilita prima le notifiche dal pulsante OneSignal.');
-                    throw new Error('not-enabled');
-                  }
-                }).then(function() {
-                  // Proceed with setting tags
+                  var p = isEnabled ? osEnsureSubscribed() : (osPrompt().then(osEnsureSubscribed));
+                  return p.then(function(){ return osIsEnabled(); });
+                }).then(function(enabledAfter){
+                  if (!enabledAfter) { throw new Error('permission-denied'); }
                   return setTagsAfterPermission();
                 }).catch(function(err) {
                   console.error('Error requesting notification permission:', err);
@@ -361,6 +428,7 @@
                       statusEl.style.display = 'inline';
                       statusEl.style.color = '#28a745';
                     }
+                    cb.checked = true;
                   }).catch(function(err){
                     console.error('Error setting tags for fuel:', fuel, err);
                     if(statusEl) {
@@ -368,6 +436,7 @@
                       statusEl.style.display = 'inline';
                       statusEl.style.color = '#dc3545';
                     }
+                    cb.checked = false;
                   });
                 }
               } catch (err) {
