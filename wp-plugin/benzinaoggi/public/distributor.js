@@ -256,6 +256,9 @@
                 }
                 if (window.OneSignal && window.OneSignal.sendTag) {
                   window.OneSignal.sendTag(tagName, '1');
+                  if (d && d.impiantoId) {
+                    try { window.OneSignal.sendTag('impianto_id', String(d.impiantoId)); } catch(_e){}
+                  }
                 }
               }).catch(function(err){ console.warn('Distributor tag opt-in error', err); });
             } else {
@@ -323,6 +326,7 @@
                       var fuelNorm = fuel.toLowerCase().replace(/\s+/g, '_');
                       var combo = 'notify_distributor_' + String(d.impiantoId) + '_' + fuelNorm;
                       tags[combo] = '1';
+                      tags['impianto_id'] = String(d.impiantoId);
                     }
                   } catch(_){}
                   
@@ -501,5 +505,4 @@
 
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', load); else load();
 })();
-
 
