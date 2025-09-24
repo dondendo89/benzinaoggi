@@ -21,9 +21,7 @@ class BenzinaOggiPlugin {
         add_action('rest_api_init', [$this, 'register_rest']);
         // Cron hourly to check variations
         add_action('benzinaoggi_check_variations', [$this, 'cron_check_variations']);
-        if (!wp_next_scheduled('benzinaoggi_check_variations')) {
-            wp_schedule_event(time() + 60, 'hourly', 'benzinaoggi_check_variations');
-        }
+        add_action('init', [$this, 'ensure_hourly_variations_cron']);
         // Admin post action for import + page creation
         add_action('admin_post_benzinaoggi_import', [$this, 'handle_import_and_pages']);
         // Single-run cron to sync pages
@@ -253,6 +251,14 @@ class BenzinaOggiPlugin {
         });
     }
 
+    public function ensure_hourly_variations_cron() {
+        if (!wp_next_scheduled('benzinaoggi_check_variations')) {
+            // schedule to the next minute to avoid missed execution on cold start
+            $next = time() + 60;
+            wp_schedule_event($next, 'hourly', 'benzinaoggi_check_variations');
+        }
+    }
+
     public function activate_flush_rewrites() {
         $this->register_sw_rewrites();
         flush_rewrite_rules();
@@ -306,20 +312,34 @@ class BenzinaOggiPlugin {
 
     public function enqueue_assets() {
         if (!is_singular()) return;
+        // detect official OneSignal plugin
+        if (!function_exists('is_plugin_active')) { include_once ABSPATH . 'wp-admin/includes/plugin.php'; }
+        $onesignal_official = false;
+        if (function_exists('is_plugin_active')) {
+            $onesignal_official = is_plugin_active('onesignal-free-web-push-notifications/onesignal.php') || is_plugin_active('onesignal/onesignal.php');
+        }
         // Leaflet
         wp_enqueue_style('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', [], '1.9.4');
         wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', [], '1.9.4', true);
         
-        // OneSignal SDK
+        // OneSignal SDK (only if official plugin NOT active)
         $opts = $this->get_options();
-        if (!empty($opts['onesignal_app_id'])) {
+        if (!$onesignal_official && !empty($opts['onesignal_app_id'])) {
             wp_enqueue_script('onesignal', 'https://cdn.onesignal.com/sdks/OneSignalSDK.js', [], null, true);
         }
         
         // Add OneSignal Service Worker to head
-        if (!empty($opts['onesignal_app_id'])) {
+        if (!$onesignal_official && !empty($opts['onesignal_app_id'])) {
             add_action('wp_head', function() use ($opts) {
-                echo '<script>window.OneSignal = window.OneSignal || [];</script>';
+                $root = home_url('/');
+                $pathQuery = home_url('/?onesignal_worker=1');
+                $appId = esc_js($opts['onesignal_app_id']);
+                echo '<script>'
+                    . 'window.OneSignal = window.OneSignal || [];' 
+                    . 'window.OneSignal.SERVICE_WORKER_PARAM = { scope: "/" };'
+                    . 'window.OneSignal.SERVICE_WORKER_PATH = "' . esc_js($pathQuery) . '";'
+                    . 'window.OneSignal.SERVICE_WORKER_UPDATER_PATH = "' . esc_js($pathQuery) . '";'
+                    . '</script>';
             });
         }
         // App
@@ -328,6 +348,8 @@ class BenzinaOggiPlugin {
         wp_localize_script('benzinaoggi-app', 'BenzinaOggi', [
             'apiBase' => rtrim($opts['api_base'], '/'),
             'onesignalAppId' => $opts['onesignal_app_id'],
+            'onesignalOfficial' => $onesignal_official,
+            'useOwnOneSignal' => !$onesignal_official,
         ]);
         wp_enqueue_script('benzinaoggi-app');
         wp_enqueue_style('benzinaoggi-style', plugins_url('public/style.css', __FILE__), [], '1.0.0');
@@ -335,10 +357,16 @@ class BenzinaOggiPlugin {
         // Distributor detail loader if shortcode present
         global $post;
         if ($post && has_shortcode($post->post_content, 'carburante_distributor')) {
-            wp_register_script('benzinaoggi-distributor', plugins_url('public/distributor.js', __FILE__), [], '1.0.0', true);
+            wp_register_script('benzinaoggi-distributor', plugins_url('public/distributor.js', __FILE__), [], '1.0.1', true);
             wp_localize_script('benzinaoggi-distributor', 'BenzinaOggi', [
                 'apiBase' => rtrim($opts['api_base'], '/'),
                 'onesignalAppId' => $opts['onesignal_app_id'],
+                'onesignalOfficial' => $onesignal_official,
+                'useOwnOneSignal' => !$onesignal_official,
+                'workerPath' => plugins_url('public/OneSignalSDKWorker.js', __FILE__),
+                'workerUpdaterPath' => plugins_url('public/OneSignalSDKUpdaterWorker.js', __FILE__),
+                'rootWorkerPath' => home_url('/OneSignalSDKWorker.js'),
+                'rootWorkerUpdaterPath' => home_url('/OneSignalSDKUpdaterWorker.js')
             ]);
             wp_enqueue_script('benzinaoggi-distributor');
         }
@@ -451,34 +479,43 @@ class BenzinaOggiPlugin {
         $api_key = $opts['onesignal_api_key'];
         if (!$app_id || !$api_key) return;
 
-        $fuelType = $variation['fuelType'] ?? 'Carburante';
-        $distributorName = $variation['distributorName'] ?? 'Distributore';
-        $oldPrice = $variation['oldPrice'] ?? 0;
-        $newPrice = $variation['newPrice'] ?? 0;
+        $fuelType = isset($variation['fuelType']) ? $variation['fuelType'] : 'Carburante';
+        $distributorName = isset($variation['distributorName']) ? $variation['distributorName'] : 'Distributore';
+        $oldPrice = isset($variation['oldPrice']) ? $variation['oldPrice'] : 0;
+        $newPrice = isset($variation['newPrice']) ? $variation['newPrice'] : 0;
         $priceDiff = $oldPrice - $newPrice;
         $percentageDiff = $oldPrice > 0 ? (($priceDiff / $oldPrice) * 100) : 0;
 
         $title = "💰 Prezzo $fuelType sceso!";
         $message = "$distributorName: $fuelType da €" . number_format($oldPrice, 3) . " a €" . number_format($newPrice, 3) . " (-" . number_format($percentageDiff, 1) . "%)";
 
-        $payload = [
+        // Prefer exact distributor+fuel targeting; fallback to per-distributor or per-fuel
+        $fuel_key_norm = strtolower(str_replace(' ', '_', $fuelType));
+        $dist_fuel_tag = 'notify_distributor_' . (isset($variation['distributorId']) ? $variation['distributorId'] : '') . '_' . $fuel_key_norm;
+
+        $payload = array(
             'app_id' => $app_id,
-            'filters' => [
-                ['field' => 'tag', 'key' => 'price_drop_notifications', 'relation' => '=', 'value' => '1'],
-                ['field' => 'tag', 'key' => 'fuel_type', 'relation' => '=', 'value' => $fuelType]
-            ],
-            'headings' => ['it' => $title],
-            'contents' => ['it' => $message],
-            'data' => [
+            // Target either specific distributor subscribers or generic fuel-type subscribers
+            'filters' => array(
+                array('field' => 'tag', 'key' => $dist_fuel_tag, 'relation' => '=', 'value' => '1'),
+                array('operator' => 'OR'),
+                array('field' => 'tag', 'key' => 'notify_distributor_' . (isset($variation['distributorId']) ? $variation['distributorId'] : ''), 'relation' => '=', 'value' => '1'),
+                array('operator' => 'OR'),
+                array('field' => 'tag', 'key' => 'price_drop_notifications', 'relation' => '=', 'value' => '1'),
+                array('field' => 'tag', 'key' => 'fuel_type', 'relation' => '=', 'value' => $fuelType)
+            ),
+            'headings' => array('it' => $title),
+            'contents' => array('it' => $message),
+            'data' => array(
                 'fuelType' => $fuelType,
-                'distributorId' => $variation['distributorId'] ?? '',
+                'distributorId' => (isset($variation['distributorId']) ? $variation['distributorId'] : ''),
                 'oldPrice' => $oldPrice,
                 'newPrice' => $newPrice,
                 'priceDiff' => $priceDiff,
                 'percentageDiff' => $percentageDiff
-            ],
-            'url' => home_url('/distributore-' . ($variation['distributorId'] ?? '')),
-        ];
+            ),
+            'url' => home_url('/distributore-' . (isset($variation['distributorId']) ? $variation['distributorId'] : ''))
+        );
 
         $response = wp_remote_post('https://onesignal.com/api/v1/notifications', [
             'headers' => [

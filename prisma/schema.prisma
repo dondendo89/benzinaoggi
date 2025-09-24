@@ -43,7 +43,7 @@ model Price {
 
   @@index([day])
   @@index([fuelType, day])
-  @@unique([distributorId, fuelType, day, isSelfService])
+  @@unique([distributorId, fuelType, day, isSelfService, price], name: "Price_unique_day_price")
 }
 
 

@@ -166,6 +166,19 @@
       if(!(window.BenzinaOggi && BenzinaOggi.onesignalAppId)) return;
       // ensure OneSignal array exists; actual SDK inclusion is handled by WP/plugin
       window.OneSignal = window.OneSignal || [];
+      // Initialize OneSignal with explicit SW paths that work even without filesystem root write access
+      OneSignal.push(function(){
+        try {
+          OneSignal.init({
+            appId: BenzinaOggi.onesignalAppId,
+            // Force query-based worker to avoid root 404s
+            serviceWorkerPath: '/?onesignal_worker=1',
+            serviceWorkerUpdaterPath: '/?onesignal_worker=1',
+            serviceWorkerScope: '/',
+            allowLocalhostAsSecureOrigin: true
+          });
+        } catch(e){ console.warn('OneSignal init error', e); }
+      });
       var container = document.getElementById('bo_subscribe') || document.querySelector('.benzinaoggi-wrap');
       if(!container) return;
       var btn = createEl('button');
