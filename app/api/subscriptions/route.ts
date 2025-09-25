@@ -9,11 +9,17 @@ export async function GET(req: NextRequest) {
     if (!impiantoId || !fuelType) {
       return NextResponse.json({ ok: false, error: "Missing impiantoId or fuelType" }, { status: 400 });
     }
-    const subs = await (prisma as any).subscription.findMany({
-      where: { impiantoId, fuelType },
-      select: { externalId: true },
-    });
-    return NextResponse.json({ ok: true, externalIds: subs.map((s: { externalId: string }) => s.externalId) });
+    const hasModel = !!(prisma as any).subscription;
+    if (hasModel) {
+      const subs = await (prisma as any).subscription.findMany({
+        where: { impiantoId, fuelType },
+        select: { externalId: true },
+      });
+      return NextResponse.json({ ok: true, externalIds: subs.map((s: { externalId: string }) => s.externalId) });
+    }
+    // Fallback: raw SQL (when generated client lacks Subscription model)
+    const rows = await prisma.$queryRaw<{ externalId: string }[]>`SELECT "externalId" FROM "Subscription" WHERE "impiantoId" = ${impiantoId} AND "fuelType" = ${fuelType} ORDER BY "createdAt" DESC`;
+    return NextResponse.json({ ok: true, externalIds: rows.map(r => r.externalId) });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
   }
@@ -30,15 +36,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Missing externalId|impiantoId|fuelType" }, { status: 400 });
     }
 
+    const hasModel = !!(prisma as any).subscription;
     if (action === "remove") {
-      await (prisma as any).subscription.deleteMany({ where: { externalId, impiantoId, fuelType } });
+      if (hasModel) {
+        await (prisma as any).subscription.deleteMany({ where: { externalId, impiantoId, fuelType } });
+      } else {
+        await prisma.$executeRaw`DELETE FROM "Subscription" WHERE "externalId" = ${externalId} AND "impiantoId" = ${impiantoId} AND "fuelType" = ${fuelType}`;
+      }
       return NextResponse.json({ ok: true, removed: true });
     }
-    await (prisma as any).subscription.upsert({
-      where: { Subscription_unique: { externalId, impiantoId, fuelType } },
-      update: {},
-      create: { externalId, impiantoId, fuelType },
-    });
+    if (hasModel) {
+      await (prisma as any).subscription.upsert({
+        where: { Subscription_unique: { externalId, impiantoId, fuelType } },
+        update: {},
+        create: { externalId, impiantoId, fuelType },
+      });
+    } else {
+      await prisma.$executeRaw`INSERT INTO "Subscription" ("externalId", "impiantoId", "fuelType") VALUES (${externalId}, ${impiantoId}, ${fuelType}) ON CONFLICT ("externalId", "impiantoId", "fuelType") DO NOTHING`;
+    }
     return NextResponse.json({ ok: true, saved: true });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });

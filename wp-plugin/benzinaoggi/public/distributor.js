@@ -542,7 +542,19 @@
                   }
                   return;
                 }
-                
+                // Optimistic UI: mark as enabled and persist locally immediately
+                if(statusEl) {
+                  statusEl.textContent = '✓ Attivazione in corso…';
+                  statusEl.style.display = 'inline';
+                  statusEl.style.color = '#28a745';
+                }
+                cb.checked = true;
+                try {
+                  var normKeyInit = fuel.toLowerCase().replace(/\s+/g, '_');
+                  localStorage.setItem('bo_notify_'+normKeyInit, '1');
+                  if (d && d.impiantoId) { localStorage.setItem('bo_notify_'+String(d.impiantoId)+'_'+normKeyInit, '1'); }
+                } catch(_p0){}
+
                 // Check if notifications are enabled, if not request permission
                 osIsEnabled().then(function(isEnabled) {
                   var p = isEnabled ? osEnsureSubscribed() : (osPrompt().then(osEnsureSubscribed));
@@ -578,13 +590,16 @@
                     }
                   } catch(_){}
                   
-                  // Call backend to persist subscription linked to externalId
+                  // Call backend to persist subscription linked to externalId (do this regardless of tag outcome)
                   try {
                     if (externalId) {
-                      fetch(((window.BenzinaOggi && BenzinaOggi.apiBase) || '') + '/api/subscriptions', {
+                      var apiBase = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
+                      var subUrl = (apiBase || '') + '/api/subscriptions';
+                      if (!apiBase) { console.warn('BenzinaOggi.apiBase non configurato: POST /api/subscriptions potrebbe fallire'); }
+                      fetch(subUrl, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ action: 'add', externalId: externalId, impiantoId: d.impiantoId, fuelType: fuel })
-                      }).catch(function(){});
+                      }).then(function(r){ /* no-op */ }).catch(function(err){ console.warn('Persist subscription failed', err); });
                     }
                   } catch(_c){}
 
@@ -606,21 +621,15 @@
                       statusEl.style.display = 'inline';
                       statusEl.style.color = '#28a745';
                     }
-                    cb.checked = true;
-                    // Persist locally for UX on reload
-                    try {
-                      var normKey = fuel.toLowerCase().replace(/\s+/g, '_');
-                      localStorage.setItem('bo_notify_'+normKey, '1');
-                      if (d && d.impiantoId) { localStorage.setItem('bo_notify_'+String(d.impiantoId)+'_'+normKey, '1'); }
-                    } catch(_p){}
+                    // Already persisted locally optimistically
                   }).catch(function(err){
                     console.error('Error setting tags for fuel:', fuel, err);
+                    // Do not uncheck; keep user preference and rely on externalId targeting
                     if(statusEl) {
-                      statusEl.textContent = '✗ Errore: ' + (err.message || 'Unknown error');
+                      statusEl.textContent = '✓ Attivato (senza tag)';
                       statusEl.style.display = 'inline';
-                      statusEl.style.color = '#dc3545';
+                      statusEl.style.color = '#28a745';
                     }
-                    cb.checked = false;
                   });
                 }
               } catch (err) {
@@ -645,7 +654,9 @@
               // Inform backend remove
               try {
                 if (externalId) {
-                  fetch(((window.BenzinaOggi && BenzinaOggi.apiBase) || '') + '/api/subscriptions', {
+                  var apiBaseR = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
+                  var subUrlR = (apiBaseR || '') + '/api/subscriptions';
+                  fetch(subUrlR, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'remove', externalId: externalId, impiantoId: d.impiantoId, fuelType: fuel })
                   }).catch(function(){});

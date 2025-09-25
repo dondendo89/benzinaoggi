@@ -236,12 +236,12 @@
     }
     ,
     {
-      "name": "User Subscriptions (list by externalId)",
+      "name": "List ExternalIds for impianto+fuel",
       "request": {
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/api/subscriptions?externalId={{externalId}}",
+          "raw": "{{baseUrl}}/api/subscriptions?impiantoId={{impiantoId}}&fuelType={{fuelType}}",
           "host": [
             "{{baseUrl}}"
           ],
@@ -250,11 +250,37 @@
             "subscriptions"
           ],
           "query": [
-            { "key": "externalId", "value": "{{externalId}}" }
+            { "key": "impiantoId", "value": "{{impiantoId}}" },
+            { "key": "fuelType", "value": "{{fuelType}}" }
           ]
         }
       },
-      "description": "Lista le subscription dell'utente per externalId."
+      "description": "Ritorna gli externalId iscritti a (impiantoId, fuelType)."
+    }
+    ,
+    {
+      "name": "User Unsubscribe (remove)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"action\": \"remove\",\n  \"externalId\": \"user-123\",\n  \"impiantoId\": {{impiantoId}},\n  \"fuelType\": \"{{fuelType}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/subscriptions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "subscriptions"
+          ]
+        }
+      },
+      "description": "Rimuove una subscription (externalId + impiantoId + fuelType)."
     }
   ],
   "event": [],
@@ -277,8 +303,7 @@
     { "key": "distributorName", "value": "Esempio Distributore" },
     { "key": "purgeDays", "value": "60" },
     { "key": "purgeHard", "value": "false" },
-    { "key": "take", "value": "100" },
-    { "key": "externalId", "value": "user-123" }
+    { "key": "take", "value": "100" }
   ]
 }
 
