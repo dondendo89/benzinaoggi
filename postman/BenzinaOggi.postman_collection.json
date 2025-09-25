@@ -47,7 +47,7 @@
       "description": "Lista tutti i distributori (id, bandiera, comune) per creazione pagine WordPress."
     },
     {
-      "name": "Update Prezzi",
+      "name": "Update Prezzi (upsert)",
       "request": {
         "method": "GET",
         "header": [
@@ -64,7 +64,7 @@
           ]
         }
       },
-      "description": "Importa prezzi carburanti dal CSV MISE. Aggiorna prezzi giornalieri per tutti i distributori."
+      "description": "Importa prezzi carburanti dal CSV MISE. Inserisce i prezzi mancanti e aggiorna solo quando cambiano (upsert). Se l'impianto non esiste viene creato un Distributor placeholder."
     },
     {
       "name": "Check Variation",
@@ -158,29 +158,29 @@
       }
     },
     {
-      "name": "Test Notification",
+      "name": "Admin Purge Prices",
       "request": {
         "method": "POST",
         "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" },
-          { "key": "Content-Type", "value": "application/json" }
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
         ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"fuelType\": \"Benzina\",\n  \"distributorId\": \"1001\",\n  \"oldPrice\": 1.500,\n  \"newPrice\": 1.450,\n  \"distributorName\": \"Test Distributore\"\n}"
-        },
         "url": {
-          "raw": "{{baseUrl}}/api/test-notification",
+          "raw": "{{baseUrl}}/api/admin/purge-prices?days={{purgeDays}}&hard={{purgeHard}}",
           "host": [
             "{{baseUrl}}"
           ],
           "path": [
             "api",
-            "test-notification"
+            "admin",
+            "purge-prices"
+          ],
+          "query": [
+            { "key": "days", "value": "{{purgeDays}}" },
+            { "key": "hard", "value": "{{purgeHard}}" }
           ]
-        },
-        "description": "Test endpoint per verificare la preparazione delle notifiche senza inviare effettivamente via OneSignal. SOLUZIONE: Usa il plugin ufficiale OneSignal per WordPress per risolvere automaticamente il Service Worker 404"
-      }
+        }
+      },
+      "description": "Elimina prezzi più vecchi di N giorni, cancella distributori orfani e lancia VACUUM ANALYZE. Imposta hard=true per VACUUM FULL (bloccante)."
     }
   ],
   "event": [],
@@ -200,7 +200,9 @@
     { "key": "distributorId", "value": "1001" },
     { "key": "oldPrice", "value": "1.500" },
     { "key": "newPrice", "value": "1.450" },
-    { "key": "distributorName", "value": "Esempio Distributore" }
+    { "key": "distributorName", "value": "Esempio Distributore" },
+    { "key": "purgeDays", "value": "60" },
+    { "key": "purgeHard", "value": "false" }
   ]
 }
 

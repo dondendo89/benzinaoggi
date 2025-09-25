@@ -19,8 +19,6 @@ model Distributor {
   indirizzo          String?
   latitudine         Float?
   longitudine        Float?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
 
   prices             Price[]
 
@@ -37,7 +35,6 @@ model Price {
   isSelfService  Boolean    @default(false)
   communicatedAt DateTime
   day            DateTime
-  createdAt      DateTime   @default(now())
 
   distributor    Distributor @relation(fields: [distributorId], references: [id])
 

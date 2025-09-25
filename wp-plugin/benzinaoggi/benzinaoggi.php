@@ -330,7 +330,7 @@ class BenzinaOggiPlugin {
             wp_enqueue_script($handle, 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js', [], null, false);
             // inline init BEFORE the SDK loads using OneSignalDeferred
             $appId = esc_js($opts['onesignal_app_id']);
-            $init = "(function(){ if (window.OneSignal && window.OneSignal.VERSION && String(window.OneSignal.VERSION).indexOf('16')===0) { return; } window.OneSignalDeferred = window.OneSignalDeferred || []; window.OneSignal = window.OneSignal || {}; window.OneSignalDeferred.push(function(OneSignal){ try { OneSignal.init({ appId: '".$appId."', serviceWorkerPath: '/?onesignal_worker=1', serviceWorkerUpdaterPath: '/?onesignal_worker=1', serviceWorkerScope: '/', allowLocalhostAsSecureOrigin: true }); } catch(e) { console.warn('OneSignal v16 init error', e); } }); })();";
+            $init = "(function(){ if (window.OneSignal && window.OneSignal.VERSION && String(window.OneSignal.VERSION).indexOf('16')===0) { return; } window.OneSignalDeferred = window.OneSignalDeferred || []; window.OneSignal = window.OneSignal || {}; window.OneSignalDeferred.push(function(OneSignal){ try { OneSignal.init({ appId: '".$appId."', serviceWorkerPath: '/OneSignalSDKWorker.js', serviceWorkerUpdaterPath: '/OneSignalSDKUpdaterWorker.js', serviceWorkerScope: '/', allowLocalhostAsSecureOrigin: true }); } catch(e) { console.warn('OneSignal v16 init error', e); } }); })();";
             wp_add_inline_script($handle, $init, 'before');
         }
         // App

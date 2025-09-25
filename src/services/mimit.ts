@@ -237,7 +237,7 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
     const isInsert = !prev;
     await prisma.price.upsert({
       where: {
-        distributorId_fuelType_day_isSelfService: {
+        Price_unique_day: {
           distributorId,
           fuelType,
           day: dayDate,
