@@ -1,4 +1,27 @@
 (function(){
+  // Early SW registration to ensure root-scoped worker is available before OneSignal flows
+  try {
+    if ('serviceWorker' in navigator) {
+      // Monkey-patch register to redirect OneSignal default paths to our query worker
+      try {
+        var _origRegister = navigator.serviceWorker.register.bind(navigator.serviceWorker);
+        navigator.serviceWorker.register = function(url, options){
+          try {
+            if (typeof url === 'string') {
+              if (url.indexOf('OneSignalSDKWorker.js') !== -1 || url.indexOf('OneSignalSDK.sw.js') !== -1) {
+                url = '/?onesignal_worker=1';
+                options = Object.assign({ scope: '/' }, options||{});
+              }
+            }
+          } catch(_e){}
+          return _origRegister(url, options);
+        };
+      } catch(_mp){}
+      navigator.serviceWorker.getRegistration('/').then(function(reg){
+        if (!reg) { try { navigator.serviceWorker.register('/?onesignal_worker=1', { scope: '/' }); } catch(e){} }
+      });
+    }
+  } catch(_e){}
   function qs(sel, el){ return (el||document).querySelector(sel); }
   function qsa(sel, el){ return Array.prototype.slice.call((el||document).querySelectorAll(sel)); }
   function createEl(tag, cls){ var e=document.createElement(tag); if(cls) e.className=cls; return e; }
@@ -63,21 +86,90 @@
     wrap.appendChild(pricesCard);
     pricesCard.appendChild(table);
 
+    // Unified permission banner (shown until permission is granted)
+    function showPermissionBanner(){
+      try {
+        var existing = document.getElementById('bo-perm-banner');
+        if (existing) return existing;
+        var perm = (window.OneSignal && OneSignal.Notifications && OneSignal.Notifications.permission) || (window.Notification && Notification.permission) || 'default';
+        // if v16 returns a function for permission, do not block banner; click will resolve
+        if (perm === 'granted') return null;
+        var banner = createEl('div');
+        banner.id = 'bo-perm-banner';
+        banner.style.cssText = 'background:#fff3cd;border:1px solid #ffeaa7;padding:10px;border-radius:4px;margin:10px 0;color:#856404;display:flex;justify-content:space-between;align-items:center;gap:12px;';
+        var msg = createEl('div');
+        msg.innerHTML = '🔔 <strong>Abilita le notifiche</strong> per ricevere avvisi quando i prezzi scendono.';
+        var btn = createEl('button');
+        btn.textContent = 'Consenti notifiche';
+        btn.style.cssText = 'background:#007cba;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;';
+        btn.addEventListener('click', function(){
+          // Try OneSignal prompt first, then browser fallback
+          osPrompt().then(function(){
+            try { banner.style.display = 'none'; } catch(_e){}
+          }).catch(function(){
+            if (window.Notification && Notification.requestPermission) {
+              Notification.requestPermission().then(function(p){ if (p === 'granted') { try { banner.style.display = 'none'; } catch(_e){} } });
+            }
+          });
+        });
+        banner.appendChild(msg);
+        banner.appendChild(btn);
+        wrap.insertBefore(banner, wrap.firstChild);
+        return banner;
+      } catch(_e) { return null; }
+    }
+
+    // Try to show banner immediately after render
+    showPermissionBanner();
+
     // OneSignal helpers (work with both v15 and v16)
+    async function ensureServiceWorkerRegistered(){
+      try {
+        if (!('serviceWorker' in navigator)) return;
+        var reg = await navigator.serviceWorker.getRegistration('/');
+        if (!reg) {
+          try {
+            await navigator.serviceWorker.register('/?onesignal_worker=1', { scope: '/' });
+          } catch(_e){}
+        }
+      } catch(_err){}
+    }
     function osExec(cb){
       try {
-        if (!window.OneSignal) return;
-        // v16: execute immediately; v15: use push queue
-        if (typeof window.OneSignal.push === 'function') { window.OneSignal.push(cb); }
-        else { cb(window.OneSignal); }
+        // Prefer v16 deferred queue if present
+        if (Array.isArray(window.OneSignalDeferred)) {
+          window.OneSignalDeferred.push(function(){ try { cb(window.OneSignal); } catch(_){} });
+          return;
+        }
+        if (window.OneSignal && typeof window.OneSignal.push === 'function') {
+          // v15 queue
+          window.OneSignal.push(cb);
+          return;
+        }
+        // If SDK not ready yet, retry shortly
+        setTimeout(function(){ osExec(cb); }, 300);
       } catch(e){}
     }
     function osIsEnabled(){
       return new Promise(function(resolve){
-        osExec(function(){
-          if (OneSignal && typeof OneSignal.isPushNotificationsEnabled === 'function') {
-            OneSignal.isPushNotificationsEnabled().then(function(v){ resolve(!!v); }).catch(function(){ resolve(false); });
-          } else { resolve(false); }
+        osExec(async function(){
+          try {
+            // v16 check
+            if (OneSignal && OneSignal.Notifications) {
+              var perm = OneSignal.Notifications.permission;
+              if (typeof perm === 'function') { try { perm = await OneSignal.Notifications.permission(); } catch(_){} }
+              if (perm === 'granted') { resolve(true); return; }
+            }
+            // v15 check
+            if (OneSignal && typeof OneSignal.isPushNotificationsEnabled === 'function') {
+              try {
+                var v = await OneSignal.isPushNotificationsEnabled();
+                resolve(!!v);
+                return;
+              } catch(_){}
+            }
+            resolve(false);
+          } catch(_e){ resolve(false); }
         });
       });
     }
@@ -159,6 +251,37 @@
     });
     
     if(useOneSignal){
+      var isV16 = !!(window.OneSignal && OneSignal.Notifications && typeof OneSignal.Notifications.requestPermission === 'function');
+      var isV15 = !!(window.OneSignal && typeof OneSignal.isPushNotificationsEnabled === 'function' && !isV16);
+      
+      // If v15 is present (official plugin), do NOT touch v16-only APIs
+      if (isV15) {
+        console.log('OneSignal v15 detected; skipping v16 auto-prompt');
+      }
+      // Auto prompt once per session on page load (v15/v16)
+      try {
+        var promptKey = 'bo_prompt_shown_session';
+        var alreadyPrompted = false;
+        try { alreadyPrompted = sessionStorage.getItem(promptKey) === '1'; } catch(_s){}
+        var tryAutoPrompt = function(){
+          if (!isV16) { return; }
+          try {
+            osExec(async function(){
+              try {
+                var permVal = (OneSignal && OneSignal.Notifications && OneSignal.Notifications.permission) || (window.Notification && Notification.permission) || 'default';
+                if (typeof permVal === 'function') { try { permVal = await OneSignal.Notifications.permission(); } catch(_){} }
+                if (permVal === 'default' && !alreadyPrompted) {
+                  try { sessionStorage.setItem(promptKey, '1'); } catch(_ss){}
+                  try { await ensureServiceWorkerRegistered(); await osPrompt(); } catch(_pe){}
+                }
+              } catch(_e){}
+            });
+          } catch(_err){}
+        };
+        // slight delay to allow SDK to be ready
+        setTimeout(tryAutoPrompt, 1200);
+      } catch(_ap){}
+
       // Rely on global v16 init done in PHP header; do not re-initialize here
       
       // Wait for OneSignal to be completely ready
@@ -218,6 +341,7 @@
                 if (OneSignal && OneSignal.Notifications && OneSignal.User && OneSignal.User.PushSubscription) {
                   const perm = await OneSignal.Notifications.permission;
                   if (perm !== 'granted') {
+                    await ensureServiceWorkerRegistered();
                     await OneSignal.Notifications.requestPermission();
                   }
                   if (OneSignal.User.PushSubscription && OneSignal.User.PushSubscription.optIn) {
