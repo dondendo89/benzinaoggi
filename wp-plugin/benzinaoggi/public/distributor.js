@@ -239,6 +239,16 @@
 
     // Check if OneSignal is available, otherwise use browser notifications
     var useOneSignal = window.BenzinaOggi && BenzinaOggi.onesignalAppId && window.OneSignal;
+
+    // Generate/load persistent externalId for this browser
+    function getExternalId(){
+      try {
+        var k='bo_ext_id'; var v=localStorage.getItem(k);
+        if (!v) { v = 'bo_'+Math.random().toString(36).slice(2)+'_'+Date.now().toString(36); localStorage.setItem(k, v); }
+        return v;
+      } catch(_) { return null; }
+    }
+    var externalId = getExternalId();
     var useBrowserNotifications = !useOneSignal && 'Notification' in window;
     
     console.log('OneSignal check:', {
@@ -281,6 +291,11 @@
         // slight delay to allow SDK to be ready
         setTimeout(tryAutoPrompt, 1200);
       } catch(_ap){}
+
+      // Login externalId to OneSignal (v16)
+      try {
+        if (externalId && OneSignal && OneSignal.login) { OneSignal.login(externalId); }
+      } catch(_l){}
 
       // Rely on global v16 init done in PHP header; do not re-initialize here
       
@@ -416,6 +431,11 @@
                 }
                 if (tagsInit && (tagsInit[tagNameInit] === '1' || tagsInit[tagNameInit] === 1)) {
                   distCb.checked = true;
+                } else {
+                  try {
+                    var loc = localStorage.getItem('bo_notify_distributor_'+String(d.impiantoId));
+                    if (loc === '1') { distCb.checked = true; }
+                  } catch(_ls){}
                 }
               } catch(_ignore){}
             });
@@ -447,6 +467,7 @@
                       }
                     } catch(_v){}
                     self.checked = true;
+                    try { localStorage.setItem('bo_notify_distributor_'+String(d.impiantoId), '1'); } catch(_s){}
                   });
                 });
               }).then(function(){
@@ -456,6 +477,7 @@
               });
             } else {
               osDeleteTag(tagName).catch(function(err){ console.warn('Distributor tag delete error', err); });
+              try { localStorage.removeItem('bo_notify_distributor_'+String(d.impiantoId)); } catch(_r){}
             }
           });
         }
@@ -478,6 +500,19 @@
                   cbSync.checked = true;
                   var stSync = cbSync.parentNode.querySelector('.notif-status');
                   if (stSync) { stSync.textContent = '✓ Attivato per ' + fSync; stSync.style.display='inline'; stSync.style.color = '#28a745'; }
+                } else {
+                  // Fallback to localStorage persistence
+                  try {
+                    var k1 = 'bo_notify_'+norm;
+                    var k2 = d && d.impiantoId ? ('bo_notify_'+String(d.impiantoId)+'_'+norm) : null;
+                    var v1 = localStorage.getItem(k1) === '1';
+                    var v2 = k2 ? (localStorage.getItem(k2) === '1') : false;
+                    if (v1 || v2) {
+                      cbSync.checked = true;
+                      var stSync2 = cbSync.parentNode.querySelector('.notif-status');
+                      if (stSync2) { stSync2.textContent = '✓ Attivato per ' + fSync; stSync2.style.display='inline'; stSync2.style.color = '#28a745'; }
+                    }
+                  } catch(_ls2){}
                 }
               });
             }
@@ -543,16 +578,41 @@
                     }
                   } catch(_){}
                   
+                  // Call backend to persist subscription linked to externalId
+                  try {
+                    if (externalId) {
+                      fetch(((window.BenzinaOggi && BenzinaOggi.apiBase) || '') + '/api/subscriptions', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'add', externalId: externalId, impiantoId: d.impiantoId, fuelType: fuel })
+                      }).catch(function(){});
+                    }
+                  } catch(_c){}
+
                   console.log('Sending tags for fuel:', fuel, 'Tags:', tags);
-                  
-                  osSetTags(tags).then(function(){
+                  osSetTags(tags).then(async function(){
                     console.log('Tags set successfully for fuel:', fuel, tags);
+                    try {
+                      if (OneSignal && OneSignal.User && OneSignal.User.getTags) {
+                        var tg = await OneSignal.User.getTags();
+                        var fuelNormV = fuel.toLowerCase().replace(/\s+/g, '_');
+                        var needs = [ 'price_drop_notifications', 'fuel_type', 'notify_'+fuelNormV ];
+                        if (d && d.impiantoId) { needs.push('notify_distributor_'+String(d.impiantoId)+'_'+fuelNormV); }
+                        var ok = needs.every(function(k){ return tg && (tg[k] === '1' || tg[k] === 1 || tg[k] === fuel || tg[k] === fuel.trim()); });
+                        if (!ok) { await osSetTags(tags); }
+                      }
+                    } catch(_vr){}
                     if(statusEl) {
                       statusEl.textContent = '✓ Attivato per ' + fuel;
                       statusEl.style.display = 'inline';
                       statusEl.style.color = '#28a745';
                     }
                     cb.checked = true;
+                    // Persist locally for UX on reload
+                    try {
+                      var normKey = fuel.toLowerCase().replace(/\s+/g, '_');
+                      localStorage.setItem('bo_notify_'+normKey, '1');
+                      if (d && d.impiantoId) { localStorage.setItem('bo_notify_'+String(d.impiantoId)+'_'+normKey, '1'); }
+                    } catch(_p){}
                   }).catch(function(err){
                     console.error('Error setting tags for fuel:', fuel, err);
                     if(statusEl) {
@@ -582,7 +642,16 @@
               try {
                 // Delete specific fuel notification tag
                 var tagToDelete = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
-                osDeleteTag(tagToDelete).then(function(){
+              // Inform backend remove
+              try {
+                if (externalId) {
+                  fetch(((window.BenzinaOggi && BenzinaOggi.apiBase) || '') + '/api/subscriptions', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'remove', externalId: externalId, impiantoId: d.impiantoId, fuelType: fuel })
+                  }).catch(function(){});
+                }
+              } catch(_cr){}
+              osDeleteTag(tagToDelete).then(function(){
                   console.log('Tag deleted successfully for fuel:', fuel);
                   if(statusEl) statusEl.style.display = 'none';
                 }).catch(function(err){
@@ -601,6 +670,12 @@
                     osDeleteTag(comboDel).catch(function(e){ console.warn('Delete combo tag error', e); });
                   }
                 } catch(__){}
+                // Remove local persistence
+                try {
+                  var normKeyR = fuel.toLowerCase().replace(/\s+/g, '_');
+                  localStorage.removeItem('bo_notify_'+normKeyR);
+                  if (d && d.impiantoId) { localStorage.removeItem('bo_notify_'+String(d.impiantoId)+'_'+normKeyR); }
+                } catch(_rm){}
               } catch (err) {
                 console.error('OneSignal deleteTag error:', err);
                 if(statusEl) {

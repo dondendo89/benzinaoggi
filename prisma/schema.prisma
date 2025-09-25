@@ -44,5 +44,16 @@ model Price {
   @@unique([distributorId, fuelType, day, isSelfService], name: "Price_unique_day")
 }
 
+model Subscription {
+  id          Int      @id @default(autoincrement())
+  externalId  String
+  impiantoId  Int
+  fuelType    String
+  createdAt   DateTime @default(now())
+
+  @@unique([externalId, impiantoId, fuelType], name: "Subscription_unique")
+  @@index([impiantoId, fuelType])
+}
+
 
 

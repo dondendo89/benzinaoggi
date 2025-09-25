@@ -493,17 +493,28 @@ class BenzinaOggiPlugin {
         $fuel_key_norm = strtolower(str_replace(' ', '_', $fuelType));
         $dist_fuel_tag = 'notify_distributor_' . (isset($variation['distributorId']) ? $variation['distributorId'] : '') . '_' . $fuel_key_norm;
 
+        // Fetch externalIds from Next API instead of using tags
+        $apiBase = rtrim($opts['api_base'] ?? '', '/');
+        $externalIds = [];
+        if ($apiBase) {
+            $q = add_query_arg(array(
+                'impiantoId' => (isset($variation['distributorId']) ? $variation['distributorId'] : ''),
+                'fuelType' => $fuelType
+            ), $apiBase . '/api/subscriptions');
+            $resp = wp_remote_get($q, [ 'timeout' => 15 ]);
+            if (!is_wp_error($resp) && wp_remote_retrieve_response_code($resp) === 200) {
+                $json = json_decode(wp_remote_retrieve_body($resp), true);
+                if (!empty($json['externalIds']) && is_array($json['externalIds'])) {
+                    $externalIds = $json['externalIds'];
+                }
+            }
+        }
+
+        if (empty($externalIds)) { return; }
+
         $payload = array(
             'app_id' => $app_id,
-            // Target either specific distributor subscribers or generic fuel-type subscribers
-            'filters' => array(
-                array('field' => 'tag', 'key' => $dist_fuel_tag, 'relation' => '=', 'value' => '1'),
-                array('operator' => 'OR'),
-                array('field' => 'tag', 'key' => 'notify_distributor_' . (isset($variation['distributorId']) ? $variation['distributorId'] : ''), 'relation' => '=', 'value' => '1'),
-                array('operator' => 'OR'),
-                array('field' => 'tag', 'key' => 'price_drop_notifications', 'relation' => '=', 'value' => '1'),
-                array('field' => 'tag', 'key' => 'fuel_type', 'relation' => '=', 'value' => $fuelType)
-            ),
+            'include_aliases' => array('external_id' => $externalIds),
             'headings' => array('it' => $title),
             'contents' => array('it' => $message),
             'data' => array(
