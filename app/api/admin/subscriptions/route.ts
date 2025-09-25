@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     const where: any = {};
     if (impiantoId) where.impiantoId = Number(impiantoId);
     if (fuelType) where.fuelType = String(fuelType);
-    const rows = await prisma.subscription.findMany({
+    const rows = await (prisma as any).subscription.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       take,
