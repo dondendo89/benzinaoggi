@@ -136,7 +136,7 @@ export async function updateAnagrafica(): Promise<{ updated: number; total: numb
   return { updated, total: rows.length, skippedNoId };
 }
 
-export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: number; day: string; total?: number; skippedUnknownDistributor?: number; skippedNoPrice?: number; skippedBadDate?: number; sampleRow?: any }>
+export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: number; updated: number; day: string; total?: number; skippedUnknownDistributor?: number; skippedNoPrice?: number; skippedBadDate?: number; sampleRow?: any }>
 {
   const raw = await fetchCsvText(PREZZI_URL);
   const norm = raw.replace(/\r\n?/g, "\n");
@@ -169,6 +169,7 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
   }
 
   let inserted = 0;
+  let updated = 0;
   let skippedUnknownDistributor = 0;
   let skippedNoPrice = 0;
   let skippedBadDate = 0;
@@ -194,12 +195,30 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
     return undefined;
   };
 
+  // Preload distributor id map to avoid per-row queries
+  const allDistributors = await prisma.distributor.findMany({ select: { id: true, impiantoId: true } });
+  const distributorIdByImpianto = new Map<number, number>();
+  for (const d of allDistributors) distributorIdByImpianto.set(d.impiantoId, d.id);
+
+  // Preload existing prices for the target day to compare and avoid unnecessary updates
+  const existing = await prisma.price.findMany({ where: { day: dayDate } });
+  const key = (p: { distributorId: number; fuelType: string; isSelfService: boolean }) => `${p.distributorId}|${p.fuelType}|${p.isSelfService ? 1 : 0}`;
+  const existingByKey = new Map<string, { id: number; price: number }>();
+  for (const p of existing) existingByKey.set(key(p), { id: p.id, price: p.price });
+
   for (const r of rows) {
     const idStr = get(r as any, ['idImpianto', 'idimpianto']);
     const impiantoId = Number(idStr);
     if (!Number.isFinite(impiantoId)) { skippedUnknownDistributor += 1; continue; }
-    const distributor = await prisma.distributor.findUnique({ where: { impiantoId } });
-    if (!distributor) { skippedUnknownDistributor += 1; continue; }
+    let distributorId = distributorIdByImpianto.get(impiantoId);
+    if (!distributorId) {
+      // Create placeholder distributor if missing so prices are never dropped
+      const created = await prisma.distributor.create({
+        data: { impiantoId },
+      });
+      distributorId = created.id;
+      distributorIdByImpianto.set(impiantoId, distributorId);
+    }
 
     const prezzoStr = get(r as any, ['prezzo']);
     const price = normalizeNumber(prezzoStr);
@@ -212,38 +231,44 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
     if (!desc) continue;
     const fuelType = String(desc).trim();
 
-    try {
-      await prisma.price.upsert({
-        where: {
-          distributorId_fuelType_day_isSelfService: {
-            distributorId: distributor.id,
-            fuelType,
-            day: dayDate,
-            isSelfService: isSelf,
-          },
-        },
-        create: {
-          distributorId: distributor.id,
+    const k = key({ distributorId, fuelType, isSelfService: isSelf });
+    const prev = existingByKey.get(k);
+    // Use upsert to avoid unique race conditions; decide counters via cache
+    const isInsert = !prev;
+    await prisma.price.upsert({
+      where: {
+        Price_unique_day: {
+          distributorId,
           fuelType,
-          price,
-          isSelfService: isSelf,
-          communicatedAt,
           day: dayDate,
+          isSelfService: isSelf,
         },
-        update: {
-          price,
-          communicatedAt,
-        },
-      });
+      },
+      create: {
+        distributorId,
+        fuelType,
+        price,
+        isSelfService: isSelf,
+        communicatedAt,
+        day: dayDate,
+      },
+      update: {
+        price,
+        communicatedAt,
+      },
+    });
+    if (isInsert) {
       inserted += 1;
-    } catch (e) {
-      // continue on constraint errors
+      existingByKey.set(k, { id: 0, price });
+    } else if (prev && prev.price !== price) {
+      updated += 1;
+      existingByKey.set(k, { id: prev.id, price });
     }
   }
 
   const total = rows.length;
   const sampleRow = debug ? rows[0] : undefined;
-  return { inserted, day: today, total, skippedUnknownDistributor, skippedNoPrice, skippedBadDate, sampleRow };
+  return { inserted, updated, day: today, total, skippedUnknownDistributor, skippedNoPrice, skippedBadDate, sampleRow };
 }
 
 export async function checkVariation() {
