@@ -16,12 +16,24 @@ export async function GET(req: NextRequest) {
     const where: any = {};
     if (impiantoId) where.impiantoId = Number(impiantoId);
     if (fuelType) where.fuelType = String(fuelType);
-    const rows = await (prisma as any).subscription.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take,
-    });
-    return NextResponse.json({ ok: true, count: rows.length, rows });
+    const hasModel = !!(prisma as any).subscription;
+    if (hasModel) {
+      const rows = await (prisma as any).subscription.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take,
+      });
+      return NextResponse.json({ ok: true, count: rows.length, rows });
+    }
+    // Fallback with raw SQL if client lacks model
+    const clauses: string[] = [];
+    const params: any[] = [];
+    if (typeof where.impiantoId === 'number') { clauses.push('"impiantoId" = $1'); params.push(where.impiantoId); }
+    if (typeof where.fuelType === 'string') { clauses.push(`"fuelType" = $${params.length+1}`); params.push(where.fuelType); }
+    const whereSql = clauses.length ? ('WHERE ' + clauses.join(' AND ')) : '';
+    const limitSql = `LIMIT ${Number.isFinite(take) ? take : 100}`;
+    const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "Subscription" ${whereSql} ORDER BY "createdAt" DESC ${limitSql}`, ...params);
+    return NextResponse.json({ ok: true, count: (rows?.length || 0), rows: rows || [] });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
   }
