@@ -12,11 +12,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check OneSignal configuration
-    if (!process.env.ONESIGNAL_APP_ID || !process.env.ONESIGNAL_API_KEY) {
+    // Resolve OneSignal configuration with fallbacks
+    const appId = process.env.ONESIGNAL_APP_ID || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || '';
+    const apiKey = process.env.ONESIGNAL_API_KEY || process.env.ONESIGNAL_REST_API_KEY || '';
+    const wpUrl = process.env.WORDPRESS_URL || '';
+    if (!appId || !apiKey) {
       console.error('OneSignal configuration missing:', {
-        appId: !!process.env.ONESIGNAL_APP_ID,
-        apiKey: !!process.env.ONESIGNAL_API_KEY
+        appIdPresent: !!appId,
+        apiKeyPresent: !!apiKey,
       });
       return NextResponse.json(
         { ok: false, error: "OneSignal not configured" },
@@ -41,7 +44,7 @@ export async function POST(req: NextRequest) {
 
     // OneSignal notification payload
     const notificationPayload = {
-      app_id: process.env.ONESIGNAL_APP_ID,
+      app_id: appId,
       included_segments: ["Subscribed Users"],
       filters: [
         { field: "tag", key: "price_drop_notifications", relation: "=", value: "1" },
@@ -57,7 +60,7 @@ export async function POST(req: NextRequest) {
         priceDiff,
         percentageDiff
       },
-      url: `${process.env.WORDPRESS_URL}/distributore-${distributorId}`,
+      url: wpUrl ? `${wpUrl.replace(/\/$/, '')}/distributore-${distributorId}` : undefined,
       chrome_web_icon: "https://carburanti.mise.gov.it/favicon.ico"
     };
 
@@ -66,7 +69,7 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Basic ${process.env.ONESIGNAL_API_KEY}`
+        'Authorization': `Basic ${apiKey}`
       },
       body: JSON.stringify(notificationPayload)
     });

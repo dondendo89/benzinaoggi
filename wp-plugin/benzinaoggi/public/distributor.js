@@ -122,6 +122,9 @@
     // Try to show banner immediately after render
     showPermissionBanner();
 
+    // Global guard map to avoid duplicate subscription POSTs per (impiantoId,fuel)
+    try { window.__boSubSent = window.__boSubSent || {}; } catch(_g){}
+
     // OneSignal helpers (work with both v15 and v16)
     async function ensureServiceWorkerRegistered(){
       try {
@@ -530,30 +533,61 @@
           console.log('Checkbox changed for fuel:', fuel, 'Element:', this);
           
           var setTag = function() {
+            try {
+              // Validate fuel type
+              if (!fuel || fuel.trim() === '') {
+                console.error('Invalid fuel type:', fuel);
+                if(statusEl) {
+                  statusEl.textContent = '✗ Errore: Tipo carburante non valido';
+                  statusEl.style.display = 'inline';
+                  statusEl.style.color = '#dc3545';
+                }
+                return;
+              }
+              // Optimistic UI: mark as enabled and persist locally immediately
+              if(statusEl) {
+                statusEl.textContent = '✓ Attivazione in corso…';
+                statusEl.style.display = 'inline';
+                statusEl.style.color = '#28a745';
+              }
+              cb.checked = true;
+              try {
+                var normKeyInit = fuel.toLowerCase().replace(/\s+/g, '_');
+                localStorage.setItem('bo_notify_'+normKeyInit, '1');
+                if (d && d.impiantoId) { localStorage.setItem('bo_notify_'+String(d.impiantoId)+'_'+normKeyInit, '1'); }
+              } catch(_p0){}
+
+              // Send subscription to backend immediately (optimistic), regardless of OneSignal readiness
+              try {
+                if (externalId) {
+                  var keyOnce = 'add:'+String(d && d.impiantoId)+'|'+String(fuel);
+                  var sentMap = (function(){ try { return window.__boSubSent; } catch(_e){ return {}; } })();
+                  if (!sentMap[keyOnce]) {
+                    sentMap[keyOnce] = true; try { window.__boSubSent = sentMap; } catch(_s){}
+                    var apiBaseEarly = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
+                    if (!apiBaseEarly) { console.warn('BenzinaOggi.apiBase non configurato: POST /api/subscriptions potrebbe fallire'); }
+                    var subUrlEarly = (apiBaseEarly || '') + '/api/subscriptions';
+                    fetch(subUrlEarly, {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'add', externalId: externalId, impiantoId: d.impiantoId, fuelType: fuel })
+                    }).then(function(){ /* noop */ }).catch(function(err){ console.warn('Persist subscription (early) failed', err); });
+                  }
+                }
+              } catch(_ce){}
+
+              // If OneSignal is not ready, stop here (we already persisted preference)
+              if (!(window.OneSignal && (window.OneSignal.sendTags || window.OneSignal.sendTag))) {
+                // retry later only for tags
+                setTimeout(setTag, 1500);
+                return;
+              }
+              
+              // From here on, proceed with OneSignal permission + tag flow
+              
+            } catch(errInit) { console.error('setTag init error', errInit); }
+            
             if (window.OneSignal && (window.OneSignal.sendTags || window.OneSignal.sendTag)) {
               try {
-                // Validate fuel type
-                if (!fuel || fuel.trim() === '') {
-                  console.error('Invalid fuel type:', fuel);
-                  if(statusEl) {
-                    statusEl.textContent = '✗ Errore: Tipo carburante non valido';
-                    statusEl.style.display = 'inline';
-                    statusEl.style.color = '#dc3545';
-                  }
-                  return;
-                }
-                // Optimistic UI: mark as enabled and persist locally immediately
-                if(statusEl) {
-                  statusEl.textContent = '✓ Attivazione in corso…';
-                  statusEl.style.display = 'inline';
-                  statusEl.style.color = '#28a745';
-                }
-                cb.checked = true;
-                try {
-                  var normKeyInit = fuel.toLowerCase().replace(/\s+/g, '_');
-                  localStorage.setItem('bo_notify_'+normKeyInit, '1');
-                  if (d && d.impiantoId) { localStorage.setItem('bo_notify_'+String(d.impiantoId)+'_'+normKeyInit, '1'); }
-                } catch(_p0){}
 
                 // Check if notifications are enabled, if not request permission
                 osIsEnabled().then(function(isEnabled) {
@@ -590,18 +624,7 @@
                     }
                   } catch(_){}
                   
-                  // Call backend to persist subscription linked to externalId (do this regardless of tag outcome)
-                  try {
-                    if (externalId) {
-                      var apiBase = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
-                      var subUrl = (apiBase || '') + '/api/subscriptions';
-                      if (!apiBase) { console.warn('BenzinaOggi.apiBase non configurato: POST /api/subscriptions potrebbe fallire'); }
-                      fetch(subUrl, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'add', externalId: externalId, impiantoId: d.impiantoId, fuelType: fuel })
-                      }).then(function(r){ /* no-op */ }).catch(function(err){ console.warn('Persist subscription failed', err); });
-                    }
-                  } catch(_c){}
+                  // Backend subscription has already been attempted optimistically above
 
                   console.log('Sending tags for fuel:', fuel, 'Tags:', tags);
                   osSetTags(tags).then(async function(){
@@ -686,6 +709,17 @@
                   var normKeyR = fuel.toLowerCase().replace(/\s+/g, '_');
                   localStorage.removeItem('bo_notify_'+normKeyR);
                   if (d && d.impiantoId) { localStorage.removeItem('bo_notify_'+String(d.impiantoId)+'_'+normKeyR); }
+                  // guard key for remove to avoid duplicate POSTs
+                  try {
+                    var sentMapR = window.__boSubSent || {};
+                    var keyOnceR = 'remove:'+String(d && d.impiantoId)+'|'+String(fuel);
+                    if (!sentMapR[keyOnceR] && externalId) {
+                      sentMapR[keyOnceR] = true; window.__boSubSent = sentMapR;
+                      var apiBaseR2 = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
+                      var subUrlR2 = (apiBaseR2 || '') + '/api/subscriptions';
+                      fetch(subUrlR2, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'remove', externalId: externalId, impiantoId: d.impiantoId, fuelType: fuel }) }).catch(function(){});
+                    }
+                  } catch(_gr){}
                 } catch(_rm){}
               } catch (err) {
                 console.error('OneSignal deleteTag error:', err);
