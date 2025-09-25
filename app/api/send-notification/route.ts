@@ -62,6 +62,8 @@ export async function POST(req: NextRequest) {
     // Targeting: prefer external_id targeting when provided, fallback to tag filters
     if (Array.isArray(externalIds) && externalIds.length > 0) {
       notificationPayload.include_aliases = { external_id: externalIds };
+      // Required by OneSignal when using alias targeting
+      notificationPayload.target_channel = 'push';
     } else {
       notificationPayload.included_segments = ["Subscribed Users"];
       notificationPayload.filters = [

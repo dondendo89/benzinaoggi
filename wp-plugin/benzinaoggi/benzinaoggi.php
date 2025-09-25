@@ -530,7 +530,8 @@ class BenzinaOggiPlugin {
         $externalIds = [];
         if ($apiBase) {
             $q = add_query_arg(array(
-                'impiantoId' => (isset($variation['distributorId']) ? $variation['distributorId'] : ''),
+                // IMPORTANT: impiantoId must be the public impianto ID, not internal distributorId
+                'impiantoId' => (isset($variation['impiantoId']) ? $variation['impiantoId'] : ''),
                 'fuelType' => $fuelType
             ), $apiBase . '/api/subscriptions');
             $resp = wp_remote_get($q, [ 'timeout' => 15 ]);
@@ -542,7 +543,10 @@ class BenzinaOggiPlugin {
             }
         }
 
-        if (empty($externalIds)) { return; }
+        if (empty($externalIds)) {
+            $this->log_progress('No subscribers (externalIds) for impianto '.(isset($variation['impiantoId']) ? $variation['impiantoId'] : 'unknown').' fuel '.$fuelType);
+            return;
+        }
 
         $payload = array(
             'app_id' => $app_id,
@@ -551,13 +555,15 @@ class BenzinaOggiPlugin {
             'contents' => array('it' => $message),
             'data' => array(
                 'fuelType' => $fuelType,
-                'distributorId' => (isset($variation['distributorId']) ? $variation['distributorId'] : ''),
+                // Use impiantoId consistently as public identifier in payload
+                'distributorId' => (isset($variation['impiantoId']) ? $variation['impiantoId'] : ''),
                 'oldPrice' => $oldPrice,
                 'newPrice' => $newPrice,
                 'priceDiff' => $priceDiff,
                 'percentageDiff' => $percentageDiff
             ),
-            'url' => home_url('/distributore-' . (isset($variation['distributorId']) ? $variation['distributorId'] : ''))
+            // Deep link to distributor page using impiantoId
+            'url' => home_url('/distributore-' . (isset($variation['impiantoId']) ? $variation['impiantoId'] : ''))
         );
 
         $response = wp_remote_post('https://onesignal.com/api/v1/notifications', [
