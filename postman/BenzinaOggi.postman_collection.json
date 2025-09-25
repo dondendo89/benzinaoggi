@@ -182,6 +182,80 @@
       },
       "description": "Elimina prezzi più vecchi di N giorni, cancella distributori orfani e lancia VACUUM ANALYZE. Imposta hard=true per VACUUM FULL (bloccante)."
     }
+    ,
+    {
+      "name": "Admin List Subscriptions",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/subscriptions?impiantoId={{impiantoId}}&fuelType={{fuelType}}&take={{take}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "subscriptions"
+          ],
+          "query": [
+            { "key": "impiantoId", "value": "{{impiantoId}}", "description": "Filtra per impianto (opzionale)" },
+            { "key": "fuelType", "value": "{{fuelType}}", "description": "Filtra per carburante (opzionale)" },
+            { "key": "take", "value": "{{take}}", "description": "Max risultati (default 100, max 500)" }
+          ]
+        }
+      },
+      "description": "Lista iscrizioni salvate (externalId, impiantoId, fuelType). Protetta da Bearer API_SECRET."
+    }
+    ,
+    {
+      "name": "User Subscribe (create/update)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"externalId\": \"user-123\",\n  \"impiantoId\": {{impiantoId}},\n  \"fuelType\": \"{{fuelType}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/subscriptions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "subscriptions"
+          ]
+        }
+      },
+      "description": "Crea o aggiorna una subscription per utente (externalId + impianto + fuel)."
+    }
+    ,
+    {
+      "name": "User Subscriptions (list by externalId)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/subscriptions?externalId={{externalId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "subscriptions"
+          ],
+          "query": [
+            { "key": "externalId", "value": "{{externalId}}" }
+          ]
+        }
+      },
+      "description": "Lista le subscription dell'utente per externalId."
+    }
   ],
   "event": [],
   "variable": [
@@ -202,7 +276,9 @@
     { "key": "newPrice", "value": "1.450" },
     { "key": "distributorName", "value": "Esempio Distributore" },
     { "key": "purgeDays", "value": "60" },
-    { "key": "purgeHard", "value": "false" }
+    { "key": "purgeHard", "value": "false" },
+    { "key": "take", "value": "100" },
+    { "key": "externalId", "value": "user-123" }
   ]
 }
 
