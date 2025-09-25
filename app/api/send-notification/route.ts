@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
   try {
-    const { fuelType, distributorId, oldPrice, newPrice, distributorName } = await req.json();
+    const { fuelType, distributorId, oldPrice, newPrice, distributorName, externalIds } = await req.json();
 
     // Validate required fields
     if (!fuelType || !distributorId || oldPrice === undefined || newPrice === undefined) {
@@ -42,14 +42,9 @@ export async function POST(req: NextRequest) {
     const title = `💰 Prezzo ${fuelType} sceso!`;
     const message = `${distributorName || 'Distributore'}: ${fuelType} da €${oldPrice.toFixed(3)} a €${newPrice.toFixed(3)} (-${percentageDiff}%)`;
 
-    // OneSignal notification payload
-    const notificationPayload = {
+    // Build OneSignal notification payload
+    const notificationPayload: Record<string, any> = {
       app_id: appId,
-      included_segments: ["Subscribed Users"],
-      filters: [
-        { field: "tag", key: "price_drop_notifications", relation: "=", value: "1" },
-        { field: "tag", key: "fuel_type", relation: "=", value: fuelType }
-      ],
       headings: { en: title, it: title },
       contents: { en: message, it: message },
       data: {
@@ -64,6 +59,17 @@ export async function POST(req: NextRequest) {
       chrome_web_icon: "https://carburanti.mise.gov.it/favicon.ico"
     };
 
+    // Targeting: prefer external_id targeting when provided, fallback to tag filters
+    if (Array.isArray(externalIds) && externalIds.length > 0) {
+      notificationPayload.include_aliases = { external_id: externalIds };
+    } else {
+      notificationPayload.included_segments = ["Subscribed Users"];
+      notificationPayload.filters = [
+        { field: "tag", key: "price_drop_notifications", relation: "=", value: "1" },
+        { field: "tag", key: "fuel_type", relation: "=", value: fuelType }
+      ];
+    }
+
     // Send notification via OneSignal API
     const response = await fetch('https://onesignal.com/api/v1/notifications', {
       method: 'POST',
@@ -74,26 +80,36 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(notificationPayload)
     });
 
+    let result: any = null;
+    let resultText: string | null = null;
+    try {
+      result = await response.json();
+    } catch {
+      try {
+        resultText = await response.text();
+      } catch {
+        resultText = null;
+      }
+    }
+
     if (!response.ok) {
-      const errorText = await response.text();
       console.error('OneSignal API error:', {
         status: response.status,
         statusText: response.statusText,
-        body: errorText
+        body: result || resultText
       });
       return NextResponse.json(
-        { ok: false, error: `OneSignal API error: ${response.status} - ${errorText}` },
+        { ok: false, status: response.status, statusText: response.statusText, onesignal: result || resultText },
         { status: 500 }
       );
     }
 
-    const result = await response.json();
-    
     return NextResponse.json({
       ok: true,
-      notificationId: result.id,
-      recipients: result.recipients,
-      message: "Notification sent successfully"
+      message: "Notification sent successfully",
+      notificationId: result?.id,
+      recipients: result?.recipients,
+      onesignal: result
     });
 
   } catch (error: any) {

@@ -19,9 +19,9 @@ class BenzinaOggiPlugin {
         add_shortcode('carburante_distributor', [$this, 'shortcode_distributor']);
         add_action('wp_enqueue_scripts', [$this, 'enqueue_assets']);
         add_action('rest_api_init', [$this, 'register_rest']);
-        // Cron hourly to check variations
+        // Cron to check variations
         add_action('benzinaoggi_check_variations', [$this, 'cron_check_variations']);
-        add_action('init', [$this, 'ensure_hourly_variations_cron']);
+        add_action('init', [$this, 'ensure_daily_variations_cron']);
         // Admin post action for import + page creation
         add_action('admin_post_benzinaoggi_import', [$this, 'handle_import_and_pages']);
         // Single-run cron to sync pages
@@ -221,6 +221,17 @@ class BenzinaOggiPlugin {
         return $five;
     }
     
+    private function next_run_10am() {
+        // Compute next 10:00 AM based on WP timezone
+        $now = current_time('timestamp');
+        $date = date_i18n('Y-m-d', $now, true);
+        $ten = strtotime($date.' 10:00:00');
+        if ($ten <= $now) {
+            $ten = strtotime('+1 day', $ten);
+        }
+        return $ten;
+    }
+    
     public function handle_onesignal_worker() {
         if (isset($_GET['onesignal_worker']) && $_GET['onesignal_worker'] === '1') {
             $worker_path = plugin_dir_path(__FILE__) . 'public/OneSignalSDKWorker.js';
@@ -249,11 +260,10 @@ class BenzinaOggiPlugin {
         });
     }
 
-    public function ensure_hourly_variations_cron() {
+    public function ensure_daily_variations_cron() {
         if (!wp_next_scheduled('benzinaoggi_check_variations')) {
-            // schedule to the next minute to avoid missed execution on cold start
-            $next = time() + 60;
-            wp_schedule_event($next, 'hourly', 'benzinaoggi_check_variations');
+            $next = $this->next_run_10am();
+            wp_schedule_event($next, 'daily', 'benzinaoggi_check_variations');
         }
     }
 
@@ -304,6 +314,27 @@ class BenzinaOggiPlugin {
                     }
                 }
                 return new WP_REST_Response(['ok'=>true,'created'=>$count]);
+            }
+        ]);
+
+        // Manual trigger to check variations and send notifications immediately
+        register_rest_route('benzinaoggi/v1', '/run-variations', [
+            'methods' => 'POST',
+            'permission_callback' => '__return_true',
+            'callback' => function($request){
+                $opts = $this->get_options();
+                $secret = sanitize_text_field($request->get_param('secret'));
+                if (!$secret || $secret !== ($opts['webhook_secret'] ?? '')) {
+                    return new WP_REST_Response(['ok'=>false,'error'=>'unauthorized'], 401);
+                }
+                if (!wp_next_scheduled('benzinaoggi_check_variations')) {
+                    wp_schedule_single_event(time() + 5, 'benzinaoggi_check_variations');
+                }
+                if (function_exists('spawn_cron')) { @spawn_cron(time() + 1); }
+                @ignore_user_abort(true);
+                @set_time_limit(120);
+                $this->cron_check_variations();
+                return new WP_REST_Response(['ok'=>true,'message'=>'Variations job triggered']);
             }
         ]);
     }
@@ -468,7 +499,8 @@ class BenzinaOggiPlugin {
 
         // Send specific notifications for each price drop
         foreach ($vars as $variation) {
-            if ($variation['type'] === 'decrease') {
+            $dir = isset($variation['direction']) ? $variation['direction'] : (isset($variation['type']) ? $variation['type'] : null);
+            if ($dir === 'down' || $dir === 'decrease') {
                 $this->send_price_drop_notification($variation, $opts);
             }
         }

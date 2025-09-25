@@ -271,7 +271,7 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
   return { inserted, updated, day: today, total, skippedUnknownDistributor, skippedNoPrice, skippedBadDate, sampleRow };
 }
 
-export async function checkVariation() {
+export async function checkVariation(options?: { impiantoId?: number; fuelType?: string; onlyDown?: boolean; verbose?: boolean }) {
   // Find last two distinct days present in Price
   const lastTwoDays = await prisma.price.findMany({
     select: { day: true },
@@ -280,13 +280,33 @@ export async function checkVariation() {
     take: 2,
   });
   if (lastTwoDays.length < 2) {
-    return { variations: [] };
+    return { variations: [], note: 'Need at least 2 distinct days in Price' };
   }
   const [today, yesterday] = [lastTwoDays[0].day, lastTwoDays[1].day];
 
+  const baseTodayWhere: any = { day: today };
+  const baseYesterdayWhere: any = { day: yesterday };
+  if (options?.fuelType) {
+    baseTodayWhere.fuelType = options.fuelType;
+    baseYesterdayWhere.fuelType = options.fuelType;
+  }
+
+  // If filtering by impiantoId, we need to map to distributorId(s)
+  let distributorIdsFilter: number[] | undefined;
+  if (options?.impiantoId != null) {
+    const d = await prisma.distributor.findUnique({ where: { impiantoId: options.impiantoId } });
+    if (d) distributorIdsFilter = [d.id];
+    else return { day: today, previousDay: yesterday, variations: [], note: `No distributor for impiantoId ${options.impiantoId}` };
+  }
+
+  if (distributorIdsFilter) {
+    baseTodayWhere.distributorId = { in: distributorIdsFilter };
+    baseYesterdayWhere.distributorId = { in: distributorIdsFilter };
+  }
+
   const [todayPrices, yesterdayPrices] = await Promise.all([
-    prisma.price.findMany({ where: { day: today } }),
-    prisma.price.findMany({ where: { day: yesterday } }),
+    prisma.price.findMany({ where: baseTodayWhere }),
+    prisma.price.findMany({ where: baseYesterdayWhere }),
   ]);
 
   const key = (p: { distributorId: number; fuelType: string; isSelfService: boolean }) =>
@@ -312,7 +332,7 @@ export async function checkVariation() {
     if (p.price !== y.price) {
       const distributor = await prisma.distributor.findUnique({ where: { id: p.distributorId } });
       if (!distributor) continue;
-      variations.push({
+      const v: Variation = {
         distributorId: p.distributorId,
         impiantoId: distributor.impiantoId,
         fuelType: p.fuelType,
@@ -320,11 +340,25 @@ export async function checkVariation() {
         oldPrice: y.price,
         newPrice: p.price,
         direction: p.price > y.price ? "up" : "down",
-      });
+      };
+      variations.push(v);
     }
   }
 
-  return { day: today, previousDay: yesterday, variations };
+  const filtered = options?.onlyDown ? variations.filter(v => v.direction === 'down') : variations;
+
+  if (options?.verbose) {
+    return {
+      day: today,
+      previousDay: yesterday,
+      counts: { today: todayPrices.length, yesterday: yesterdayPrices.length, variations: variations.length, filtered: filtered.length },
+      filters: { impiantoId: options?.impiantoId, fuelType: options?.fuelType, onlyDown: options?.onlyDown },
+      variations: filtered,
+    };
+  }
+
+  return { day: today, previousDay: yesterday, variations: filtered };
 }
+
 
 
