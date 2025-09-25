@@ -9,11 +9,11 @@ export async function GET(req: NextRequest) {
     if (!impiantoId || !fuelType) {
       return NextResponse.json({ ok: false, error: "Missing impiantoId or fuelType" }, { status: 400 });
     }
-    const subs = await prisma.subscription.findMany({
+    const subs = await (prisma as any).subscription.findMany({
       where: { impiantoId, fuelType },
       select: { externalId: true },
     });
-    return NextResponse.json({ ok: true, externalIds: subs.map(s => s.externalId) });
+    return NextResponse.json({ ok: true, externalIds: subs.map((s: { externalId: string }) => s.externalId) });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
   }
@@ -31,10 +31,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "remove") {
-      await prisma.subscription.deleteMany({ where: { externalId, impiantoId, fuelType } });
+      await (prisma as any).subscription.deleteMany({ where: { externalId, impiantoId, fuelType } });
       return NextResponse.json({ ok: true, removed: true });
     }
-    await prisma.subscription.upsert({
+    await (prisma as any).subscription.upsert({
       where: { Subscription_unique: { externalId, impiantoId, fuelType } },
       update: {},
       create: { externalId, impiantoId, fuelType },
