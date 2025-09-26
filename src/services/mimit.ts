@@ -206,6 +206,15 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
   const existingByKey = new Map<string, { id: number; price: number }>();
   for (const p of existing) existingByKey.set(key(p), { id: p.id, price: p.price });
 
+  type UpsertItem = {
+    distributorId: number;
+    fuelType: string;
+    isSelf: boolean;
+    price: number;
+    communicatedAt: Date;
+  };
+  const items: UpsertItem[] = [];
+
   for (const r of rows) {
     const idStr = get(r as any, ['idImpianto', 'idimpianto']);
     const impiantoId = Number(idStr);
@@ -233,37 +242,44 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
 
     const k = key({ distributorId, fuelType, isSelfService: isSelf });
     const prev = existingByKey.get(k);
-    // Use upsert to avoid unique race conditions; decide counters via cache
     const isInsert = !prev;
-    await prisma.price.upsert({
-      where: {
-        Price_unique_day: {
-          distributorId,
-          fuelType,
-          day: dayDate,
-          isSelfService: isSelf,
-        },
-      },
-      create: {
-        distributorId,
-        fuelType,
-        price,
-        isSelfService: isSelf,
-        communicatedAt,
-        day: dayDate,
-      },
-      update: {
-        price,
-        communicatedAt,
-      },
-    });
     if (isInsert) {
       inserted += 1;
       existingByKey.set(k, { id: 0, price });
     } else if (prev && prev.price !== price) {
       updated += 1;
       existingByKey.set(k, { id: prev.id, price });
+    } else {
+      // no change; skip from bulk write
+      continue;
     }
+    items.push({ distributorId, fuelType, isSelf, price, communicatedAt });
+  }
+
+  // Bulk UPSERT using raw SQL in chunks to avoid per-row queries
+  const chunkSize = 500;
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize);
+    if (chunk.length === 0) continue;
+    const valuesSqlParts: string[] = [];
+    const params: any[] = [];
+    let p = 1;
+    for (const it of chunk) {
+      valuesSqlParts.push(`($${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++})`);
+      params.push(it.distributorId);
+      params.push(it.fuelType);
+      params.push(dayDate);
+      params.push(it.isSelf);
+      params.push(it.price);
+      params.push(it.communicatedAt);
+    }
+    const sql = `INSERT INTO "Price" ("distributorId","fuelType","day","isSelfService","price","communicatedAt")
+VALUES ${valuesSqlParts.join(',')}
+ON CONFLICT ON CONSTRAINT "Price_unique_day"
+DO UPDATE SET "price"=EXCLUDED."price", "communicatedAt"=EXCLUDED."communicatedAt"`;
+    // Use $executeRawUnsafe with parameter binding array length variable
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    await (prisma as any).$executeRawUnsafe(sql, ...params);
   }
 
   const total = rows.length;
