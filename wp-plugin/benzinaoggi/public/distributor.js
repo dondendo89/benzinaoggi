@@ -2,23 +2,8 @@
   // Early SW registration to ensure root-scoped worker is available before OneSignal flows
   try {
     if ('serviceWorker' in navigator) {
-      // Monkey-patch register to redirect OneSignal default paths to our query worker
-      try {
-        var _origRegister = navigator.serviceWorker.register.bind(navigator.serviceWorker);
-        navigator.serviceWorker.register = function(url, options){
-          try {
-            if (typeof url === 'string') {
-              if (url.indexOf('OneSignalSDKWorker.js') !== -1 || url.indexOf('OneSignalSDK.sw.js') !== -1) {
-                url = '/?onesignal_worker=1';
-                options = Object.assign({ scope: '/' }, options||{});
-              }
-            }
-          } catch(_e){}
-          return _origRegister(url, options);
-        };
-      } catch(_mp){}
       navigator.serviceWorker.getRegistration('/').then(function(reg){
-        if (!reg) { try { navigator.serviceWorker.register('/?onesignal_worker=1', { scope: '/' }); } catch(e){} }
+        if (!reg) { try { navigator.serviceWorker.register('/OneSignalSDKWorker.js', { scope: '/' }); } catch(e){} }
       });
     }
   } catch(_e){}
@@ -126,6 +111,15 @@
     try { window.__boSubSent = window.__boSubSent || {}; } catch(_g){}
 
     // OneSignal helpers (work with both v15 and v16)
+    function canUseIndexedDB(){
+      return new Promise(function(resolve){
+        try {
+          var req = indexedDB.open('bo_test_db');
+          req.onerror = function(){ resolve(false); };
+          req.onsuccess = function(){ try { req.result && req.result.close && req.result.close(); } catch(_){} resolve(true); };
+        } catch(_) { resolve(false); }
+      });
+    }
     async function ensureServiceWorkerRegistered(){
       try {
         if (!('serviceWorker' in navigator)) return;
@@ -295,9 +289,36 @@
         setTimeout(tryAutoPrompt, 1200);
       } catch(_ap){}
 
-      // Login externalId to OneSignal (v16)
+      // Safe login flow after SDK initialized + IndexedDB available
       try {
-        if (externalId && OneSignal && OneSignal.login) { OneSignal.login(externalId); }
+        window.OneSignalDeferred = window.OneSignalDeferred || [];
+        window.OneSignalDeferred.push(async function(OS){
+          try {
+            if (!OS || !OS.initialized) return;
+            try { await OS.initialized; } catch(_i){}
+            var okIDB = await canUseIndexedDB();
+            if (okIDB && externalId && OS.login) {
+              try { await OS.login(externalId); } catch(_lg){}
+            }
+            if (OS.Notifications && OS.Notifications.requestPermission) {
+              try { await OS.Notifications.requestPermission(); } catch(_rp){}
+            }
+            // Ensure push subscription and wait for subscriptionId
+            try {
+              if (OS.User && OS.User.PushSubscription) {
+                if (typeof OS.User.PushSubscription.optIn === 'function') {
+                  try { await OS.User.PushSubscription.optIn(); } catch(_){}
+                }
+                var sid = null, tries = 0;
+                while (!sid && tries < 20) {
+                  try { sid = await OS.User.PushSubscription.getId(); } catch(_){}
+                  if (!sid) { await new Promise(function(r){ setTimeout(r, 500); }); tries++; }
+                }
+                if (sid) { try { console.log('OneSignal subId acquired:', sid); } catch(_){} }
+              }
+            } catch(_sub){}
+          } catch(_e){}
+        });
       } catch(_l){}
 
       // Rely on global v16 init done in PHP header; do not re-initialize here

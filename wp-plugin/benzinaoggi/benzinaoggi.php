@@ -24,6 +24,8 @@ class BenzinaOggiPlugin {
         add_action('init', [$this, 'ensure_daily_variations_cron']);
         // Admin post action for import + page creation
         add_action('admin_post_benzinaoggi_import', [$this, 'handle_import_and_pages']);
+        // Admin post action to run variations now
+        add_action('admin_post_benzinaoggi_run_variations', [$this, 'handle_run_variations']);
         // Single-run cron to sync pages
         add_action('benzinaoggi_sync_pages', [$this, 'cron_sync_pages']);
         // Ensure daily sync at 05:00 local time
@@ -125,6 +127,10 @@ class BenzinaOggiPlugin {
         wp_nonce_field('bo_import_all');
         submit_button('Avvia sincronizzazione pagine (cron)', 'secondary', 'submit', false);
         echo '</form>';
+        echo '<form method="post" action="'.esc_url($action).'" style="margin-top:8px">';
+        echo '<input type="hidden" name="action" value="benzinaoggi_run_variations" />';
+        submit_button('Esegui adesso notifica variazioni', 'secondary', 'submit', false);
+        echo '</form>';
         $last = get_option('benzinaoggi_last_sync');
         if ($last) {
             echo '<p><em>Ultima sincronizzazione: '.esc_html($last['when'] ?? '').' — create: '.intval($last['created'] ?? 0).'</em></p>';
@@ -140,6 +146,28 @@ class BenzinaOggiPlugin {
             echo '</pre>'; 
         }
         echo '</div>';
+    }
+
+    public function handle_run_variations() {
+        if (!current_user_can('manage_options')) wp_die('Not allowed');
+        // Schedule single event to run in background
+        if (!wp_next_scheduled('benzinaoggi_check_variations')) {
+            wp_schedule_single_event(time() + 5, 'benzinaoggi_check_variations');
+        }
+        // Try to immediately spawn wp-cron so the job appears and runs
+        if (function_exists('spawn_cron')) {
+            @spawn_cron(time() + 1);
+        } else {
+            // Fallback: ping wp-cron.php
+            wp_remote_post(site_url('wp-cron.php'));
+        }
+        // Also run synchronously now to send notifications immediately
+        @ignore_user_abort(true);
+        @set_time_limit(180);
+        $this->cron_check_variations();
+        set_transient('benzinaoggi_notice', 'Job variazioni avviato. Notifiche inviate se presenti cali prezzo.', 30);
+        wp_redirect(admin_url('options-general.php?page=benzinaoggi'));
+        exit;
     }
 
     public function handle_import_and_pages() {
@@ -361,7 +389,7 @@ class BenzinaOggiPlugin {
             wp_enqueue_script($handle, 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js', [], null, false);
             // inline init BEFORE the SDK loads using OneSignalDeferred (minimal)
             $appId = esc_js($opts['onesignal_app_id']);
-            $init = "(function(){ window.OneSignalDeferred = window.OneSignalDeferred || []; window.OneSignalDeferred.push(function(OneSignal){ try { OneSignal.init({ appId: '".$appId."', serviceWorkerPath: '/OneSignalSDK.sw.js', serviceWorkerUpdaterPath: '/OneSignalSDK.sw.js', serviceWorkerScope: '/', allowLocalhostAsSecureOrigin: true }); } catch(e) { } }); })();";
+            $init = "(function(){ window.OneSignalDeferred = window.OneSignalDeferred || []; window.OneSignalDeferred.push(function(OneSignal){ try { OneSignal.init({ appId: '".$appId."', serviceWorkerPath: '/OneSignalSDKWorker.js', serviceWorkerUpdaterPath: '/OneSignalSDKUpdaterWorker.js', serviceWorkerScope: '/', allowLocalhostAsSecureOrigin: true }); } catch(e) { } }); })();";
             wp_add_inline_script($handle, $init, 'before');
         }
         // App
@@ -538,8 +566,11 @@ class BenzinaOggiPlugin {
         $payload = array(
             'app_id' => $app_id,
             'include_aliases' => array('external_id' => $externalIds),
-            'headings' => array('it' => $title),
-            'contents' => array('it' => $message),
+            // Required when using alias targeting
+            'target_channel' => 'push',
+            // OneSignal requires an English (en) fallback
+            'headings' => array('en' => $title, 'it' => $title),
+            'contents' => array('en' => $message, 'it' => $message),
             'data' => array(
                 'fuelType' => $fuelType,
                 // Use impiantoId consistently as public identifier in payload
@@ -564,7 +595,12 @@ class BenzinaOggiPlugin {
         if (is_wp_error($response)) {
             $this->log_progress('OneSignal error for ' . $fuelType . ': ' . $response->get_error_message());
         } else {
-            $this->log_progress('Notification sent for ' . $fuelType . ' at ' . $distributorName);
+            $code = wp_remote_retrieve_response_code($response);
+            $body = wp_remote_retrieve_body($response);
+            $this->log_progress('OneSignal response ['.$code.']: ' . $body);
+            if ($code >= 200 && $code < 300) {
+                $this->log_progress('Notification sent for ' . $fuelType . ' at ' . $distributorName);
+            }
         }
     }
 }
