@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import OneSignalNotification from '@/components/OneSignalNotification';
 import { useOneSignal } from '@/hooks/useOneSignal';
 
 export default function NotificationsPage() {
@@ -50,16 +49,7 @@ export default function NotificationsPage() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8">
-          {/* Componente OneSignal */}
-          <div>
-            <h2 className="text-xl font-semibold mb-4">Stato Notifiche</h2>
-            <OneSignalNotification 
-              appId={appId}
-              onSubscriptionChange={handleSubscriptionChange}
-            />
-          </div>
-
+        <div className="grid md:grid-cols-1 gap-8">
           {/* Hook OneSignal */}
           <div>
             <h2 className="text-xl font-semibold mb-4">Controlli Avanzati</h2>

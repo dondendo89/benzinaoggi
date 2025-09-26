@@ -34,9 +34,9 @@ class BenzinaOggiPlugin {
             }
         });
         
-        // Handle OneSignal Service Worker
+        // Handle OneSignal Service Worker (legacy query path kept for safety)
         add_action('init', [$this, 'handle_onesignal_worker']);
-        // Add rewrites to expose SW at root
+        // Add rewrites to expose SW at root (v16)
         add_action('init', [$this, 'register_sw_rewrites']);
         register_activation_hook(__FILE__, [$this, 'activate_flush_rewrites']);
         register_deactivation_hook(__FILE__, [$this, 'deactivate_flush_rewrites']);
@@ -234,27 +234,26 @@ class BenzinaOggiPlugin {
     
     public function handle_onesignal_worker() {
         if (isset($_GET['onesignal_worker']) && $_GET['onesignal_worker'] === '1') {
-            $worker_path = plugin_dir_path(__FILE__) . 'public/OneSignalSDKWorker.js';
-            if (file_exists($worker_path)) {
-                header('Content-Type: application/javascript');
-                header('Cache-Control: public, max-age=31536000');
-                readfile($worker_path);
-                exit;
-            }
+            // Back-compat: serve v16 SW from query path too
+            header('Content-Type: application/javascript; charset=UTF-8');
+            header('Cache-Control: public, max-age=31536000');
+            echo "importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');";
+            exit;
         }
     }
 
     public function register_sw_rewrites() {
         add_rewrite_rule('^OneSignalSDKWorker\.js$', 'index.php?onesignal_sw=1', 'top');
         add_rewrite_rule('^OneSignalSDKUpdaterWorker\.js$', 'index.php?onesignal_sw_updater=1', 'top');
-        // Some OneSignal versions request OneSignalSDK.sw.js — serve the same worker
+        // v16 primary SW filename
         add_rewrite_rule('^OneSignalSDK\.sw\.js$', 'index.php?onesignal_sw_alias=1', 'top');
         add_filter('query_vars', function($vars){ $vars[]='onesignal_sw'; $vars[]='onesignal_sw_updater'; $vars[]='onesignal_sw_alias'; return $vars; });
         add_action('template_redirect', function(){
             if (get_query_var('onesignal_sw') || get_query_var('onesignal_sw_updater') || get_query_var('onesignal_sw_alias')) {
                 header('Content-Type: application/javascript; charset=UTF-8');
                 header('Cache-Control: public, max-age=31536000');
-                echo "importScripts('https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js');";
+                // Always serve v16 SW
+                echo "importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');";
                 exit;
             }
         });
@@ -347,12 +346,11 @@ class BenzinaOggiPlugin {
         wp_enqueue_style('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', [], '1.9.4');
         wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', [], '1.9.4', true);
         
-        // OneSignal SDK v16 (our own integration)
+        // OneSignal SDK v16 (clean minimal integration)
         $opts = $this->get_options();
         if (!empty($opts['onesignal_app_id'])) {
             $handle = 'onesignal-v16';
-            // Try to dequeue/deregister possible OneSignal plugin scripts to avoid v15/v16 conflicts
-            // (common known handles used by official plugins)
+            // Best-effort: avoid conflicts with official plugin
             wp_dequeue_script('onesignal-sdk');
             wp_dequeue_script('OneSignalSDK');
             wp_dequeue_script('onesignal-public-sdk');
@@ -361,16 +359,9 @@ class BenzinaOggiPlugin {
             wp_deregister_script('onesignal-public-sdk');
             // enqueue v16 page SDK in header
             wp_enqueue_script($handle, 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js', [], null, false);
-            // inline init BEFORE the SDK loads using OneSignalDeferred
+            // inline init BEFORE the SDK loads using OneSignalDeferred (minimal)
             $appId = esc_js($opts['onesignal_app_id']);
-            // pre-guard: if a v15 object is present, clear it before loading v16
-            $pre = "(function(){ try{ if (window.OneSignal && window.OneSignal.VERSION && String(window.OneSignal.VERSION).indexOf('15')===0) { try { delete window.OneSignal; } catch(e){ window.OneSignal = undefined; } } }catch(e){} })();";
-            // Provide minimal safe shim to avoid early access errors from third-party/theme code
-            $shim = "(function(){ try{ window.OneSignal = window.OneSignal || {}; if (!window.OneSignal.emitter) { window.OneSignal.emitter = { on:function(){}, off:function(){}, emit:function(){} }; } window.OneSignal.EVENTS = window.OneSignal.EVENTS || {}; if (!window.OneSignal.EVENTS.NOTIFICATION_PERMISSION_CHANGED_AS_STRING) { window.OneSignal.EVENTS.NOTIFICATION_PERMISSION_CHANGED_AS_STRING = 'permission-change'; } }catch(e){} })();";
-            // Use query-based worker paths to avoid permalinks/rewrite dependency
-            $init = "(function(){ if (window.OneSignal && window.OneSignal.VERSION && String(window.OneSignal.VERSION).indexOf('16')===0) { return; } window.OneSignalDeferred = window.OneSignalDeferred || []; window.OneSignal = window.OneSignal || {}; window.OneSignalDeferred.push(function(OneSignal){ try { OneSignal.init({ appId: '".$appId."', serviceWorkerPath: '/?onesignal_worker=1', serviceWorkerUpdaterPath: '/?onesignal_worker=1', serviceWorkerScope: '/', allowLocalhostAsSecureOrigin: true }); } catch(e) { console.warn('OneSignal v16 init error', e); } }); })();";
-            wp_add_inline_script($handle, $pre, 'before');
-            wp_add_inline_script($handle, $shim, 'before');
+            $init = "(function(){ window.OneSignalDeferred = window.OneSignalDeferred || []; window.OneSignalDeferred.push(function(OneSignal){ try { OneSignal.init({ appId: '".$appId."', serviceWorkerPath: '/OneSignalSDK.sw.js', serviceWorkerUpdaterPath: '/OneSignalSDK.sw.js', serviceWorkerScope: '/', allowLocalhostAsSecureOrigin: true }); } catch(e) { } }); })();";
             wp_add_inline_script($handle, $init, 'before');
         }
         // App
@@ -388,16 +379,12 @@ class BenzinaOggiPlugin {
         // Distributor detail loader if shortcode present
         global $post;
         if ($post && has_shortcode($post->post_content, 'carburante_distributor')) {
-            wp_register_script('benzinaoggi-distributor', plugins_url('public/distributor.js', __FILE__), [], '1.0.1', true);
+            wp_register_script('benzinaoggi-distributor', plugins_url('public/distributor.js', __FILE__), [], '2.0.0', true);
             wp_localize_script('benzinaoggi-distributor', 'BenzinaOggi', [
                 'apiBase' => rtrim($opts['api_base'], '/'),
                 'onesignalAppId' => $opts['onesignal_app_id'],
                 'onesignalOfficial' => false,
-                'useOwnOneSignal' => true,
-                'workerPath' => plugins_url('public/OneSignalSDKWorker.js', __FILE__),
-                'workerUpdaterPath' => plugins_url('public/OneSignalSDKUpdaterWorker.js', __FILE__),
-                'rootWorkerPath' => home_url('/OneSignalSDKWorker.js'),
-                'rootWorkerUpdaterPath' => home_url('/OneSignalSDKUpdaterWorker.js')
+                'useOwnOneSignal' => true
             ]);
             wp_enqueue_script('benzinaoggi-distributor');
         }
