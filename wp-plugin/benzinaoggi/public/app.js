@@ -91,12 +91,14 @@
       var brand = (qs('bo_brand') && qs('bo_brand').value) || '';
       var sort = (qs('bo_sort') && qs('bo_sort').value) || '';
       var lat = window._bo_lat, lon = window._bo_lon;
-      var url = api + '/api/distributors?limit=300'
+      var rad = (function(){ var r=qs('bo_radius_km'); return r? parseFloat(r.value)||undefined : undefined; })();
+      var url = api + '/api/distributors?limit=1000'
         + (city ? ('&city=' + encodeURIComponent(city)) : '')
         + (fuel ? ('&fuel=' + encodeURIComponent(fuel)) : '')
         + (brand ? ('&brand=' + encodeURIComponent(brand)) : '')
         + (sort ? ('&sort=' + encodeURIComponent(sort)) : '')
-        + ((lat!=null && lon!=null) ? ('&lat=' + encodeURIComponent(lat) + '&lon=' + encodeURIComponent(lon)) : '');
+        + ((lat!=null && lon!=null) ? ('&lat=' + encodeURIComponent(lat) + '&lon=' + encodeURIComponent(lon)) : '')
+        + ((lat!=null && lon!=null && rad!=null) ? ('&radiusKm=' + encodeURIComponent(rad)) : '');
       fetch(url).then(function(r){ return r.json(); }).then(function(data){
         clearMarkers();
         if(!data || !data.distributors){ return; }
@@ -135,9 +137,8 @@
           if(list) list.appendChild(li);
         });
         // Fit map to markers (and user position if set)
-        if (window._bo_lat != null && window._bo_lon != null) {
-          bounds.extend([window._bo_lat, window._bo_lon]);
-        }
+        if (useCircle && center) { bounds.extend(center); }
+        else if (window._bo_lat != null && window._bo_lon != null) { bounds.extend([window._bo_lat, window._bo_lon]); }
         if (bounds.isValid()) {
           map.fitBounds(bounds.pad(0.2));
         }
@@ -192,6 +193,18 @@
     }
 
     qs('bo_search') && qs('bo_search').addEventListener('click', function(){ fetchData(); });
+    // Toggle filters visibility (mobile)
+    var toggleBtn = document.getElementById('bo_filters_toggle');
+    if (toggleBtn) {
+      var visible = true;
+      toggleBtn.addEventListener('click', function(){
+        var filters = document.querySelector('.benzinaoggi-wrap .filters');
+        if (!filters) return;
+        visible = !visible;
+        filters.style.display = visible ? 'flex' : 'none';
+        toggleBtn.textContent = visible ? 'Nascondi filtri' : 'Mostra filtri';
+      });
+    }
     // Auto-center by geolocation on first load for mobile
     if (isMobile && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(function(pos){

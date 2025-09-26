@@ -37,6 +37,8 @@
 /* Mobile optimizations */
 @media (max-width: 768px){
   .benzinaoggi-wrap{padding:8px;border-radius:6px}
+  .bo-filters-toggle{position:sticky;top:0;background:#fff;z-index:6;padding-top:6px}
+  #bo_filters_toggle{width:100%;background:#e2e8f0;border:1px solid #cbd5e1;border-radius:6px;height:38px}
   .benzinaoggi-wrap .filters{flex-direction:column;align-items:stretch;gap:6px}
   .benzinaoggi-wrap .filters > *{width:100%}
   #bo_map{height:62vh !important}

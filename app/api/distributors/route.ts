@@ -12,7 +12,9 @@ export async function GET(req: NextRequest) {
     const lonParam = searchParams.get("lon");
     const userLat = latParam ? parseFloat(latParam) : undefined;
     const userLon = lonParam ? parseFloat(lonParam) : undefined;
-    const limit = Math.min(parseInt(searchParams.get("limit") || "200", 10), 500);
+    const radiusKmParam = searchParams.get("radiusKm");
+    const radiusKm = radiusKmParam ? parseFloat(radiusKmParam) : undefined;
+    const limit = Math.min(parseInt(searchParams.get("limit") || "200", 10), 2000);
 
     const distributors = await prisma.distributor.findMany({
       where: {
@@ -72,7 +74,15 @@ export async function GET(req: NextRequest) {
       return R * c;
     }
 
-    const enriched = filtered.map(d => {
+    // Optional server-side radius filter if user lat/lon and radius provided
+    const radiusFiltered = (userLat != null && userLon != null && radiusKm != null)
+      ? filtered.filter(d => {
+          const dist = haversine(d.latitudine, d.longitudine, userLat, userLon);
+          return dist != null && dist <= radiusKm;
+        })
+      : filtered;
+
+    const enriched = radiusFiltered.map(d => {
       const dPrices = byDistributor.get(d.id) || [];
       const distance = (userLat != null && userLon != null) ? haversine(d.latitudine, d.longitudine, userLat, userLon) : undefined;
       return { ...d, prices: dPrices, distance };

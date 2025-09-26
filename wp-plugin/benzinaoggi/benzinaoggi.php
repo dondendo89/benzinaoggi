@@ -447,6 +447,7 @@ class BenzinaOggiPlugin {
         ob_start();
         ?>
         <div class="benzinaoggi-wrap">
+            <div class="bo-filters-toggle"><button id="bo_filters_toggle" type="button">Nascondi filtri</button></div>
             <div class="filters">
                 <div style="margin-bottom:8px;">
                     <strong>Disegna un'area di tipo:</strong>
