@@ -9,6 +9,8 @@
     if(wrap && !wrap.classList.contains('bo-loader')){ wrap.classList.add('bo-loader'); }
 
     var map = L.map('bo_map').setView([41.8719, 12.5674], 6);
+    // expose for any legacy handlers
+    try { window.__bo_map = map; } catch(_){}
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap'
@@ -16,6 +18,7 @@
 
     var markers = [];
     var userMarker = null;
+    var drawnLayer = null; // current circle/polygon selection
     function clearMarkers(){ markers.forEach(function(m){ map.removeLayer(m); }); markers = []; }
 
     function slugify(text){
@@ -62,6 +65,19 @@
       }
     }
 
+    function pointInPolygon(pt, poly){
+      // ray-casting algorithm for polygons
+      var x = pt[1], y = pt[0];
+      var inside = false;
+      for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        var xi = poly[i][1], yi = poly[i][0];
+        var xj = poly[j][1], yj = poly[j][0];
+        var intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi + 1e-12) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+
     function fetchData(){
       var api = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
       if(!api){ return; }
@@ -82,8 +98,23 @@
         if(!data || !data.distributors){ return; }
         var list = qs('bo_list'); if(list) list.innerHTML = '';
         var bounds = L.latLngBounds([]);
+        // optional spatial filtering by drawn shape
+        var useCircle = drawnLayer && drawnLayer instanceof L.Circle;
+        var usePolygon = drawnLayer && drawnLayer instanceof L.Polygon && !(drawnLayer instanceof L.Circle);
+        var center = useCircle ? drawnLayer.getLatLng() : null;
+        var radius = useCircle ? drawnLayer.getRadius() : null; // meters
+        var polygonLatLngs = usePolygon ? drawnLayer.getLatLngs()[0] || [] : [];
+
         data.distributors.forEach(function(d){
           if(d.latitudine && d.longitudine){
+            // spatial filter
+            if (useCircle) {
+              var dist = map.distance([d.latitudine, d.longitudine], center);
+              if (dist > radius) { return; }
+            } else if (usePolygon) {
+              var poly = polygonLatLngs.map(function(ll){ return [ll.lat, ll.lng]; });
+              if (!pointInPolygon([d.latitudine, d.longitudine], poly)) { return; }
+            }
             var m = L.marker([d.latitudine, d.longitudine]).addTo(map);
             markers.push(m);
             var prices = (d.prices || []).map(function(p){ return p.fuelType + ': ' + p.price.toFixed(3); }).join('<br/>');
@@ -157,6 +188,86 @@
     }
 
     qs('bo_search') && qs('bo_search').addEventListener('click', function(){ fetchData(); });
+    // radius slider label
+    var radiusInput = qs('bo_radius_km');
+    var radiusLabel = qs('bo_radius_km_label');
+    if (radiusInput && radiusLabel) {
+      var updateRadius = function(){
+        radiusLabel.textContent = String(radiusInput.value);
+        if(drawnLayer && drawnLayer instanceof L.Circle){
+          drawnLayer.setRadius(parseFloat(radiusInput.value) * 1000);
+          fetchData();
+        }
+      };
+      radiusInput.addEventListener('input', updateRadius);
+    }
+
+    // Leaflet Draw controls: circle/polygon
+    var drawControl = new L.Control.Draw({
+      draw: {
+        polyline: false,
+        rectangle: false,
+        marker: false,
+        circlemarker: false,
+        circle: { shapeOptions: { color: '#0ea5e9' } },
+        polygon: { allowIntersection: false, showArea: true, shapeOptions: { color: '#0ea5e9' } }
+      },
+      edit: false
+    });
+    map.addControl(drawControl);
+
+    map.on(L.Draw.Event.CREATED, function (e) {
+      if (drawnLayer) { try { map.removeLayer(drawnLayer); } catch(_){} }
+      drawnLayer = e.layer;
+      map.addLayer(drawnLayer);
+      if (drawnLayer instanceof L.Circle && radiusInput) {
+        var rkm = parseFloat(radiusInput.value) || 9.5;
+        drawnLayer.setRadius(rkm * 1000);
+      }
+      fetchData();
+    });
+
+    // Geocoder search box bound to bo_city input
+    if (L.Control && L.Control.Geocoder) {
+      var geocoder = L.Control.geocoder({ defaultMarkGeocode: false }).addTo(map);
+      var input = qs('bo_city');
+      if (input) {
+        input.addEventListener('keydown', function(ev){ if(ev.key === 'Enter'){ ev.preventDefault(); geocodeNow(); }});
+      }
+      function geocodeNow(){
+        var q = (input && input.value) || '';
+        if (!q) return;
+        L.Control.Geocoder.nominatim().geocode(q, function(results){
+          if(results && results[0]){
+            var b = results[0].bbox; var c = results[0].center;
+            map.fitBounds([[b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]]);
+            if (drawnLayer) { try { map.removeLayer(drawnLayer); } catch(_){} }
+            var km = parseFloat((radiusInput && radiusInput.value) || '9.5') || 9.5;
+            drawnLayer = L.circle([c.lat, c.lng], { radius: km * 1000, color: '#0ea5e9' }).addTo(map);
+            fetchData();
+          }
+        });
+      }
+    }
+
+    // Geolocate button inside render, bind circle with current radius
+    var geoBtn = qs('bo_geo');
+    if (geoBtn) {
+      geoBtn.addEventListener('click', function(e){
+        e.preventDefault();
+        if(navigator.geolocation){
+          navigator.geolocation.getCurrentPosition(function(pos){
+            window._bo_lat = pos.coords.latitude; window._bo_lon = pos.coords.longitude;
+            // replace selection with a circle at user position
+            if (drawnLayer) { try { map.removeLayer(drawnLayer); } catch(_){} }
+            var km = parseFloat((radiusInput && radiusInput.value) || '9.5') || 9.5;
+            drawnLayer = L.circle([window._bo_lat, window._bo_lon], { radius: km * 1000, color: '#0ea5e9' }).addTo(map);
+            map.setView([window._bo_lat, window._bo_lon], 13);
+            fetchData();
+          }, function(){ fetchData(); }, { enableHighAccuracy: true, timeout: 8000 });
+        }
+      });
+    }
     fetchData();
 
     // OneSignal: add a single unified subscribe button in plugin UI (use global v16 init from PHP)

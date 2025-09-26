@@ -392,6 +392,12 @@ class BenzinaOggiPlugin {
         // Leaflet
         wp_enqueue_style('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', [], '1.9.4');
         wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', [], '1.9.4', true);
+        // Leaflet Draw (for circle/polygon tools)
+        wp_enqueue_style('leaflet-draw', 'https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css', [], '1.0.4');
+        wp_enqueue_script('leaflet-draw', 'https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js', ['leaflet'], '1.0.4', true);
+        // Leaflet Control Geocoder (Nominatim)
+        wp_enqueue_style('leaflet-geocoder', 'https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css', [], null);
+        wp_enqueue_script('leaflet-geocoder', 'https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js', ['leaflet'], null, true);
         
         // OneSignal SDK v16 (clean minimal integration)
         $opts = $this->get_options();
@@ -442,7 +448,16 @@ class BenzinaOggiPlugin {
         ?>
         <div class="benzinaoggi-wrap">
             <div class="filters">
-                <input type="text" id="bo_city" placeholder="Città" />
+                <div style="margin-bottom:8px;">
+                    <strong>Disegna un'area di tipo:</strong>
+                    <label style="margin-left:8px"><input type="radio" name="bo_shape" value="circle" checked /> Cerchio</label>
+                    <label style="margin-left:8px"><input type="radio" name="bo_shape" value="polygon" /> Poligono</label>
+                </div>
+                <div style="margin-bottom:8px;">
+                    <label>Impostazione attuale del Raggio <span id="bo_radius_km_label">9.5</span> km</label>
+                    <input type="range" id="bo_radius_km" min="1" max="50" step="0.5" value="9.5" style="width:280px; vertical-align:middle; margin-left:8px" />
+                </div>
+                <input type="text" id="bo_city" placeholder="Via, cap, provincia" />
                 <select id="bo_fuel">
                     <option value="">Tutti i carburanti</option>
                     <option>Benzina</option>
