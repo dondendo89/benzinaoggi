@@ -21,6 +21,16 @@ class BenzinaOggiPlugin {
         add_action('rest_api_init', [$this, 'register_rest']);
         // Cron to check variations
         add_action('benzinaoggi_check_variations', [$this, 'cron_check_variations']);
+        // Add custom cron schedule for every 10 minutes
+        add_filter('cron_schedules', function($schedules){
+            if (!isset($schedules['ten_minutes'])) {
+                $schedules['ten_minutes'] = [
+                    'interval' => 600,
+                    'display' => __('Every 10 Minutes', 'benzinaoggi')
+                ];
+            }
+            return $schedules;
+        });
         add_action('init', [$this, 'ensure_daily_variations_cron']);
         // Admin post action for import + page creation
         add_action('admin_post_benzinaoggi_import', [$this, 'handle_import_and_pages']);
@@ -288,9 +298,18 @@ class BenzinaOggiPlugin {
     }
 
     public function ensure_daily_variations_cron() {
+        // Migrate to 10-minute schedule once
+        $cron_v = get_option('benzinaoggi_cron_v');
+        if ($cron_v !== 'ten_minutes_v1') {
+            wp_clear_scheduled_hook('benzinaoggi_check_variations');
+            wp_schedule_event(time() + 60, 'ten_minutes', 'benzinaoggi_check_variations');
+            update_option('benzinaoggi_cron_v', 'ten_minutes_v1');
+            $this->log_progress('Scheduled benzinaoggi_check_variations every 10 minutes.');
+            return;
+        }
+        // Ensure it's scheduled
         if (!wp_next_scheduled('benzinaoggi_check_variations')) {
-            $next = $this->next_run_10am();
-            wp_schedule_event($next, 'daily', 'benzinaoggi_check_variations');
+            wp_schedule_event(time() + 60, 'ten_minutes', 'benzinaoggi_check_variations');
         }
     }
 
@@ -554,6 +573,9 @@ class BenzinaOggiPlugin {
                 $json = json_decode(wp_remote_retrieve_body($resp), true);
                 if (!empty($json['externalIds']) && is_array($json['externalIds'])) {
                     $externalIds = $json['externalIds'];
+                    // Log how many and a small sample to verify
+                    $sample = array_slice($externalIds, 0, 5);
+                    $this->log_progress('Subscriptions fetched for impianto '.(isset($variation['impiantoId']) ? $variation['impiantoId'] : 'unknown').' fuel '.$fuelType.': count='.count($externalIds).' sample='.json_encode($sample));
                 }
             }
         }
@@ -578,7 +600,8 @@ class BenzinaOggiPlugin {
                 'oldPrice' => $oldPrice,
                 'newPrice' => $newPrice,
                 'priceDiff' => $priceDiff,
-                'percentageDiff' => $percentageDiff
+                'percentageDiff' => $percentageDiff,
+                'externalIdsCount' => count($externalIds)
             ),
             // Deep link to distributor page using impiantoId
             'url' => home_url('/distributore-' . (isset($variation['impiantoId']) ? $variation['impiantoId'] : ''))
