@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updatePrezzi } from "@/src/services/mimit";
 
+// Ensure serverless function gets enough time and isn't statically optimized
+export const dynamic = "force-dynamic";
+export const maxDuration = 60; // seconds (Vercel max on many plans)
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);

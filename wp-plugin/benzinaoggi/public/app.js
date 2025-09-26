@@ -8,7 +8,11 @@
     var wrap = document.querySelector('.benzinaoggi-wrap');
     if(wrap && !wrap.classList.contains('bo-loader')){ wrap.classList.add('bo-loader'); }
 
-    var map = L.map('bo_map').setView([41.8719, 12.5674], 6);
+    // Prefer device location first on mobile for better UX
+    var isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+    var startCenter = [41.8719, 12.5674], startZoom = 6;
+    var map = L.map('bo_map', { zoomControl: !isMobile }).setView(startCenter, startZoom);
+    if (isMobile) { L.control.zoom({ position: 'bottomright' }).addTo(map); }
     // expose for any legacy handlers
     try { window.__bo_map = map; } catch(_){}
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -188,6 +192,17 @@
     }
 
     qs('bo_search') && qs('bo_search').addEventListener('click', function(){ fetchData(); });
+    // Auto-center by geolocation on first load for mobile
+    if (isMobile && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(function(pos){
+        window._bo_lat = pos.coords.latitude; window._bo_lon = pos.coords.longitude;
+        var km = parseFloat((radiusInput && radiusInput.value) || '9.5') || 9.5;
+        if (drawnLayer) { try { map.removeLayer(drawnLayer); } catch(_){} }
+        drawnLayer = L.circle([window._bo_lat, window._bo_lon], { radius: km * 1000, color: '#0ea5e9' }).addTo(map);
+        map.setView([window._bo_lat, window._bo_lon], 13);
+        fetchData();
+      }, function(){}, { enableHighAccuracy: true, timeout: 7000 });
+    }
     // radius slider label
     var radiusInput = qs('bo_radius_km');
     var radiusLabel = qs('bo_radius_km_label');

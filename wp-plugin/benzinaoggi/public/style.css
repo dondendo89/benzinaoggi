@@ -1,5 +1,9 @@
 .benzinaoggi-wrap{border:1px solid #e2e8f0;padding:12px;border-radius:8px}
-.benzinaoggi-wrap .filters{display:flex;gap:8px;align-items:center}
+.benzinaoggi-wrap .filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;position:sticky;top:0;background:#fff;z-index:5;padding-top:8px}
+.benzinaoggi-wrap .filters input[type="text"],
+.benzinaoggi-wrap .filters select,
+.benzinaoggi-wrap .filters button{height:38px}
+.benzinaoggi-wrap .filters button{padding:0 12px}
 .benzinaoggi-wrap #bo_list{list-style:none;margin:0;padding:0}
 .benzinaoggi-wrap #bo_list li{padding:6px 4px;border-bottom:1px solid #edf2f7}
 .benzinaoggi-wrap #bo_list li button.bo_item{background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:6px 8px;width:100%;text-align:left;cursor:pointer}
@@ -29,4 +33,19 @@
 /* Notify button */
 .bo-notify-btn{background:#0ea5e9;color:#fff;border:none;border-radius:6px;padding:8px 12px;cursor:pointer}
 .bo-notify-btn:hover{background:#0284c7}
+
+/* Mobile optimizations */
+@media (max-width: 768px){
+  .benzinaoggi-wrap{padding:8px;border-radius:6px}
+  .benzinaoggi-wrap .filters{flex-direction:column;align-items:stretch;gap:6px}
+  .benzinaoggi-wrap .filters > *{width:100%}
+  #bo_map{height:62vh !important}
+  .benzinaoggi-wrap #bo_list li{padding:8px 6px}
+  .benzinaoggi-wrap #bo_list li button.bo_item{padding:10px 12px}
+}
+
+/* Range slider nicer on mobile */
+input[type="range"]#bo_radius_km{appearance:none;-webkit-appearance:none;height:6px;background:#e2e8f0;border-radius:999px}
+input[type="range"]#bo_radius_km::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#0ea5e9;border:none}
+input[type="range"]#bo_radius_km::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#0ea5e9;border:none}
 
