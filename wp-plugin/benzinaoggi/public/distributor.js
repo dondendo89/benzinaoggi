@@ -570,15 +570,19 @@
                     fetch(subUrlEarly, {
                       method: 'POST', headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ action: 'add', externalId: externalId, impiantoId: d.impiantoId, fuelType: fuel })
-                    }).then(function(){ /* noop */ }).catch(function(err){ console.warn('Persist subscription (early) failed', err); });
+                    }).then(function(r){ return r.json().catch(function(){ return {}; }); }).then(function(res){
+                      if (res && res.ok) {
+                        try {
+                          if (statusEl) { statusEl.textContent = '✓ Attivato per ' + fuel; statusEl.style.display = 'inline'; statusEl.style.color = '#28a745'; }
+                        } catch(_sx){}
+                      }
+                    }).catch(function(err){ console.warn('Persist subscription (early) failed', err); });
                   }
                 }
               } catch(_ce){}
 
-              // If OneSignal is not ready, stop here (we already persisted preference)
+              // If OneSignal is not ready, stop here (we already persisted preference and updated UI)
               if (!(window.OneSignal && (window.OneSignal.sendTags || window.OneSignal.sendTag))) {
-                // retry later only for tags
-                setTimeout(setTag, 1500);
                 return;
               }
               

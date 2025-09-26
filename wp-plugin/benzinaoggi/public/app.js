@@ -160,31 +160,7 @@
     fetchData();
 
     // OneSignal: add a single unified subscribe button in plugin UI (use global v16 init from PHP)
-    (function addNotifyButton(){
-      // remove any pre-existing custom buttons
-      var old = document.getElementById('bo_notify_btn'); if(old && old.parentNode) old.parentNode.removeChild(old);
-      if(!(window.BenzinaOggi && BenzinaOggi.onesignalAppId)) return;
-      // rely on OneSignal v16 already initialized in header
-      var container = document.getElementById('bo_subscribe') || document.querySelector('.benzinaoggi-wrap');
-      if(!container) return;
-      var btn = createEl('button');
-      btn.id = 'bo_notify_btn';
-      btn.className = 'bo-notify-btn';
-      btn.type = 'button';
-      btn.textContent = '🔔 Attiva notifiche';
-      btn.addEventListener('click', function(){
-        try {
-          if (window.OneSignal && OneSignal.Notifications && OneSignal.Notifications.requestPermission) {
-            OneSignal.Notifications.requestPermission();
-          } else if (window.OneSignal && OneSignal.showNativePrompt) {
-            OneSignal.showNativePrompt();
-          } else if (window.OneSignal && OneSignal.registerForPushNotifications) {
-            OneSignal.registerForPushNotifications();
-          }
-        } catch(e){ console.warn('OneSignal prompt error', e); }
-      });
-      container.appendChild(btn);
-    })();
+    // Removed home notify button to avoid prompting on homepage
   }
 
     if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render); else render();
