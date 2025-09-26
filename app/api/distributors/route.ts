@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
     const city = searchParams.get("city")?.trim();
     const fuel = searchParams.get("fuel")?.trim() || undefined;
     const brand = searchParams.get("brand")?.trim() || undefined;
-    const sort = (searchParams.get("sort") || "").toLowerCase();
+    const sortParam = (searchParams.get("sort") || "").toLowerCase();
     const latParam = searchParams.get("lat");
     const lonParam = searchParams.get("lon");
     const userLat = latParam ? parseFloat(latParam) : undefined;
@@ -22,13 +22,21 @@ export async function GET(req: NextRequest) {
       take: limit,
     });
 
-    // Fetch latest day
-    const lastDayRow = await prisma.price.findFirst({ select: { day: true }, orderBy: { day: "desc" } });
-    const day = lastDayRow?.day;
+    // Fetch latest two distinct days to allow fallback when some distributors have no price today
+    const lastTwoDays = await prisma.price.findMany({ select: { day: true }, orderBy: { day: "desc" }, distinct: ["day"], take: 2 });
+    const day = lastTwoDays[0]?.day;
+    const prevDay = lastTwoDays[1]?.day;
 
     const prices = day ? await prisma.price.findMany({
       where: {
         day,
+        fuelType: fuel || undefined,
+      },
+    }) : [];
+
+    const prevPrices = prevDay ? await prisma.price.findMany({
+      where: {
+        day: prevDay,
         fuelType: fuel || undefined,
       },
     }) : [];
@@ -39,8 +47,17 @@ export async function GET(req: NextRequest) {
       arr.push({ fuelType: p.fuelType, price: p.price, isSelfService: p.isSelfService });
       byDistributor.set(p.distributorId, arr);
     }
+    // Fill gaps with previous day prices only if no entry exists yet for that distributor
+    if (prevPrices.length > 0) {
+      for (const p of prevPrices) {
+        if (!byDistributor.has(p.distributorId)) {
+          byDistributor.set(p.distributorId, [{ fuelType: p.fuelType, price: p.price, isSelfService: p.isSelfService }]);
+        }
+      }
+    }
 
-    const filtered = distributors;
+    // If a specific fuel is requested, keep only distributors that have at least one price after fallback
+    const filtered = fuel ? distributors.filter(d => (byDistributor.get(d.id) || []).some(pp => (pp.fuelType || '').toLowerCase() === fuel.toLowerCase())) : distributors;
 
     function haversine(lat1?: number | null, lon1?: number | null, lat2?: number, lon2?: number) {
       if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return undefined;
@@ -62,6 +79,7 @@ export async function GET(req: NextRequest) {
     });
 
     let result = enriched;
+    const sort = (sortParam === 'nearest') ? 'distance' : sortParam; // accept nearest alias
     if (sort === 'distance' && userLat != null && userLon != null) {
       result = [...enriched].sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
     }
