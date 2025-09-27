@@ -298,7 +298,34 @@ export async function checkVariation(options?: { impiantoId?: number; fuelType?:
   if (lastTwoDays.length < 2) {
     return { variations: [], note: 'Need at least 2 distinct days in Price' };
   }
-  const [today, yesterday] = [lastTwoDays[0].day, lastTwoDays[1].day];
+  let [today, yesterday] = [lastTwoDays[0].day, lastTwoDays[1].day];
+
+  // IMPROVEMENT: If we have very few prices for comparison, try to find more historical data
+  const todayCount = await prisma.price.count({ where: { day: today } });
+  const yesterdayCount = await prisma.price.count({ where: { day: yesterday } });
+  
+  // If we have very few prices for comparison, try to find a better comparison day
+  if (todayCount < 10 || yesterdayCount < 10) {
+    console.log(`Low price counts: today=${todayCount}, yesterday=${yesterdayCount}. Looking for better comparison...`);
+    
+    // Try to find a day with more prices for comparison
+    const betterYesterday = await prisma.price.findFirst({
+      where: {
+        day: { lt: today },
+        // Find a day that has at least some overlap with today's distributors
+      },
+      select: { day: true },
+      orderBy: { day: 'desc' }
+    });
+    
+    if (betterYesterday && betterYesterday.day !== yesterday) {
+      console.log(`Using better comparison day: ${betterYesterday.day} instead of ${yesterday}`);
+      yesterday = betterYesterday.day;
+    }
+  }
+
+  // Debug: Log the days being compared
+  console.log(`Checking variations between ${yesterday} and ${today}`);
 
   const baseTodayWhere: any = { day: today };
   const baseYesterdayWhere: any = { day: yesterday };
@@ -325,11 +352,19 @@ export async function checkVariation(options?: { impiantoId?: number; fuelType?:
     prisma.price.findMany({ where: baseYesterdayWhere }),
   ]);
 
+  // Debug: Log counts
+  console.log(`Found ${todayPrices.length} prices for today (${today}) and ${yesterdayPrices.length} for yesterday (${yesterday})`);
+
   const key = (p: { distributorId: number; fuelType: string; isSelfService: boolean }) =>
     `${p.distributorId}|${p.fuelType}|${p.isSelfService ? 1 : 0}`;
 
   const mapYesterday = new Map<string, typeof yesterdayPrices[number]>();
   for (const p of yesterdayPrices) mapYesterday.set(key(p), p);
+
+  // Debug: Log unique keys
+  const todayKeys = new Set(todayPrices.map(p => key(p)));
+  const yesterdayKeys = new Set(yesterdayPrices.map(p => key(p)));
+  console.log(`Today has ${todayKeys.size} unique price combinations, yesterday has ${yesterdayKeys.size}`);
 
   type Variation = {
     distributorId: number;
@@ -342,12 +377,24 @@ export async function checkVariation(options?: { impiantoId?: number; fuelType?:
   };
 
   const variations: Variation[] = [];
+  let processedCount = 0;
+  let skippedNoYesterday = 0;
+  let skippedNoDistributor = 0;
+  let noChangeCount = 0;
+
   for (const p of todayPrices) {
+    processedCount++;
     const y = mapYesterday.get(key(p));
-    if (!y) continue;
+    if (!y) {
+      skippedNoYesterday++;
+      continue;
+    }
     if (p.price !== y.price) {
       const distributor = await prisma.distributor.findUnique({ where: { id: p.distributorId } });
-      if (!distributor) continue;
+      if (!distributor) {
+        skippedNoDistributor++;
+        continue;
+      }
       const v: Variation = {
         distributorId: p.distributorId,
         impiantoId: distributor.impiantoId,
@@ -358,7 +405,18 @@ export async function checkVariation(options?: { impiantoId?: number; fuelType?:
         direction: p.price > y.price ? "up" : "down",
       };
       variations.push(v);
+    } else {
+      noChangeCount++;
     }
+  }
+
+  // Debug: Log processing stats
+  console.log(`Processed ${processedCount} today prices: ${variations.length} variations, ${noChangeCount} no change, ${skippedNoYesterday} no yesterday data, ${skippedNoDistributor} no distributor`);
+
+  // IMPROVEMENT: If we have very few variations due to missing historical data, 
+  // suggest using MISE API for better detection
+  if (variations.length === 0 && skippedNoYesterday > processedCount * 0.5) {
+    console.log(`WARNING: ${skippedNoYesterday} prices skipped due to missing historical data. Consider using MISE API for real-time comparison.`);
   }
 
   const filtered = options?.onlyDown ? variations.filter(v => v.direction === 'down') : variations;
@@ -367,7 +425,16 @@ export async function checkVariation(options?: { impiantoId?: number; fuelType?:
     return {
       day: today,
       previousDay: yesterday,
-      counts: { today: todayPrices.length, yesterday: yesterdayPrices.length, variations: variations.length, filtered: filtered.length },
+      counts: { 
+        today: todayPrices.length, 
+        yesterday: yesterdayPrices.length, 
+        variations: variations.length, 
+        filtered: filtered.length,
+        processed: processedCount,
+        skippedNoYesterday,
+        skippedNoDistributor,
+        noChange: noChangeCount
+      },
       filters: { impiantoId: options?.impiantoId, fuelType: options?.fuelType, onlyDown: options?.onlyDown },
       variations: filtered,
     };

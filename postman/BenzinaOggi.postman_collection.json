@@ -113,6 +113,320 @@
       "description": "Variazioni filtrate per impianto/carb, solo cali, con output verboso (conteggi/giorni)."
     },
     {
+      "name": "Debug Variations",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/debug-variations?verbose=true",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "debug-variations"
+          ],
+          "query": [
+            {
+              "key": "verbose",
+              "value": "true",
+              "description": "Output debug completo"
+            }
+          ]
+        }
+      },
+      "description": "Debug completo per analizzare il rilevamento variazioni: statistiche database, giorni disponibili, conteggi prezzi."
+    },
+    {
+      "name": "Smart Variations Check",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/check-variations-smart?onlyDown=true&verbose=true&limit=100",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "check-variations-smart"
+          ],
+          "query": [
+            { "key": "onlyDown", "value": "true" },
+            { "key": "verbose", "value": "true" },
+            { "key": "limit", "value": "100" }
+          ]
+        }
+      },
+      "description": "Controllo intelligente delle variazioni: usa confronto standard, se pochi risultati prova API MISE, combina e rimuove duplicati."
+    },
+    {
+      "name": "Force Update All Prices",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/force-update-all-prices?limit=1000&force=true&debug=true",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "force-update-all-prices"
+          ],
+          "query": [
+            { "key": "limit", "value": "1000" },
+            { "key": "force", "value": "true" },
+            { "key": "debug", "value": "true" }
+          ]
+        }
+      },
+      "description": "Forza aggiornamento prezzi per TUTTI i distributori usando API MISE. Aggiorna prezzi obsoleti nel database."
+    },
+    {
+      "name": "Test MISE Comparison",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/test-mise-comparison?impiantoId=58674",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "test-mise-comparison"
+          ],
+          "query": [
+            {
+              "key": "impiantoId",
+              "value": "58674",
+              "description": "ID impianto da confrontare (default: 58674)"
+            }
+          ]
+        }
+      },
+      "description": "Confronta prezzi locali vs API MISE per un distributore specifico. Mostra differenze dettagliate."
+    },
+    {
+      "name": "Force Update Distributor",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/force-update-distributor?impiantoId=58674&force=true",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "force-update-distributor"
+          ],
+          "query": [
+            {
+              "key": "impiantoId",
+              "value": "58674",
+              "description": "ID impianto da aggiornare"
+            },
+            {
+              "key": "force",
+              "value": "true",
+              "description": "Forza aggiornamento anche senza differenze"
+            }
+          ]
+        }
+      },
+      "description": "Forza l'aggiornamento di un distributore specifico con dati MISE. Aggiorna tutti i prezzi anche se non ci sono differenze."
+    },
+    {
+      "name": "Sync MISE Prices",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/sync-mise-prices?limit=10&force=false",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "sync-mise-prices"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "10",
+              "description": "Numero distributori da controllare"
+            },
+            {
+              "key": "force",
+              "value": "false",
+              "description": "Forza aggiornamento anche senza variazioni"
+            },
+            {
+              "key": "impiantoId",
+              "value": "{{impiantoId}}",
+              "description": "ID impianto specifico (opzionale)"
+            }
+          ]
+        }
+      },
+      "description": "Sincronizza prezzi con API MISE diretta. Confronta prezzi locali con dati MISE in tempo reale."
+    },
+    {
+      "name": "Check MISE Variations",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/check-mise-variations?limit=50&onlyDown=true",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "check-mise-variations"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "50",
+              "description": "Numero distributori da controllare"
+            },
+            {
+              "key": "onlyDown",
+              "value": "true",
+              "description": "Solo cali prezzo"
+            },
+            {
+              "key": "impiantoId",
+              "value": "{{impiantoId}}",
+              "description": "ID impianto specifico (opzionale)"
+            }
+          ]
+        }
+      },
+      "description": "Controlla variazioni confrontando prezzi locali con API MISE in tempo reale. Più accurato del check-variation standard."
+    },
+    {
+      "name": "Update and Check Variations (Complete)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/update-and-check-variations?debug=true&useMiseApi=true&limit=50",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "update-and-check-variations"
+          ],
+          "query": [
+            {
+              "key": "debug",
+              "value": "true",
+              "description": "Output debug dettagliato"
+            },
+            {
+              "key": "useMiseApi",
+              "value": "true",
+              "description": "Usa anche API MISE per controllo"
+            },
+            {
+              "key": "limit",
+              "value": "50",
+              "description": "Limite distributori per MISE API"
+            }
+          ]
+        }
+      },
+      "description": "Operazione completa: aggiorna prezzi dal CSV + controlla variazioni standard + controlla con API MISE. Combina tutti i risultati."
+    },
+    {
+      "name": "Daily Price Update (Cron Job)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/cron/update-prices-daily?limit=100&dryRun=false&force=false",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "cron",
+            "update-prices-daily"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "100",
+              "description": "Numero distributori da processare"
+            },
+            {
+              "key": "dryRun",
+              "value": "false",
+              "description": "Simula senza aggiornare (true/false)"
+            },
+            {
+              "key": "force",
+              "value": "false",
+              "description": "Forza aggiornamento anche senza differenze"
+            }
+          ]
+        }
+      },
+      "description": "Job automatico per aggiornare prezzi giornalmente alle 6:00. Usa API MISE per dati real-time. Processa distributori in batch."
+    },
+    {
+      "name": "Cron Job Setup",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/cron/setup?action=setup",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "cron",
+            "setup"
+          ],
+          "query": [
+            {
+              "key": "action",
+              "value": "setup",
+              "description": "setup, test, o status"
+            }
+          ]
+        }
+      },
+      "description": "Configura e testa il cron job per aggiornamento prezzi giornaliero. Fornisce istruzioni per Vercel."
+    },
+    {
       "name": "List Distributors",
       "request": {
         "method": "GET",

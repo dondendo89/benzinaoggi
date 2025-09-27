@@ -41,6 +41,8 @@ class BenzinaOggiPlugin {
         add_action('admin_post_benzinaoggi_create_pages', [$this, 'handle_create_pages']);
         // Admin post action to run variations now
         add_action('admin_post_benzinaoggi_run_variations', [$this, 'handle_run_variations']);
+        // Admin post action to run daily price update manually
+        add_action('admin_post_benzinaoggi_run_daily_update', [$this, 'handle_run_daily_update']);
         // Single-run cron to sync pages
         add_action('benzinaoggi_sync_pages', [$this, 'cron_sync_pages']);
         // Ensure daily sync at 05:00 local time
@@ -48,6 +50,15 @@ class BenzinaOggiPlugin {
             if (!wp_next_scheduled('benzinaoggi_sync_pages')) {
                 $next = $this->next_run_5am();
                 wp_schedule_event($next, 'daily', 'benzinaoggi_sync_pages');
+            }
+        });
+        
+        // Daily price update job at 06:00
+        add_action('benzinaoggi_daily_price_update', [$this, 'cron_daily_price_update']);
+        add_action('init', function(){
+            if (!wp_next_scheduled('benzinaoggi_daily_price_update')) {
+                $next = $this->next_run_6am();
+                wp_schedule_event($next, 'daily', 'benzinaoggi_daily_price_update');
             }
         });
         
@@ -170,10 +181,24 @@ class BenzinaOggiPlugin {
                     <?php wp_nonce_field('bo_run_variations'); ?>
                     <button type="submit" class="button button-secondary">Esegui adesso notifica variazioni</button>
                 </form>
+                <form method="post" action="<?php echo esc_url($action); ?>" style="margin-top:8px">
+                    <input type="hidden" name="action" value="benzinaoggi_run_daily_update" />
+                    <?php wp_nonce_field('bo_run_daily_update'); ?>
+                    <button type="submit" class="button button-primary">Esegui aggiornamento prezzi giornaliero</button>
+                </form>
                 <?php
                 $last = get_option('benzinaoggi_last_sync');
                 if ($last) {
                     echo '<p>Ultima sincronizzazione: ' . esc_html($last) . '</p>';
+                }
+                
+                $lastPriceUpdate = get_option('benzinaoggi_last_price_update');
+                if ($lastPriceUpdate) {
+                    echo '<p><strong>Ultimo aggiornamento prezzi:</strong> ' . esc_html($lastPriceUpdate['when']) . '</p>';
+                    echo '<p>Statistiche: ' . intval($lastPriceUpdate['processed']) . ' processati, ' . 
+                         intval($lastPriceUpdate['updated']) . ' aggiornati, ' . 
+                         intval($lastPriceUpdate['created']) . ' creati, ' . 
+                         intval($lastPriceUpdate['errors']) . ' errori</p>';
                 }
                 ?>
                 
@@ -254,6 +279,18 @@ class BenzinaOggiPlugin {
         @set_time_limit(180);
         $this->cron_check_variations();
         set_transient('benzinaoggi_notice', 'Job variazioni avviato. Notifiche inviate se presenti cali prezzo.', 30);
+        wp_redirect(admin_url('options-general.php?page=benzinaoggi'));
+        exit;
+    }
+    
+    public function handle_run_daily_update() {
+        if (!current_user_can('manage_options')) wp_die('Not allowed');
+        check_admin_referer('bo_run_daily_update');
+        
+        // Esegui immediatamente l'aggiornamento prezzi
+        $this->cron_daily_price_update();
+        
+        set_transient('benzinaoggi_notice', 'Aggiornamento prezzi giornaliero eseguito. Controlla i log per i dettagli.', 30);
         wp_redirect(admin_url('options-general.php?page=benzinaoggi'));
         exit;
     }
@@ -346,6 +383,105 @@ class BenzinaOggiPlugin {
         exit;
     }
 
+    public function cron_daily_price_update() {
+        $this->log_progress('Avvio aggiornamento prezzi giornaliero con rilevamento variazioni...');
+        
+        $api_base = $this->get_options()['api_base'] ?? '';
+        if (empty($api_base)) {
+            $this->log_progress('ERRORE: API base non configurata');
+            return;
+        }
+        
+        try {
+            // STEP 1: Aggiorna prezzi usando API MISE diretta (sempre)
+            $this->log_progress('STEP 1: Aggiornamento prezzi con API MISE diretta...');
+            $response = wp_remote_get($api_base . '/api/cron/update-prices-daily?limit=1000&force=true', [
+                'timeout' => 300, // 5 minuti timeout
+                'headers' => [
+                    'Authorization' => 'Bearer ' . ($this->get_options()['api_secret'] ?? ''),
+                    'User-Agent' => 'BenzinaOggi-WordPress/1.0'
+                ]
+            ]);
+            
+            if (is_wp_error($response)) {
+                $this->log_progress('ERRORE chiamata API: ' . $response->get_error_message());
+                return;
+            }
+            
+            $body = wp_remote_retrieve_body($response);
+            $data = json_decode($body, true);
+            
+            if ($data && $data['ok']) {
+                $summary = $data['summary'] ?? [];
+                $results = $data['results'] ?? [];
+                
+                $this->log_progress(sprintf(
+                    'Aggiornamento MISE completato: %d processati, %d aggiornati, %d creati',
+                    $summary['totalProcessed'] ?? 0,
+                    $summary['totalUpdated'] ?? 0,
+                    $summary['totalCreated'] ?? 0
+                ));
+                
+                // STEP 2: Rileva variazioni dopo aggiornamento
+                $this->log_progress('STEP 2: Rilevamento variazioni dopo aggiornamento...');
+                $variationResponse = wp_remote_get($api_base . '/api/check-variations-smart?onlyDown=true&verbose=true&limit=100', [
+                    'timeout' => 60,
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . ($this->get_options()['api_secret'] ?? ''),
+                        'User-Agent' => 'BenzinaOggi-WordPress/1.0'
+                    ]
+                ]);
+                
+                if (!is_wp_error($variationResponse)) {
+                    $variationData = json_decode(wp_remote_retrieve_body($variationResponse), true);
+                    $variations = $variationData['variations'] ?? [];
+                    $variationCount = count($variations);
+                    
+                    if ($variationCount > 0) {
+                        $this->log_progress("STEP 3: Invio notifiche per {$variationCount} variazioni...");
+                        
+                        // Raggruppa variazioni per distributore
+                        $variationsByDistributor = [];
+                        foreach ($variations as $variation) {
+                            $distributorId = $variation['impiantoId'] ?? $variation['distributorId'];
+                            if (!isset($variationsByDistributor[$distributorId])) {
+                                $variationsByDistributor[$distributorId] = [];
+                            }
+                            $variationsByDistributor[$distributorId][] = $variation;
+                        }
+                        
+                        // Invia notifica per ogni distributore con variazioni
+                        foreach ($variationsByDistributor as $distributorId => $distributorVariations) {
+                            $this->send_price_drop_notification($distributorVariations);
+                        }
+                        
+                        $this->log_progress("Notifiche inviate per " . count($variationsByDistributor) . " distributori");
+                    } else {
+                        $this->log_progress('Nessuna variazione rilevata dopo aggiornamento');
+                    }
+                } else {
+                    $this->log_progress('ERRORE rilevamento variazioni: ' . $variationResponse->get_error_message());
+                }
+                
+                // Salva statistiche
+                update_option('benzinaoggi_last_price_update', [
+                    'when' => current_time('mysql'),
+                    'processed' => $summary['totalProcessed'] ?? 0,
+                    'updated' => $summary['totalUpdated'] ?? 0,
+                    'variations' => $variationCount,
+                    'notifications_sent' => $variationCount > 0 ? count($variationsByDistributor ?? []) : 0
+                ]);
+                
+            } else {
+                $error = $data['error'] ?? 'Errore sconosciuto';
+                $this->log_progress('ERRORE risposta API: ' . $error);
+            }
+            
+        } catch (Exception $e) {
+            $this->log_progress('ERRORE eccezione: ' . $e->getMessage());
+        }
+    }
+
     public function cron_sync_pages() {
         $opts = $this->get_options();
         $base = rtrim($opts['api_base'], '/');
@@ -399,6 +535,17 @@ class BenzinaOggiPlugin {
             $five = strtotime('+1 day', $five);
         }
         return $five;
+    }
+    
+    private function next_run_6am() {
+        // Compute next 6:00 AM based on WP timezone
+        $now = current_time('timestamp');
+        $date = date_i18n('Y-m-d', $now, true);
+        $six = strtotime($date.' 06:00:00');
+        if ($six <= $now) {
+            $six = strtotime('+1 day', $six);
+        }
+        return $six;
     }
     
     private function next_run_10am() {
@@ -656,15 +803,18 @@ class BenzinaOggiPlugin {
         $base = rtrim($opts['api_base'], '/');
         if (!$base) return;
         
+        $this->log_progress('Controllo variazioni ogni 10 minuti con endpoint smart...');
+        
         // Use Bearer auth for protected endpoint
         $headers = [];
         if (!empty($opts['api_secret'])) {
             $headers['Authorization'] = 'Bearer ' . $opts['api_secret'];
         }
         
-        $url = $base . '/api/check-variation';
+        // Usa endpoint smart per rilevamento intelligente (sempre con API MISE)
+        $url = $base . '/api/check-variations-smart?onlyDown=true&verbose=true&limit=50';
         $resp = wp_remote_get($url, [ 
-            'timeout' => 20,
+            'timeout' => 60, // Aumentato timeout per endpoint smart
             'headers' => $headers
         ]);
         if (is_wp_error($resp)) {
@@ -682,6 +832,14 @@ class BenzinaOggiPlugin {
             return;
         }
         $vars = $data['variations'];
+        $method = $data['method'] ?? 'unknown';
+        $summary = $data['summary'] ?? [];
+        
+        $this->log_progress(sprintf(
+            'Controllo variazioni completato (metodo: %s): %d variazioni rilevate',
+            $method,
+            count($vars)
+        ));
         if (empty($vars)) {
             $this->log_progress('No price variations detected');
             return;
