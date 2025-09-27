@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/src/lib/prisma";
+import { prisma } from "@/src/lib/db";
 import { getMiseServiceArea } from "@/src/services/mise-api";
 
 export const maxDuration = 600; // 10 minuti per il check variazioni

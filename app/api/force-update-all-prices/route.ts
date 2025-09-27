@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/src/lib/db";
 import { getMiseServiceArea, comparePrices, normalizeFuelName } from "@/src/services/mise-api";
-import { assertBearer } from "@/src/lib/auth";
+
+function assertBearer(req: NextRequest) {
+  const auth = req.headers.get('authorization') || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  const expected = process.env.API_SECRET || '';
+  if (!expected || token !== expected) {
+    throw new Error('Unauthorized');
+  }
+}
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 minutes
