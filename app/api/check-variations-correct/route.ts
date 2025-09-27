@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/src/lib/db";
-import { getMiseServiceArea } from "@/src/services/mise-api";
+import { getMiseServiceArea, normalizeFuelName } from "@/src/services/mise-api";
 
 export const maxDuration = 600; // 10 minuti per il check variazioni
 
@@ -20,7 +20,8 @@ export async function GET(req: NextRequest) {
       select: {
         id: true,
         impiantoId: true,
-        name: true
+        bandiera: true,
+        comune: true
       }
     });
 
@@ -58,8 +59,7 @@ export async function GET(req: NextRequest) {
           select: {
             fuelType: true,
             price: true,
-            isSelfService: true,
-            fuelId: true
+            isSelfService: true
           }
         });
 
@@ -70,9 +70,10 @@ export async function GET(req: NextRequest) {
 
         // 3. Confronta ogni prezzo MISE con quello nel DB
         for (const miseFuel of miseData.fuels) {
+          const normalizedFuelType = normalizeFuelName(miseFuel.name);
           const dbPrice = dbPrices.find(p => 
-            p.fuelType === miseFuel.fuelType && 
-            p.isSelfService === miseFuel.isSelfService
+            p.fuelType === normalizedFuelType && 
+            p.isSelfService === miseFuel.isSelf
           );
 
           if (!dbPrice) {
@@ -96,9 +97,9 @@ export async function GET(req: NextRequest) {
             variations.push({
               distributorId: distributor.id,
               impiantoId: distributor.impiantoId,
-              distributorName: distributor.name,
-              fuelType: miseFuel.fuelType,
-              isSelfService: miseFuel.isSelfService,
+              distributorName: distributor.bandiera || distributor.comune,
+              fuelType: normalizedFuelType,
+              isSelfService: miseFuel.isSelf,
               oldPrice: dbPrice.price, // Prezzo salvato nel DB
               newPrice: miseFuel.price, // Prezzo attuale dalla MISE API
               direction,
@@ -106,8 +107,7 @@ export async function GET(req: NextRequest) {
               percentageChange: parseFloat(((difference / dbPrice.price) * 100).toFixed(2)),
               source: 'mise_vs_db',
               checkedAt: new Date().toISOString(),
-              miseFuelId: miseFuel.fuelId,
-              dbFuelId: dbPrice.fuelId
+              miseFuelId: miseFuel.fuelId
             });
           } else {
             noChanges++;

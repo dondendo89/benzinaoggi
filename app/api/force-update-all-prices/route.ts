@@ -28,9 +28,6 @@ export async function POST(req: NextRequest) {
     
     // Get all distributors with their impiantoId
     const distributors = await prisma.distributor.findMany({
-      where: {
-        impiantoId: { not: null }
-      },
       select: {
         id: true,
         impiantoId: true,
@@ -47,8 +44,8 @@ export async function POST(req: NextRequest) {
       totalUpdated: 0,
       totalCreated: 0,
       totalErrors: 0,
-      distributors: [],
-      errors: []
+      distributors: [] as any[],
+      errors: [] as any[]
     };
     
     // Process each distributor
@@ -83,11 +80,12 @@ export async function POST(req: NextRequest) {
         });
         
         // Compare and update prices
-        const changes = [];
-        const pricesToUpdate = [];
+        const changes: any[] = [];
+        const pricesToUpdate: any[] = [];
         
         for (const miseFuel of miseData.fuels) {
           const normalizedFuel = normalizeFuelName(miseFuel.name);
+          if (!normalizedFuel) continue; // Skip if fuel type not recognized
           const isSelfService = miseFuel.isSelf || false;
           
           // Find matching local price
@@ -96,7 +94,7 @@ export async function POST(req: NextRequest) {
             p.isSelfService === isSelfService
           );
           
-          const misePrice = parseFloat(miseFuel.price);
+          const misePrice = miseFuel.price;
           
           if (localPrice) {
             // Update existing price if different

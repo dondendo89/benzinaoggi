@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkVariation } from "@/src/services/mimit";
 import { prisma } from "@/src/lib/db";
-import { getMiseServiceArea } from "@/src/services/mise-api";
+import { getMiseServiceArea, normalizeFuelName } from "@/src/services/mise-api";
 
 export const maxDuration = 600; // 10 minuti per il check variazioni
 
@@ -22,11 +22,11 @@ export async function GET(req: NextRequest) {
       const distributors = impiantoId 
         ? await prisma.distributor.findMany({ 
             where: { impiantoId },
-            select: { id: true, impiantoId: true, name: true }
+            select: { id: true, impiantoId: true, bandiera: true, comune: true }
           })
         : await prisma.distributor.findMany({
             take: 50,
-            select: { id: true, impiantoId: true, name: true }
+            select: { id: true, impiantoId: true, bandiera: true, comune: true }
           });
 
       const variations: any[] = [];
@@ -51,11 +51,12 @@ export async function GET(req: NextRequest) {
 
           // Confronta prezzi
           for (const miseFuel of miseData.fuels) {
-            if (fuelType && miseFuel.fuelType !== fuelType) continue;
+            const normalizedFuelType = normalizeFuelName(miseFuel.name);
+            if (fuelType && normalizedFuelType !== fuelType) continue;
             
             const dbPrice = dbPrices.find(p => 
-              p.fuelType === miseFuel.fuelType && 
-              p.isSelfService === miseFuel.isSelfService
+              p.fuelType === normalizedFuelType && 
+              p.isSelfService === miseFuel.isSelf
             );
 
             if (!dbPrice) continue;
@@ -71,8 +72,8 @@ export async function GET(req: NextRequest) {
               variations.push({
                 distributorId: distributor.id,
                 impiantoId: distributor.impiantoId,
-                fuelType: miseFuel.fuelType,
-                isSelfService: miseFuel.isSelfService,
+                fuelType: normalizedFuelType,
+                isSelfService: miseFuel.isSelf,
                 oldPrice: dbPrice.price,
                 newPrice: miseFuel.price,
                 direction,
