@@ -3,6 +3,8 @@ import { checkVariation } from "@/src/services/mimit";
 import { prisma } from "@/src/lib/prisma";
 import { getMiseServiceArea } from "@/src/services/mise-api";
 
+export const maxDuration = 600; // 10 minuti per il check variazioni
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
