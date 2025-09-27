@@ -190,11 +190,26 @@
       return new Promise(function(resolve, reject){
         try {
           if (window.OneSignal && OneSignal.User && typeof OneSignal.User.removeTag === 'function') {
-            OneSignal.User.removeTag(key).then(resolve).catch(reject);
+            var p = OneSignal.User.removeTag(key);
+            if (p && typeof p.then === 'function') {
+              p.then(resolve).catch(reject);
+            } else {
+              resolve();
+            }
           } else if (window.OneSignal && typeof OneSignal.deleteTag === 'function') {
-            OneSignal.deleteTag(key).then(resolve).catch(reject);
-          } else { reject(new Error('No deleteTag API available')); }
-        } catch(e){ reject(e); }
+            var p2 = OneSignal.deleteTag(key);
+            if (p2 && typeof p2.then === 'function') {
+              p2.then(resolve).catch(reject);
+            } else {
+              resolve();
+            }
+          } else { 
+            resolve(); // Silently succeed if no API available
+          }
+        } catch(e){ 
+          console.warn('osDeleteTag error:', e);
+          resolve(); // Don't fail the UI flow
+        }
       });
     }
     function osPrompt(){
@@ -699,52 +714,48 @@
               try {
                 // Delete specific fuel notification tag
                 var tagToDelete = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
-              // Inform backend remove
-              try {
-                if (externalId) {
-                  var apiBaseR = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
-                  var subUrlR = (apiBaseR || '') + '/api/subscriptions';
-                  fetch(subUrlR, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'remove', externalId: externalId, impiantoId: d.impiantoId, fuelType: fuel })
-                  }).catch(function(){});
+                // Delete combined distributor+fuel tag (this is the key one for per-distributor targeting)
+                var comboDel = null;
+                if (d && d.impiantoId) {
+                  var fuelNorm2 = fuel.toLowerCase().replace(/\s+/g, '_');
+                  comboDel = 'notify_distributor_' + String(d.impiantoId) + '_' + fuelNorm2;
                 }
-              } catch(_cr){}
-              osDeleteTag(tagToDelete).then(function(){
-                  console.log('Tag deleted successfully for fuel:', fuel);
+                
+                // Inform backend remove FIRST (this stops notifications for this specific impianto+fuel)
+                try {
+                  if (externalId) {
+                    var apiBaseR = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
+                    var subUrlR = (apiBaseR || '') + '/api/subscriptions';
+                    fetch(subUrlR, {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'remove', externalId: externalId, impiantoId: d.impiantoId, fuelType: fuel })
+                    }).then(function(r){ return r.json().catch(function(){ return {}; }); }).then(function(res){
+                      if (res && res.ok) {
+                        console.log('Backend subscription removed for', d.impiantoId, fuel);
+                      }
+                    }).catch(function(err){ console.warn('Backend remove failed', err); });
+                  }
+                } catch(_cr){}
+                
+                // Delete OneSignal tags (both general fuel tag and specific distributor+fuel tag)
+                var deletePromises = [osDeleteTag(tagToDelete)];
+                if (comboDel) {
+                  deletePromises.push(osDeleteTag(comboDel));
+                }
+                
+                Promise.all(deletePromises).then(function(){
+                  console.log('All tags deleted successfully for fuel:', fuel, 'distributor:', d.impiantoId);
                   if(statusEl) statusEl.style.display = 'none';
                 }).catch(function(err){
-                  console.error('Error deleting tag for fuel:', fuel, err);
-                  if(statusEl) {
-                    statusEl.textContent = '✗ Errore';
-                    statusEl.style.display = 'inline';
-                    statusEl.style.color = '#dc3545';
-                  }
+                  console.warn('Error deleting some tags for fuel:', fuel, err);
+                  if(statusEl) statusEl.style.display = 'none'; // Hide status anyway
                 });
-                // Delete combined distributor+fuel tag too
-                try {
-                  if (d && d.impiantoId) {
-                    var fuelNorm2 = fuel.toLowerCase().replace(/\s+/g, '_');
-                    var comboDel = 'notify_distributor_' + String(d.impiantoId) + '_' + fuelNorm2;
-                    osDeleteTag(comboDel).catch(function(e){ console.warn('Delete combo tag error', e); });
-                  }
-                } catch(__){}
+                
                 // Remove local persistence
                 try {
                   var normKeyR = fuel.toLowerCase().replace(/\s+/g, '_');
                   localStorage.removeItem('bo_notify_'+normKeyR);
                   if (d && d.impiantoId) { localStorage.removeItem('bo_notify_'+String(d.impiantoId)+'_'+normKeyR); }
-                  // guard key for remove to avoid duplicate POSTs
-                  try {
-                    var sentMapR = window.__boSubSent || {};
-                    var keyOnceR = 'remove:'+String(d && d.impiantoId)+'|'+String(fuel);
-                    if (!sentMapR[keyOnceR] && externalId) {
-                      sentMapR[keyOnceR] = true; window.__boSubSent = sentMapR;
-                      var apiBaseR2 = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
-                      var subUrlR2 = (apiBaseR2 || '') + '/api/subscriptions';
-                      fetch(subUrlR2, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'remove', externalId: externalId, impiantoId: d.impiantoId, fuelType: fuel }) }).catch(function(){});
-                    }
-                  } catch(_gr){}
                 } catch(_rm){}
               } catch (err) {
                 console.error('OneSignal deleteTag error:', err);

@@ -303,21 +303,6 @@
   }
 
     if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render); else render();
-    // Geolocate button
-    document.addEventListener('click', function(e){
-      if(e.target && e.target.id === 'bo_geo'){ e.preventDefault();
-        if(navigator.geolocation){
-          navigator.geolocation.getCurrentPosition(function(pos){
-            window._bo_lat = pos.coords.latitude; window._bo_lon = pos.coords.longitude;
-            // show user position and center map immediately
-            if (userMarker) { try { map.removeLayer(userMarker); } catch (e){} }
-            userMarker = L.circle([window._bo_lat, window._bo_lon], { radius: 200, color: '#0ea5e9' }).addTo(map);
-            map.setView([window._bo_lat, window._bo_lon], 12);
-            fetchData();
-          }, function(){ fetchData(); }, { enableHighAccuracy: true, timeout: 8000 });
-        }
-      }
-    });
 
     // Deep-link handling: load detail if query contains impiantoId
     try {
