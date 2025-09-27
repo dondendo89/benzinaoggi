@@ -8,6 +8,9 @@ Author: Dev
 
 if (!defined('ABSPATH')) { exit; }
 
+// Includi template loader
+require_once plugin_dir_path(__FILE__) . 'template-loader.php';
+
 class BenzinaOggiPlugin {
     const OPTION_GROUP = 'benzinaoggi_options_group';
     const OPTION_NAME = 'benzinaoggi_options';
@@ -34,6 +37,8 @@ class BenzinaOggiPlugin {
         add_action('init', [$this, 'ensure_daily_variations_cron']);
         // Admin post action for import + page creation
         add_action('admin_post_benzinaoggi_import', [$this, 'handle_import_and_pages']);
+        // Admin post action to create template pages
+        add_action('admin_post_benzinaoggi_create_pages', [$this, 'handle_create_pages']);
         // Admin post action to run variations now
         add_action('admin_post_benzinaoggi_run_variations', [$this, 'handle_run_variations']);
         // Single-run cron to sync pages
@@ -118,44 +123,117 @@ class BenzinaOggiPlugin {
     }
 
     public function options_page() {
-        echo '<div class="wrap"><h1>Benzina Oggi</h1>';
-        // Admin notice from last action
-        if ($msg = get_transient('benzinaoggi_notice')) {
-            echo '<div class="notice notice-success is-dismissible"><p>'.esc_html($msg).'</p></div>';
-            delete_transient('benzinaoggi_notice');
-        }
-        echo '<form method="post" action="options.php">';
-        settings_fields(self::OPTION_GROUP);
-        do_settings_sections('benzinaoggi');
-        submit_button();
-        echo '</form>';
-        echo '<h2>Shortcode</h2><code>[carburanti_map]</code>';
-        echo '<h2>Azioni</h2>';
-        $action = admin_url('admin-post.php');
-        echo '<form method="post" action="'.esc_url($action).'" style="margin-top:8px">';
-        echo '<input type="hidden" name="action" value="benzinaoggi_import" />';
-        wp_nonce_field('bo_import_all');
-        submit_button('Avvia sincronizzazione pagine (cron)', 'secondary', 'submit', false);
-        echo '</form>';
-        echo '<form method="post" action="'.esc_url($action).'" style="margin-top:8px">';
-        echo '<input type="hidden" name="action" value="benzinaoggi_run_variations" />';
-        submit_button('Esegui adesso notifica variazioni', 'secondary', 'submit', false);
-        echo '</form>';
-        $last = get_option('benzinaoggi_last_sync');
-        if ($last) {
-            echo '<p><em>Ultima sincronizzazione: '.esc_html($last['when'] ?? '').' — create: '.intval($last['created'] ?? 0).'</em></p>';
-        }
-        // Log di avanzamento
-        $log = get_option('benzinaoggi_sync_log', []);
-        if (!empty($log)) {
-            echo '<h3>Log sincronizzazione</h3>';
-            echo '<pre style="max-height:240px; overflow:auto; background:#f6f8fa; padding:8px; border:1px solid #e2e8f0;">';
-            foreach (array_slice($log, -100) as $line) {
-                echo esc_html($line)."\n";
+        $active_tab = isset($_GET['tab']) ? $_GET['tab'] : 'settings';
+        ?>
+        <div class="wrap">
+            <h1>Benzina Oggi</h1>
+            <nav class="nav-tab-wrapper">
+                <a href="?page=benzinaoggi&tab=settings" class="nav-tab <?php echo $active_tab == 'settings' ? 'nav-tab-active' : ''; ?>">Impostazioni</a>
+                <a href="?page=benzinaoggi&tab=import" class="nav-tab <?php echo $active_tab == 'import' ? 'nav-tab-active' : ''; ?>">Importa Dati</a>
+                <a href="?page=benzinaoggi&tab=notifications" class="nav-tab <?php echo $active_tab == 'notifications' ? 'nav-tab-active' : ''; ?>">Notifiche</a>
+                <a href="?page=benzinaoggi&tab=pages" class="nav-tab <?php echo $active_tab == 'pages' ? 'nav-tab-active' : ''; ?>">Pagine Template</a>
+            </nav>
+            
+            <?php
+            // Admin notice from last action
+            if ($msg = get_transient('benzinaoggi_notice')) {
+                echo '<div class="notice notice-success is-dismissible"><p>'.esc_html($msg).'</p></div>';
+                delete_transient('benzinaoggi_notice');
             }
-            echo '</pre>'; 
-        }
-        echo '</div>';
+            
+            if (isset($_GET['created'])) {
+                echo '<div class="notice notice-success is-dismissible"><p>Pagine create: ' . esc_html($_GET['created']) . '</p></div>';
+            }
+            ?>
+            
+            <?php if ($active_tab == 'settings'): ?>
+                <form method="post" action="options.php">
+                    <?php
+                    settings_fields(self::OPTION_GROUP);
+                    do_settings_sections('benzinaoggi');
+                    submit_button();
+                    ?>
+                </form>
+                <h2>Shortcode</h2>
+                <code>[carburanti_map]</code>
+                
+            <?php elseif ($active_tab == 'import'): ?>
+                <h2>Azioni</h2>
+                <?php $action = admin_url('admin-post.php'); ?>
+                <form method="post" action="<?php echo esc_url($action); ?>" style="margin-top:8px">
+                    <input type="hidden" name="action" value="benzinaoggi_import" />
+                    <?php wp_nonce_field('bo_import_all'); ?>
+                    <button type="submit" class="button button-secondary">Avvia sincronizzazione pagine (cron)</button>
+                </form>
+                <form method="post" action="<?php echo esc_url($action); ?>" style="margin-top:8px">
+                    <input type="hidden" name="action" value="benzinaoggi_run_variations" />
+                    <?php wp_nonce_field('bo_run_variations'); ?>
+                    <button type="submit" class="button button-secondary">Esegui adesso notifica variazioni</button>
+                </form>
+                <?php
+                $last = get_option('benzinaoggi_last_sync');
+                if ($last) {
+                    echo '<p>Ultima sincronizzazione: ' . esc_html($last) . '</p>';
+                }
+                ?>
+                
+            <?php elseif ($active_tab == 'notifications'): ?>
+                <h2>Gestione Notifiche</h2>
+                <p>Le notifiche vengono inviate automaticamente quando i prezzi scendono per i distributori a cui gli utenti sono iscritti.</p>
+                <p><strong>Configurazione OneSignal:</strong> Assicurati di aver configurato correttamente App ID e API Key nelle impostazioni.</p>
+                
+            <?php elseif ($active_tab == 'pages'): ?>
+                <h2>Pagine Template</h2>
+                <p>Crea le pagine necessarie per il funzionamento del plugin con i template personalizzati.</p>
+                
+                <div class="card" style="max-width: 600px;">
+                    <h3>Pagine da creare:</h3>
+                    <ul>
+                        <li><strong>Home:</strong> <code>/benzinaoggi-home/</code> - Pagina principale con mappa e ricerca</li>
+                        <li><strong>Risultati:</strong> <code>/benzinaoggi-risultati/</code> - Pagina per visualizzare i risultati della ricerca</li>
+                        <li><strong>Distributori:</strong> <code>/distributore-{ID}/</code> - Pagine dinamiche per ogni distributore</li>
+                    </ul>
+                    
+                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top: 20px;">
+                        <input type="hidden" name="action" value="benzinaoggi_create_pages" />
+                        <?php wp_nonce_field('benzinaoggi_create_pages'); ?>
+                        <button type="submit" class="button button-primary">Crea Pagine Template</button>
+                    </form>
+                </div>
+                
+                <h3>Pagine esistenti:</h3>
+                <?php
+                $home_page = get_page_by_path('benzinaoggi-home');
+                $results_page = get_page_by_path('benzinaoggi-risultati');
+                ?>
+                <table class="wp-list-table widefat fixed striped">
+                    <thead>
+                        <tr>
+                            <th>Pagina</th>
+                            <th>Stato</th>
+                            <th>URL</th>
+                            <th>Azioni</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Home</td>
+                            <td><?php echo $home_page ? '<span style="color: green;">✓ Creata</span>' : '<span style="color: red;">✗ Non creata</span>'; ?></td>
+                            <td><?php echo $home_page ? '<a href="' . get_permalink($home_page->ID) . '" target="_blank">' . get_permalink($home_page->ID) . '</a>' : '-'; ?></td>
+                            <td><?php echo $home_page ? '<a href="' . get_edit_post_link($home_page->ID) . '">Modifica</a>' : '-'; ?></td>
+                        </tr>
+                        <tr>
+                            <td>Risultati</td>
+                            <td><?php echo $results_page ? '<span style="color: green;">✓ Creata</span>' : '<span style="color: red;">✗ Non creata</span>'; ?></td>
+                            <td><?php echo $results_page ? '<a href="' . get_permalink($results_page->ID) . '" target="_blank">' . get_permalink($results_page->ID) . '</a>' : '-'; ?></td>
+                            <td><?php echo $results_page ? '<a href="' . get_edit_post_link($results_page->ID) . '">Modifica</a>' : '-'; ?></td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+            <?php endif; ?>
+        </div>
+        <?php
     }
 
     public function handle_run_variations() {
@@ -178,6 +256,70 @@ class BenzinaOggiPlugin {
         set_transient('benzinaoggi_notice', 'Job variazioni avviato. Notifiche inviate se presenti cali prezzo.', 30);
         wp_redirect(admin_url('options-general.php?page=benzinaoggi'));
         exit;
+    }
+
+    public function handle_create_pages() {
+        if (!current_user_can('manage_options')) {
+            wp_die('Non autorizzato');
+        }
+        
+        check_admin_referer('benzinaoggi_create_pages');
+        
+        $pages_created = [];
+        
+        // Pagina Home
+        $home_page = get_page_by_path('benzinaoggi-home');
+        if (!$home_page) {
+            $home_id = wp_insert_post([
+                'post_title' => 'BenzinaOggi - Trova i prezzi più bassi',
+                'post_name' => 'benzinaoggi-home',
+                'post_content' => '[carburanti_map]',
+                'post_status' => 'publish',
+                'post_type' => 'page',
+                'post_author' => get_current_user_id()
+            ]);
+            if ($home_id) {
+                $pages_created[] = 'Home page creata (ID: ' . $home_id . ')';
+            }
+        } else {
+            $pages_created[] = 'Home page già esistente (ID: ' . $home_page->ID . ')';
+        }
+        
+        // Pagina Risultati
+        $results_page = get_page_by_path('benzinaoggi-risultati');
+        if (!$results_page) {
+            $results_id = wp_insert_post([
+                'post_title' => 'Risultati Ricerca Distributori',
+                'post_name' => 'benzinaoggi-risultati',
+                'post_content' => 'Pagina per visualizzare i risultati della ricerca distributori.',
+                'post_status' => 'publish',
+                'post_type' => 'page',
+                'post_author' => get_current_user_id()
+            ]);
+            if ($results_id) {
+                $pages_created[] = 'Pagina risultati creata (ID: ' . $results_id . ')';
+            }
+        } else {
+            $pages_created[] = 'Pagina risultati già esistente (ID: ' . $results_page->ID . ')';
+        }
+        
+        // Imposta permalink structure per distributori
+        $this->setup_rewrite_rules();
+        
+        wp_redirect(admin_url('admin.php?page=benzinaoggi&tab=pages&created=' . urlencode(implode(', ', $pages_created))));
+        exit;
+    }
+    
+    private function setup_rewrite_rules() {
+        // Aggiungi regola per distributori: /distributore-123/
+        add_rewrite_rule(
+            '^distributore-([0-9]+)/?$',
+            'index.php?pagename=distributore-$matches[1]',
+            'top'
+        );
+        
+        // Flush rewrite rules
+        flush_rewrite_rules();
     }
 
     public function handle_import_and_pages() {
