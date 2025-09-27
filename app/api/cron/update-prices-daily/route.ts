@@ -3,12 +3,12 @@ import { prisma } from "@/src/lib/db";
 import { getMiseServiceArea, comparePrices, normalizeFuelName } from "@/src/services/mise-api";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 900; // 15 minuti per il job completo
+export const maxDuration = 300; // 5 minuti per compatibilità Vercel Hobby
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const limit = parseInt(searchParams.get('limit') || '5000'); // Default 5000 distributori
+    const limit = parseInt(searchParams.get('limit') || '2000'); // Default 2000 distributori per 5 minuti
     const force = searchParams.get('force') === 'true' || true; // Sempre forzare aggiornamento
     const dryRun = searchParams.get('dryRun') === 'true';
     

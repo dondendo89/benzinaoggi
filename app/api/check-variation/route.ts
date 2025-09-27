@@ -3,7 +3,8 @@ import { checkVariation } from "@/src/services/mimit";
 import { prisma } from "@/src/lib/db";
 import { getMiseServiceArea, normalizeFuelName } from "@/src/services/mise-api";
 
-export const maxDuration = 600; // 10 minuti per il check variazioni
+export const dynamic = "force-dynamic";
+export const maxDuration = 300; // 5 minuti per compatibilità Vercel Hobby
 
 export async function GET(req: NextRequest) {
   try {
