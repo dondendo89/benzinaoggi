@@ -125,8 +125,8 @@ export function normalizeFuelName(miseName: string): string {
     'Gasolio': 'Gasolio',
     'GPL': 'GPL',
     'Metano': 'Metano',
-    'HiQ Perform+': 'Benzina', // Considera come benzina premium
-    'HVO': 'Gasolio', // Considera come gasolio
+    'HiQ Perform+': 'HiQ Perform+', // Mantieni come tipo separato
+    'HVO': 'HVO', // Mantieni come tipo separato
   };
   
   return fuelMap[miseName] || miseName;
