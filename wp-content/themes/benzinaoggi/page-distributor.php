@@ -134,8 +134,9 @@ get_header(); ?>
         }
         
         .bo-price-item {
-            display: flex;
-            justify-content: space-between;
+            display: grid;
+            grid-template-columns: 1fr auto auto auto auto;
+            gap: 15px;
             align-items: center;
             padding: 15px 0;
             border-bottom: 1px solid #f0f0f0;
@@ -145,15 +146,46 @@ get_header(); ?>
             border-bottom: none;
         }
         
+        .bo-fuel-info {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
         .bo-fuel-type {
             font-weight: 600;
             color: #333;
+            font-size: 16px;
+        }
+        
+        .bo-service-type {
+            font-size: 12px;
+            color: #666;
         }
         
         .bo-price {
             font-size: 24px;
             font-weight: 700;
             color: #2c5aa0;
+            text-align: center;
+        }
+        
+        .bo-variation {
+            text-align: center;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .bo-variation.positive {
+            color: #28a745;
+        }
+        
+        .bo-variation.negative {
+            color: #dc3545;
+        }
+        
+        .bo-variation.neutral {
+            color: #6c757d;
         }
         
         .bo-self-service {
@@ -163,6 +195,40 @@ get_header(); ?>
             border-radius: 4px;
             font-size: 12px;
             font-weight: 500;
+        }
+        
+        .bo-notification-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .bo-notification-checkbox {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        
+        .bo-notification-label {
+            font-size: 12px;
+            color: #666;
+            cursor: pointer;
+        }
+        
+        .bo-notification-status {
+            font-size: 11px;
+            margin-top: 2px;
+            display: none;
+        }
+        
+        .bo-notification-status.active {
+            display: block;
+            color: #28a745;
+        }
+        
+        .bo-notification-status.error {
+            display: block;
+            color: #dc3545;
         }
         
         .bo-loading {
@@ -327,6 +393,20 @@ get_header(); ?>
             .bo-map-button {
                 justify-content: center;
             }
+            
+            .bo-price-item {
+                grid-template-columns: 1fr;
+                gap: 10px;
+                text-align: center;
+            }
+            
+            .bo-fuel-info {
+                align-items: center;
+            }
+            
+            .bo-notification-control {
+                justify-content: center;
+            }
         }
     </style>
 </head>
@@ -377,7 +457,8 @@ get_header(); ?>
                     <span>Ricevi notifiche quando il prezzo scende</span>
                 </div>
                 <div class="bo-notification-info">
-                    <p>Attiva le notifiche per essere avvisato quando il prezzo del carburante scende in questo distributore. Le notifiche vengono inviate solo quando c'è una variazione significativa del prezzo.</p>
+                    <p><strong>💡 Notifiche:</strong> Abilita le notifiche del browser per ricevere avvisi quando i prezzi scendono. Clicca su "quando scende" per ogni carburante specifico nella tabella prezzi qui sotto.</p>
+                    <p>Le notifiche vengono inviate solo quando c'è una variazione significativa del prezzo per il carburante selezionato.</p>
                 </div>
             </div>
         </div>
@@ -450,15 +531,40 @@ get_header(); ?>
                     <!-- Prezzi carburanti -->
                     <div class="bo-prices">
                         <h3>⛽ Prezzi Carburanti</h3>
-                        ${prices.length > 0 ? prices.map(price => `
-                            <div class="bo-price-item">
-                                <div>
-                                    <div class="bo-fuel-type">${price.fuelType}</div>
-                                    ${price.isSelfService ? '<span class="bo-self-service">Self</span>' : ''}
-                                </div>
-                                <div class="bo-price">€${price.price.toFixed(3)}</div>
+                        ${prices.length > 0 ? `
+                            <div class="bo-price-header" style="display: grid; grid-template-columns: 1fr auto auto auto auto; gap: 15px; padding: 10px 0; border-bottom: 2px solid #e0e0e0; font-weight: 600; color: #666; font-size: 14px;">
+                                <div>Carburante</div>
+                                <div style="text-align: center;">Prezzo</div>
+                                <div style="text-align: center;">Servizio</div>
+                                <div style="text-align: center;">Variazione</div>
+                                <div style="text-align: center;">Notifica</div>
                             </div>
-                        `).join('') : '<p>Nessun prezzo disponibile</p>'}
+                            ${prices.map(price => `
+                                <div class="bo-price-item">
+                                    <div class="bo-fuel-info">
+                                        <div class="bo-fuel-type">${price.fuelType}</div>
+                                    </div>
+                                    <div class="bo-price">€${price.price.toFixed(3)}</div>
+                                    <div class="bo-service-type">
+                                        ${price.isSelfService ? '<span class="bo-self-service">Self</span>' : '<span style="color: #666;">Servito</span>'}
+                                    </div>
+                                    <div class="bo-variation ${price.variation ? (price.variation > 0 ? 'positive' : 'negative') : 'neutral'}">
+                                        ${price.variation ? (price.variation > 0 ? '↗ +' : '↘ ') + Math.abs(price.variation).toFixed(3) : '← 0.000'}
+                                    </div>
+                                    <div class="bo-notification-control">
+                                        <input type="checkbox" 
+                                               class="bo-notification-checkbox" 
+                                               data-fuel="${price.fuelType}" 
+                                               data-service="${price.isSelfService ? 'self' : 'served'}"
+                                               id="notify_${price.fuelType.replace(/[^a-z0-9]/gi, '_')}_${price.isSelfService ? 'self' : 'served'}">
+                                        <label for="notify_${price.fuelType.replace(/[^a-z0-9]/gi, '_')}_${price.isSelfService ? 'self' : 'served'}" class="bo-notification-label">
+                                            quando scende
+                                        </label>
+                                        <div class="bo-notification-status"></div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        ` : '<p>Nessun prezzo disponibile</p>'}
                     </div>
                 </div>
             `;
@@ -470,6 +576,9 @@ get_header(); ?>
             
             // Mostra e configura le notifiche
             setupNotifications(distributor);
+            
+            // Configura notifiche per singolo carburante
+            setupFuelNotifications(distributor, prices);
         }
         
         function setupMap(distributor) {
@@ -593,6 +702,109 @@ get_header(); ?>
             }).catch(error => {
                 console.warn('Errore nel salvare la preferenza:', error);
             });
+        }
+        
+        function setupFuelNotifications(distributor, prices) {
+            const distributorId = distributor.id || impiantoId;
+            
+            // Configura ogni checkbox per carburante
+            document.querySelectorAll('.bo-notification-checkbox[data-fuel]').forEach(checkbox => {
+                const fuelType = checkbox.getAttribute('data-fuel');
+                const serviceType = checkbox.getAttribute('data-service');
+                const statusEl = checkbox.parentNode.querySelector('.bo-notification-status');
+                
+                // Carica stato salvato
+                const savedState = localStorage.getItem(`bo_notify_${distributorId}_${fuelType}_${serviceType}`);
+                if (savedState === '1') {
+                    checkbox.checked = true;
+                }
+                
+                // Gestisci cambio stato
+                checkbox.addEventListener('change', function() {
+                    const isEnabled = this.checked;
+                    const fuelKey = `${fuelType}_${serviceType}`;
+                    
+                    if (isEnabled) {
+                        enableFuelNotification(distributorId, fuelType, serviceType, statusEl);
+                    } else {
+                        disableFuelNotification(distributorId, fuelType, serviceType, statusEl);
+                    }
+                });
+            });
+        }
+        
+        function enableFuelNotification(distributorId, fuelType, serviceType, statusEl) {
+            // Salva localmente
+            localStorage.setItem(`bo_notify_${distributorId}_${fuelType}_${serviceType}`, '1');
+            
+            // Mostra stato
+            if (statusEl) {
+                statusEl.textContent = '✓ Attivazione in corso...';
+                statusEl.className = 'bo-notification-status active';
+            }
+            
+            // Verifica OneSignal
+            if (typeof OneSignal !== 'undefined') {
+                OneSignal.showNativePrompt().then(() => {
+                    // Aggiungi tag per questo carburante specifico
+                    const fuelKey = fuelType.toLowerCase().replace(/\s+/g, '_');
+                    const tagKey = `price_drop_${fuelKey}_${serviceType}`;
+                    
+                    OneSignal.User.addTags({
+                        [tagKey]: '1',
+                        'distributor_id': distributorId.toString(),
+                        'fuel_type': fuelType,
+                        'service_type': serviceType
+                    }).then(() => {
+                        if (statusEl) {
+                            statusEl.textContent = '✓ Attivato';
+                            statusEl.className = 'bo-notification-status active';
+                        }
+                        console.log('Notifiche attivate per:', fuelType, serviceType);
+                    }).catch(error => {
+                        console.error('Errore nell\'attivazione notifiche:', error);
+                        if (statusEl) {
+                            statusEl.textContent = '✗ Errore';
+                            statusEl.className = 'bo-notification-status error';
+                        }
+                    });
+                }).catch(() => {
+                    if (statusEl) {
+                        statusEl.textContent = '✗ Rifiutato';
+                        statusEl.className = 'bo-notification-status error';
+                    }
+                });
+            } else {
+                if (statusEl) {
+                    statusEl.textContent = '✗ OneSignal non disponibile';
+                    statusEl.className = 'bo-notification-status error';
+                }
+            }
+        }
+        
+        function disableFuelNotification(distributorId, fuelType, serviceType, statusEl) {
+            // Rimuovi da localStorage
+            localStorage.removeItem(`bo_notify_${distributorId}_${fuelType}_${serviceType}`);
+            
+            // Rimuovi tag OneSignal
+            if (typeof OneSignal !== 'undefined') {
+                const fuelKey = fuelType.toLowerCase().replace(/\s+/g, '_');
+                const tagKey = `price_drop_${fuelKey}_${serviceType}`;
+                
+                OneSignal.User.removeTag(tagKey).then(() => {
+                    if (statusEl) {
+                        statusEl.textContent = '✓ Disattivato';
+                        statusEl.className = 'bo-notification-status active';
+                        setTimeout(() => {
+                            statusEl.textContent = '';
+                            statusEl.className = 'bo-notification-status';
+                        }, 2000);
+                    }
+                    console.log('Notifiche disattivate per:', fuelType, serviceType);
+                }).catch(error => {
+                    console.error('Errore nella disattivazione notifiche:', error);
+                });
+            }
         }
         
         // Carica i dati quando la pagina è pronta

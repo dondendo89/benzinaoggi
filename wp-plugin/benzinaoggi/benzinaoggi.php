@@ -1157,53 +1157,33 @@ class BenzinaOggiPlugin {
         $title = "💰 Prezzo $fuelType sceso!";
         $message = "$distributorName: $fuelType da €" . number_format($oldPrice, 3) . " a €" . number_format($newPrice, 3) . " (-" . number_format($percentageDiff, 1) . "%)";
 
-        // Prefer exact distributor+fuel targeting; fallback to per-distributor or per-fuel
+        // Usa tag targeting per carburante specifico
         $fuel_key_norm = strtolower(str_replace(' ', '_', $fuelType));
-        $dist_fuel_tag = 'notify_distributor_' . (isset($variation['distributorId']) ? $variation['distributorId'] : '') . '_' . $fuel_key_norm;
-
-        // Fetch externalIds from Next API instead of using tags
-        $apiBase = rtrim($opts['api_base'] ?? '', '/');
-        $externalIds = [];
-        if ($apiBase) {
-            $q = add_query_arg(array(
-                // IMPORTANT: impiantoId must be the public impianto ID, not internal distributorId
-                'impiantoId' => (isset($variation['impiantoId']) ? $variation['impiantoId'] : ''),
-                'fuelType' => $fuelType
-            ), $apiBase . '/api/subscriptions');
-            $resp = wp_remote_get($q, [ 'timeout' => 15 ]);
-            if (!is_wp_error($resp) && wp_remote_retrieve_response_code($resp) === 200) {
-                $json = json_decode(wp_remote_retrieve_body($resp), true);
-                if (!empty($json['externalIds']) && is_array($json['externalIds'])) {
-                    $externalIds = $json['externalIds'];
-                    // Log how many and a small sample to verify
-                    $sample = array_slice($externalIds, 0, 5);
-                    $this->log_progress('Subscriptions fetched for impianto '.(isset($variation['impiantoId']) ? $variation['impiantoId'] : 'unknown').' fuel '.$fuelType.': count='.count($externalIds).' sample='.json_encode($sample));
-                }
-            }
-        }
-
-        if (empty($externalIds)) {
-            $this->log_progress('No subscribers (externalIds) for impianto '.(isset($variation['impiantoId']) ? $variation['impiantoId'] : 'unknown').' fuel '.$fuelType);
-            return;
-        }
+        $isSelfService = isset($variation['isSelfService']) ? $variation['isSelfService'] : false;
+        $serviceType = $isSelfService ? 'self' : 'served';
+        $fuel_tag = 'price_drop_' . $fuel_key_norm . '_' . $serviceType;
 
         $payload = array(
             'app_id' => $app_id,
-            'include_aliases' => array('external_id' => $externalIds),
-            // Required when using alias targeting
-            'target_channel' => 'push',
+            'included_segments' => array('Subscribed Users'),
+            'filters' => array(
+                array('field' => 'tag', 'key' => $fuel_tag, 'relation' => '=', 'value' => '1'),
+                array('field' => 'tag', 'key' => 'distributor_id', 'relation' => '=', 'value' => $distributorId),
+                array('field' => 'tag', 'key' => 'fuel_type', 'relation' => '=', 'value' => $fuelType),
+                array('field' => 'tag', 'key' => 'service_type', 'relation' => '=', 'value' => $serviceType)
+            ),
             // OneSignal requires an English (en) fallback
             'headings' => array('en' => $title, 'it' => $title),
             'contents' => array('en' => $message, 'it' => $message),
             'data' => array(
                 'fuelType' => $fuelType,
+                'serviceType' => $serviceType,
                 // Use impiantoId consistently as public identifier in payload
                 'distributorId' => (isset($variation['impiantoId']) ? $variation['impiantoId'] : ''),
                 'oldPrice' => $oldPrice,
                 'newPrice' => $newPrice,
                 'priceDiff' => $priceDiff,
-                'percentageDiff' => $percentageDiff,
-                'externalIdsCount' => count($externalIds)
+                'percentageDiff' => $percentageDiff
             ),
             // Deep link to distributor page using impiantoId
             'url' => home_url('/distributore-' . (isset($variation['impiantoId']) ? $variation['impiantoId'] : ''))
