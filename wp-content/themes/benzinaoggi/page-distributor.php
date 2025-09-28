@@ -582,13 +582,13 @@ get_header(); ?>
         }
         
         function setupMap(distributor) {
-            if (!distributor.lat || !distributor.lng) {
+            if (!distributor.latitudine || !distributor.longitudine) {
                 console.warn('Coordinate non disponibili per la mappa');
                 return;
             }
             
-            const lat = distributor.lat;
-            const lng = distributor.lng;
+            const lat = distributor.latitudine;
+            const lng = distributor.longitudine;
             const address = `${distributor.indirizzo || ''}, ${distributor.comune || ''}, ${distributor.provincia || ''}`.trim();
             
             // Mostra la sezione mappa
