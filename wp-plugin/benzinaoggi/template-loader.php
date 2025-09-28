@@ -92,8 +92,12 @@ class BenzinaOggi_Template_Loader {
      * Carica asset per i template
      */
     public function enqueue_template_assets() {
+        // Debug: log per vedere se la pagina viene riconosciuta
+        $pagename = get_query_var('pagename');
+        $is_plugin_page = $this->is_benzinaoggi_page();
+        
         // Solo per le pagine del plugin
-        if (!$this->is_benzinaoggi_page()) {
+        if (!$is_plugin_page) {
             return;
         }
         
@@ -114,6 +118,16 @@ class BenzinaOggi_Template_Loader {
             wp_enqueue_script('benzinaoggi-home-js', plugin_dir_url(__FILE__) . 'templates/page-home.js', array('leaflet-js'), '1.0.0', true);
         }
         
+        if (is_page('benzinaoggi-risultati') || is_page('risultati-benzinaoggi')) {
+            wp_enqueue_script('benzinaoggi-risultati-js', plugin_dir_url(__FILE__) . 'templates/page-risultati.js', array('leaflet-js'), '1.0.0', true);
+        }
+        
+        // Debug: aggiungi script per tutte le pagine del plugin
+        if ($is_plugin_page) {
+            // Carica sempre il JavaScript per le pagine del plugin
+            wp_enqueue_script('benzinaoggi-common-js', plugin_dir_url(__FILE__) . 'templates/page-home.js', array('leaflet-js'), '1.0.0', true);
+        }
+        
         // OneSignal per le pagine che lo richiedono
         $pagename = get_query_var('pagename');
         if (is_page() && (
@@ -124,11 +138,30 @@ class BenzinaOggi_Template_Loader {
         }
         
         // Localizza script
-        wp_localize_script('benzinaoggi-home-js', 'BenzinaOggi', array(
-            'apiBase' => get_option('benzinaoggi_api_base', 'https://benzinaoggi.vercel.app'),
-            'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('benzinaoggi_nonce')
-        ));
+        if (is_page('benzinaoggi-home') || is_page('home-benzinaoggi')) {
+            wp_localize_script('benzinaoggi-home-js', 'BenzinaOggi', array(
+                'apiBase' => get_option('benzinaoggi_api_base', 'https://benzinaoggi.vercel.app'),
+                'ajaxUrl' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('benzinaoggi_nonce')
+            ));
+        }
+        
+        if (is_page('benzinaoggi-risultati') || is_page('risultati-benzinaoggi')) {
+            wp_localize_script('benzinaoggi-risultati-js', 'BenzinaOggi', array(
+                'apiBase' => get_option('benzinaoggi_api_base', 'https://benzinaoggi.vercel.app'),
+                'ajaxUrl' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('benzinaoggi_nonce')
+            ));
+        }
+        
+        // Localizza anche lo script comune
+        if ($is_plugin_page) {
+            wp_localize_script('benzinaoggi-common-js', 'BenzinaOggi', array(
+                'apiBase' => get_option('benzinaoggi_api_base', 'https://benzinaoggi.vercel.app'),
+                'ajaxUrl' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('benzinaoggi_nonce')
+            ));
+        }
     }
     
     /**
