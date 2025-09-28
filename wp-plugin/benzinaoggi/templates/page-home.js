@@ -6,7 +6,7 @@
     apiBase: window.BenzinaOggi?.apiBase || '',
     mapCenter: [41.8719, 12.5674],
     defaultZoom: 6,
-    maxResults: 1000
+    maxResults: 10  // Mostra solo 10 risultati più vicini
   };
 
   // Elementi DOM
@@ -149,7 +149,18 @@
       const data = await response.json();
 
       if (data.ok) {
-        state.searchResults = data.distributors || [];
+        let distributors = data.distributors || [];
+        
+        // Ordina per distanza se disponibile, altrimenti per ID
+        distributors.sort((a, b) => {
+          if (a.distance && b.distance) {
+            return a.distance - b.distance;
+          }
+          return (a.impiantoId || 0) - (b.impiantoId || 0);
+        });
+        
+        // Limita a 10 risultati
+        state.searchResults = distributors.slice(0, config.maxResults);
         updateResults();
         updateMap();
       } else {
@@ -193,7 +204,10 @@
         `<div class="bo-result-distance">${distributor.distance.toFixed(1)} km</div>` : '';
 
       return `
-        <div class="bo-result-item" data-impianto="${distributor.impiantoId}">
+        <div class="bo-result-item" 
+             data-impianto="${distributor.impiantoId}"
+             data-bandiera="${distributor.bandiera || 'Distributore'}"
+             data-comune="${distributor.comune || ''}">
           <div class="bo-result-header">
             <div class="bo-result-brand">${distributor.bandiera || 'Distributore'}</div>
             ${distance}
@@ -208,7 +222,22 @@
     elements.resultsList.querySelectorAll('.bo-result-item').forEach(item => {
       item.addEventListener('click', () => {
         const impiantoId = item.dataset.impianto;
+        const bandiera = item.dataset.bandiera || 'Distributore';
+        const comune = item.dataset.comune || '';
+        
         if (impiantoId) {
+          // Cerca la pagina esistente con il formato {BANDIERA} {COMUNE}-{IMPIANTO_ID}
+          const pageSlug = `${bandiera}-${comune}-${impiantoId}`.toLowerCase()
+            .replace(/\s+/g, '-')
+            .replace(/[^a-z0-9-]/g, '');
+          
+          // Prova prima con il formato completo, poi con solo impiantoId
+          const possibleUrls = [
+            `/${pageSlug}/`,
+            `/distributore-${impiantoId}/`
+          ];
+          
+          // Per ora usa il formato dinamico, ma in futuro si può implementare la ricerca delle pagine esistenti
           window.location.href = `/distributore-${impiantoId}/`;
         }
       });
@@ -260,8 +289,35 @@
 
   // Carica dati iniziali
   function loadInitialData() {
-    // Carica distributori in area predefinita
-    searchDistributors();
+    // Prova prima a ottenere la posizione dell'utente
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          state.userLocation = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
+          
+          elements.map.setView([state.userLocation.lat, state.userLocation.lng], 13);
+          state.currentFilters.location = `${state.userLocation.lat},${state.userLocation.lng}`;
+          elements.locationInput.value = 'La mia posizione';
+          searchDistributors();
+        },
+        (error) => {
+          console.log('Geolocalizzazione non disponibile, carico distributori in area predefinita');
+          // Fallback: carica distributori in area predefinita (Roma)
+          searchDistributors();
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 5000,
+          maximumAge: 300000
+        }
+      );
+    } else {
+      // Fallback: carica distributori in area predefinita
+      searchDistributors();
+    }
   }
 
   // Mostra/nascondi loading

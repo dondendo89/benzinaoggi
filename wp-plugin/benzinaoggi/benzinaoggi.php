@@ -22,6 +22,10 @@ class BenzinaOggiPlugin {
         add_shortcode('carburante_distributor', [$this, 'shortcode_distributor']);
         add_action('wp_enqueue_scripts', [$this, 'enqueue_assets']);
         add_action('rest_api_init', [$this, 'register_rest']);
+        
+        // Inizializza template loader
+        new BenzinaOggi_Template_Loader();
+        
         // Cron to check variations
         add_action('benzinaoggi_check_variations', [$this, 'cron_check_variations']);
         // Add custom cron schedule for every 10 minutes
@@ -451,8 +455,11 @@ class BenzinaOggiPlugin {
                         }
                         
                         // Invia notifica per ogni distributore con variazioni
+                        $opts = $this->get_options();
                         foreach ($variationsByDistributor as $distributorId => $distributorVariations) {
-                            $this->send_price_drop_notification($distributorVariations);
+                            foreach ($distributorVariations as $variation) {
+                                $this->send_price_drop_notification($variation, $opts);
+                            }
                         }
                         
                         $this->log_progress("Notifiche inviate per " . count($variationsByDistributor) . " distributori");

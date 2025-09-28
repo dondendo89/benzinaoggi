@@ -35,8 +35,20 @@ class BenzinaOggi_Template_Loader {
         
         // Template per dettaglio distributore
         if (is_page() && preg_match('/^distributore-(\d+)$/', get_query_var('pagename'), $matches)) {
-            $this->load_template('single-distributor.php', array('impianto_id' => $matches[1]));
-            exit;
+            $impianto_id = $matches[1];
+            
+            // Cerca prima se esiste una pagina specifica per questo distributore
+            $existing_page = get_page_by_path(get_query_var('pagename'));
+            
+            if ($existing_page) {
+                // Usa la pagina esistente con il template personalizzato
+                $this->load_template('single-distributor.php', array('impianto_id' => $impianto_id));
+                exit;
+            } else {
+                // Fallback: usa il template dinamico
+                $this->load_template('single-distributor.php', array('impianto_id' => $impianto_id));
+                exit;
+            }
         }
     }
     
