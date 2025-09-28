@@ -199,10 +199,10 @@ class BenzinaOggiPlugin {
                 $lastPriceUpdate = get_option('benzinaoggi_last_price_update');
                 if ($lastPriceUpdate) {
                     echo '<p><strong>Ultimo aggiornamento prezzi:</strong> ' . esc_html($lastPriceUpdate['when']) . '</p>';
-                    echo '<p>Statistiche: ' . intval($lastPriceUpdate['processed']) . ' processati, ' . 
-                         intval($lastPriceUpdate['updated']) . ' aggiornati, ' . 
-                         intval($lastPriceUpdate['created']) . ' creati, ' . 
-                         intval($lastPriceUpdate['errors']) . ' errori</p>';
+                    echo '<p>Statistiche: ' . intval($lastPriceUpdate['processed'] ?? 0) . ' processati, ' . 
+                         intval($lastPriceUpdate['updated'] ?? 0) . ' aggiornati, ' . 
+                         intval($lastPriceUpdate['created'] ?? 0) . ' creati, ' . 
+                         intval($lastPriceUpdate['errors'] ?? 0) . ' errori</p>';
                 }
                 ?>
                 
