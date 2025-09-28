@@ -926,6 +926,18 @@ class BenzinaOggiPlugin {
 
     public function enqueue_assets() {
         if (!is_singular()) return;
+        
+        // Non caricare app.js se siamo su una pagina distributore (usa iframe per mappa)
+        $pagename = get_query_var('pagename');
+        $is_distributor_page = is_page() && (
+            strpos($pagename, 'distributore-') === 0 || 
+            preg_match('/^([a-z0-9-]+)-(\d+)$/', $pagename)
+        );
+        
+        if ($is_distributor_page) {
+            return; // Non caricare script per pagine distributore
+        }
+        
         // Always use our own OneSignal integration (do not rely on official plugin)
         $onesignal_official = false;
         // Leaflet

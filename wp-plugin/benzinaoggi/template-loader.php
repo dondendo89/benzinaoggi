@@ -138,8 +138,17 @@ class BenzinaOggi_Template_Loader {
         
         // Debug: aggiungi script per tutte le pagine del plugin
         if ($is_plugin_page) {
-            // Carica sempre il JavaScript per le pagine del plugin
-            wp_enqueue_script('benzinaoggi-common-js', plugin_dir_url(__FILE__) . 'templates/page-home.js', array('leaflet-js'), '1.0.0', true);
+            // Non caricare page-home.js sulle pagine distributore (usano iframe per mappa)
+            $pagename = get_query_var('pagename');
+            $is_distributor_page = is_page() && (
+                strpos($pagename, 'distributore-') === 0 || 
+                preg_match('/^([a-z0-9-]+)-(\d+)$/', $pagename)
+            );
+            
+            if (!$is_distributor_page) {
+                // Carica il JavaScript per le pagine del plugin (escluso distributore)
+                wp_enqueue_script('benzinaoggi-common-js', plugin_dir_url(__FILE__) . 'templates/page-home.js', array('leaflet-js'), '1.0.0', true);
+            }
         }
         
         // OneSignal per le pagine che lo richiedono

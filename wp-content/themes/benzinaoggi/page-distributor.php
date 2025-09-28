@@ -348,7 +348,7 @@ get_header(); ?>
         <!-- Sezione Mappa -->
         <div id="bo-map-section" style="display: none;">
             <div class="bo-map-container">
-                <iframe id="bo-map" class="bo-map" src="" frameborder="0" allowfullscreen></iframe>
+                <iframe id="bo-distributor-map" class="bo-map" src="" frameborder="0" allowfullscreen></iframe>
                 <div class="bo-map-actions">
                     <a id="bo-google-maps-btn" href="#" target="_blank" class="bo-map-button">
                         <i>🗺️</i>
@@ -487,7 +487,7 @@ get_header(); ?>
             
             // Configura l'iframe della mappa (OpenStreetMap)
             const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.01},${lat-0.01},${lng+0.01},${lat+0.01}&layer=mapnik&marker=${lat},${lng}`;
-            document.getElementById('bo-map').src = mapUrl;
+            document.getElementById('bo-distributor-map').src = mapUrl;
             
             // Configura i pulsanti Google Maps
             const googleMapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;

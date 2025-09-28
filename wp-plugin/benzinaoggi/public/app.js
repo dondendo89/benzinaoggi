@@ -4,6 +4,13 @@
 
   function render(){
     var mapEl = qs('bo_map'); if(!mapEl) return;
+    
+    // Controlla se la mappa è già stata inizializzata
+    if (mapEl._leaflet_id) {
+      console.log('Mappa già inizializzata in app.js, skip');
+      return;
+    }
+    
     // Wrap container for loader overlay
     var wrap = document.querySelector('.benzinaoggi-wrap');
     if(wrap && !wrap.classList.contains('bo-loader')){ wrap.classList.add('bo-loader'); }
@@ -11,7 +18,13 @@
     // Prefer device location first on mobile for better UX
     var isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
     var startCenter = [41.8719, 12.5674], startZoom = 6;
-    var map = L.map('bo_map', { zoomControl: !isMobile }).setView(startCenter, startZoom);
+    
+    try {
+      var map = L.map('bo_map', { zoomControl: !isMobile }).setView(startCenter, startZoom);
+    } catch (error) {
+      console.warn('Errore nell\'inizializzazione della mappa in app.js:', error);
+      return;
+    }
     if (isMobile) { L.control.zoom({ position: 'bottomright' }).addTo(map); }
     // expose for any legacy handlers
     try { window.__bo_map = map; } catch(_){}

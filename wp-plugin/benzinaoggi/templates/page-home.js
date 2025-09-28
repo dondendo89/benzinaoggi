@@ -44,15 +44,25 @@
 
   // Inizializza mappa
   function initMap() {
-    elements.map = L.map('bo_map').setView(config.mapCenter, config.defaultZoom);
+    // Controlla se la mappa è già stata inizializzata
+    if (elements.map || document.getElementById('bo_map')._leaflet_id) {
+      console.log('Mappa già inizializzata, skip');
+      return;
+    }
     
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(elements.map);
+    try {
+      elements.map = L.map('bo_map').setView(config.mapCenter, config.defaultZoom);
+      
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(elements.map);
 
-    // Controlli mappa
-    L.control.zoom({ position: 'bottomright' }).addTo(elements.map);
+      // Controlli mappa
+      L.control.zoom({ position: 'bottomright' }).addTo(elements.map);
+    } catch (error) {
+      console.warn('Errore nell\'inizializzazione della mappa:', error);
+    }
   }
 
   // Eventi
