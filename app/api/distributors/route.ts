@@ -14,7 +14,11 @@ export async function GET(req: NextRequest) {
     const userLon = lonParam ? parseFloat(lonParam) : undefined;
     const radiusKmParam = searchParams.get("radiusKm");
     const radiusKm = radiusKmParam ? parseFloat(radiusKmParam) : undefined;
-    const limit = Math.min(parseInt(searchParams.get("limit") || "200", 10), 2000);
+    // Se ci sono coordinate geografiche, aumenta il limit per permettere il filtraggio per distanza
+    const baseLimit = parseInt(searchParams.get("limit") || "200", 10);
+    const limit = (userLat != null && userLon != null && radiusKm != null) 
+      ? Math.min(baseLimit * 10, 2000) // Aumenta il limit quando c'è filtraggio geografico
+      : Math.min(baseLimit, 2000);
 
     const distributors = await prisma.distributor.findMany({
       where: {
