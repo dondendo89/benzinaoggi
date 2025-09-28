@@ -45,6 +45,9 @@ class BenzinaOggiPlugin {
         // Admin post action to create template pages
         add_action('admin_post_benzinaoggi_create_pages', [$this, 'handle_create_pages']);
         add_action('admin_post_benzinaoggi_delete_distributor_pages', [$this, 'handle_delete_distributor_pages']);
+        // Registra template personalizzato
+        add_filter('theme_page_templates', [$this, 'add_custom_page_template']);
+        add_filter('page_template', [$this, 'load_custom_page_template']);
         // Admin post action to run variations now
         add_action('admin_post_benzinaoggi_run_variations', [$this, 'handle_run_variations']);
         // Admin post action to run daily price update manually
@@ -541,6 +544,30 @@ class BenzinaOggiPlugin {
         exit;
     }
 
+    /**
+     * Aggiunge il template personalizzato alla lista dei template disponibili
+     */
+    public function add_custom_page_template($templates) {
+        $templates['page-distributor.php'] = 'Distributore BenzinaOggi';
+        return $templates;
+    }
+
+    /**
+     * Carica il template personalizzato quando selezionato
+     */
+    public function load_custom_page_template($template) {
+        global $post;
+        
+        if ($post && get_page_template_slug($post->ID) === 'page-distributor.php') {
+            $plugin_template = plugin_dir_path(__FILE__) . 'templates/page-distributor.php';
+            if (file_exists($plugin_template)) {
+                return $plugin_template;
+            }
+        }
+        
+        return $template;
+    }
+
     public function cron_daily_price_update() {
         $this->log_progress('Avvio aggiornamento prezzi giornaliero con rilevamento variazioni...');
         
@@ -673,7 +700,8 @@ class BenzinaOggiPlugin {
                         'post_name'  => $slug,
                         'post_type'  => 'page',
                         'post_status'=> 'publish',
-                        'post_content' => '[carburante_distributor impianto_id="'.$d['impiantoId'].'"]'
+                        'post_content' => '[carburante_distributor impianto_id="'.$d['impiantoId'].'"]',
+                        'page_template' => 'page-distributor.php'
                     ], true);
                     if (is_wp_error($post_id)) { $errors++; $this->log_progress('Errore creazione pagina impianto '.$d['impiantoId'].': '.$post_id->get_error_message()); }
                     else { $created++; }

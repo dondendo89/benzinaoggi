@@ -60,8 +60,8 @@ class BenzinaOggi_Template_Loader {
             $existing_page = get_page_by_path(get_query_var('pagename'));
             
             if ($existing_page) {
-                // Usa la pagina esistente con il template personalizzato
-                $this->load_template('single-distributor.php', array('impianto_id' => $impianto_id));
+                // Usa il template personalizzato per distributori
+                $this->load_template('page-distributor.php', array('impianto_id' => $impianto_id));
                 exit;
             } else {
                 // Fallback: usa il template dinamico
