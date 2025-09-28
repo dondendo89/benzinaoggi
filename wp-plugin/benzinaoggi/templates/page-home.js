@@ -160,14 +160,16 @@
         limit: config.maxResults
       });
 
-      if (state.userLocation) {
+      // Priorità: se l'utente ha inserito un nome di città, usa la ricerca per città
+      if (state.currentFilters.location && !state.userLocation) {
+        params.append('city', state.currentFilters.location);
+        console.log('Ricerca per città:', state.currentFilters.location);
+      } else if (state.userLocation) {
+        // Solo se l'utente ha usato la geolocalizzazione, usa le coordinate
         params.append('lat', state.userLocation.lat);
         params.append('lon', state.userLocation.lng);
         params.append('radiusKm', state.currentFilters.radius);
         console.log('Ricerca con coordinate:', state.userLocation, 'raggio:', state.currentFilters.radius);
-      } else if (state.currentFilters.location) {
-        params.append('city', state.currentFilters.location);
-        console.log('Ricerca per città:', state.currentFilters.location);
       }
 
       if (state.currentFilters.fuel) {
