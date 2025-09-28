@@ -875,53 +875,6 @@ class BenzinaOggiPlugin {
             }
         ]);
 
-        // Endpoint per gestire le preferenze delle notifiche
-        register_rest_route('benzinaoggi/v1', '/notifications/preference', [
-            'methods' => 'POST',
-            'permission_callback' => '__return_true',
-            'callback' => function($request){
-                $distributor_id = sanitize_text_field($request->get_param('distributorId'));
-                $enabled = (bool) $request->get_param('enabled');
-                
-                if (!$distributor_id) {
-                    return new WP_REST_Response(['ok' => false, 'error' => 'distributorId required'], 400);
-                }
-                
-                // Salva la preferenza nel database
-                $preferences = get_option('benzinaoggi_notification_preferences', []);
-                $preferences[$distributor_id] = $enabled;
-                update_option('benzinaoggi_notification_preferences', $preferences);
-                
-                return new WP_REST_Response([
-                    'ok' => true, 
-                    'message' => 'Preferenza salvata',
-                    'distributorId' => $distributor_id,
-                    'enabled' => $enabled
-                ]);
-            }
-        ]);
-
-        // Endpoint per ottenere le preferenze delle notifiche
-        register_rest_route('benzinaoggi/v1', '/notifications/preference', [
-            'methods' => 'GET',
-            'permission_callback' => '__return_true',
-            'callback' => function($request){
-                $distributor_id = sanitize_text_field($request->get_param('distributorId'));
-                
-                if (!$distributor_id) {
-                    return new WP_REST_Response(['ok' => false, 'error' => 'distributorId required'], 400);
-                }
-                
-                $preferences = get_option('benzinaoggi_notification_preferences', []);
-                $enabled = isset($preferences[$distributor_id]) ? $preferences[$distributor_id] : false;
-                
-                return new WP_REST_Response([
-                    'ok' => true,
-                    'distributorId' => $distributor_id,
-                    'enabled' => $enabled
-                ]);
-            }
-        ]);
     }
 
     public function enqueue_assets() {
@@ -1137,53 +1090,53 @@ class BenzinaOggiPlugin {
             return;
         }
         
-        // Verifica se ci sono preferenze attive per questo distributore
-        $preferences = get_option('benzinaoggi_notification_preferences', []);
-        $hasActiveSubscribers = false;
-        
-        // Controlla se almeno un utente ha abilitato le notifiche per questo distributore
-        foreach ($preferences as $prefDistributorId => $enabled) {
-            if ($enabled && $prefDistributorId == $distributorId) {
-                $hasActiveSubscribers = true;
-                break;
-            }
-        }
-        
-        if (!$hasActiveSubscribers) {
-            $this->log_progress("No active subscribers for distributor $distributorId, skipping notification");
-            return;
-        }
 
         $title = "💰 Prezzo $fuelType sceso!";
         $message = "$distributorName: $fuelType da €" . number_format($oldPrice, 3) . " a €" . number_format($newPrice, 3) . " (-" . number_format($percentageDiff, 1) . "%)";
 
-        // Usa tag targeting per carburante specifico
-        $fuel_key_norm = strtolower(str_replace(' ', '_', $fuelType));
-        $isSelfService = isset($variation['isSelfService']) ? $variation['isSelfService'] : false;
-        $serviceType = $isSelfService ? 'self' : 'served';
-        $fuel_tag = 'price_drop_' . $fuel_key_norm . '_' . $serviceType;
+        // Fetch externalIds from Next API (sistema originale)
+        $apiBase = rtrim($opts['api_base'] ?? '', '/');
+        $externalIds = [];
+        if ($apiBase) {
+            $q = add_query_arg(array(
+                // IMPORTANT: impiantoId must be the public impianto ID, not internal distributorId
+                'impiantoId' => (isset($variation['impiantoId']) ? $variation['impiantoId'] : ''),
+                'fuelType' => $fuelType
+            ), $apiBase . '/api/subscriptions');
+            $resp = wp_remote_get($q, [ 'timeout' => 15 ]);
+            if (!is_wp_error($resp) && wp_remote_retrieve_response_code($resp) === 200) {
+                $json = json_decode(wp_remote_retrieve_body($resp), true);
+                if (!empty($json['externalIds']) && is_array($json['externalIds'])) {
+                    $externalIds = $json['externalIds'];
+                    // Log how many and a small sample to verify
+                    $sample = array_slice($externalIds, 0, 5);
+                    $this->log_progress('Subscriptions fetched for impianto '.(isset($variation['impiantoId']) ? $variation['impiantoId'] : 'unknown').' fuel '.$fuelType.': count='.count($externalIds).' sample='.json_encode($sample));
+                }
+            }
+        }
+
+        if (empty($externalIds)) {
+            $this->log_progress('No subscribers (externalIds) for impianto '.(isset($variation['impiantoId']) ? $variation['impiantoId'] : 'unknown').' fuel '.$fuelType);
+            return;
+        }
 
         $payload = array(
             'app_id' => $app_id,
-            'included_segments' => array('Subscribed Users'),
-            'filters' => array(
-                array('field' => 'tag', 'key' => $fuel_tag, 'relation' => '=', 'value' => '1'),
-                array('field' => 'tag', 'key' => 'distributor_id', 'relation' => '=', 'value' => $distributorId),
-                array('field' => 'tag', 'key' => 'fuel_type', 'relation' => '=', 'value' => $fuelType),
-                array('field' => 'tag', 'key' => 'service_type', 'relation' => '=', 'value' => $serviceType)
-            ),
+            'include_aliases' => array('external_id' => $externalIds),
+            // Required when using alias targeting
+            'target_channel' => 'push',
             // OneSignal requires an English (en) fallback
             'headings' => array('en' => $title, 'it' => $title),
             'contents' => array('en' => $message, 'it' => $message),
             'data' => array(
                 'fuelType' => $fuelType,
-                'serviceType' => $serviceType,
                 // Use impiantoId consistently as public identifier in payload
                 'distributorId' => (isset($variation['impiantoId']) ? $variation['impiantoId'] : ''),
                 'oldPrice' => $oldPrice,
                 'newPrice' => $newPrice,
                 'priceDiff' => $priceDiff,
-                'percentageDiff' => $percentageDiff
+                'percentageDiff' => $percentageDiff,
+                'externalIdsCount' => count($externalIds)
             ),
             // Deep link to distributor page using impiantoId
             'url' => home_url('/distributore-' . (isset($variation['impiantoId']) ? $variation['impiantoId'] : ''))

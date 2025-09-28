@@ -614,17 +614,11 @@ get_header(); ?>
             const toggle = document.getElementById('bo-notification-toggle');
             const distributorId = distributor.id || impiantoId;
             
-            // Carica lo stato salvato dal server
-            loadNotificationPreference(distributorId).then(enabled => {
-                toggle.checked = enabled;
-            }).catch(error => {
-                console.warn('Errore nel caricare le preferenze:', error);
-                // Fallback: carica da localStorage
-                const savedState = localStorage.getItem(`bo_notifications_${distributorId}`);
-                if (savedState === 'true') {
-                    toggle.checked = true;
-                }
-            });
+            // Carica lo stato salvato localmente
+            const savedState = localStorage.getItem(`bo_notifications_${distributorId}`);
+            if (savedState === 'true') {
+                toggle.checked = true;
+            }
             
             // Gestisci il cambio di stato
             toggle.addEventListener('change', function() {
@@ -639,18 +633,6 @@ get_header(); ?>
             });
         }
         
-        function loadNotificationPreference(distributorId) {
-            const wpApiUrl = '<?php echo esc_js(home_url('/wp-json/benzinaoggi/v1')); ?>';
-            return fetch(`${wpApiUrl}/notifications/preference?distributorId=${distributorId}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.ok) {
-                        return data.enabled;
-                    } else {
-                        throw new Error(data.error || 'Errore nel caricamento delle preferenze');
-                    }
-                });
-        }
         
         function subscribeToNotifications(distributorId) {
             // Verifica se OneSignal è disponibile
@@ -659,8 +641,6 @@ get_header(); ?>
                     // L'utente ha accettato le notifiche
                     console.log('Notifiche attivate per il distributore:', distributorId);
                     
-                    // Salva la preferenza nel database (opzionale)
-                    saveNotificationPreference(distributorId, true);
                 }).catch(() => {
                     // L'utente ha rifiutato le notifiche
                     console.log('Notifiche rifiutate');
@@ -675,34 +655,8 @@ get_header(); ?>
         
         function unsubscribeFromNotifications(distributorId) {
             console.log('Notifiche disattivate per il distributore:', distributorId);
-            
-            // Salva la preferenza nel database (opzionale)
-            saveNotificationPreference(distributorId, false);
         }
         
-        function saveNotificationPreference(distributorId, enabled) {
-            // Salva la preferenza tramite API WordPress
-            const wpApiUrl = '<?php echo esc_js(home_url('/wp-json/benzinaoggi/v1')); ?>';
-            fetch(`${wpApiUrl}/notifications/preference`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    distributorId: distributorId,
-                    enabled: enabled
-                })
-            }).then(response => response.json())
-            .then(data => {
-                if (data.ok) {
-                    console.log('Preferenza salvata:', data);
-                } else {
-                    console.warn('Errore nel salvare la preferenza:', data.error);
-                }
-            }).catch(error => {
-                console.warn('Errore nel salvare la preferenza:', error);
-            });
-        }
         
         function setupFuelNotifications(distributor, prices) {
             const distributorId = distributor.id || impiantoId;
@@ -746,25 +700,18 @@ get_header(); ?>
             // Verifica OneSignal
             if (typeof OneSignal !== 'undefined') {
                 OneSignal.showNativePrompt().then(() => {
-                    // Aggiungi tag per questo carburante specifico
-                    const fuelKey = fuelType.toLowerCase().replace(/\s+/g, '_');
-                    const tagKey = `price_drop_${fuelKey}_${serviceType}`;
-                    
-                    OneSignal.User.addTags({
-                        [tagKey]: '1',
-                        'distributor_id': distributorId.toString(),
-                        'fuel_type': fuelType,
-                        'service_type': serviceType
-                    }).then(() => {
-                        if (statusEl) {
-                            statusEl.textContent = '✓ Attivato';
-                            statusEl.className = 'bo-notification-status active';
+                    // Ottieni externalId da OneSignal
+                    OneSignal.User.PushSubscription.getId().then(externalId => {
+                        if (!externalId) {
+                            throw new Error('ExternalId non disponibile');
                         }
-                        console.log('Notifiche attivate per:', fuelType, serviceType);
+                        
+                        // Iscriviti tramite API subscriptions
+                        subscribeToFuelNotification(externalId, distributorId, fuelType, statusEl);
                     }).catch(error => {
-                        console.error('Errore nell\'attivazione notifiche:', error);
+                        console.error('Errore nel recupero externalId:', error);
                         if (statusEl) {
-                            statusEl.textContent = '✗ Errore';
+                            statusEl.textContent = '✗ Errore externalId';
                             statusEl.className = 'bo-notification-status error';
                         }
                     });
@@ -782,29 +729,107 @@ get_header(); ?>
             }
         }
         
+        function subscribeToFuelNotification(externalId, distributorId, fuelType, statusEl) {
+            const apiBase = '<?php echo esc_js(get_option('benzinaoggi_api_base', 'https://benzinaoggi.vercel.app')); ?>';
+            
+            fetch(`${apiBase}/api/subscriptions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: 'add',
+                    externalId: externalId,
+                    impiantoId: distributorId,
+                    fuelType: fuelType
+                })
+            }).then(response => response.json())
+            .then(data => {
+                if (data.ok) {
+                    if (statusEl) {
+                        statusEl.textContent = '✓ Attivato';
+                        statusEl.className = 'bo-notification-status active';
+                    }
+                    console.log('Iscrizione salvata per:', fuelType, 'distributore:', distributorId);
+                } else {
+                    throw new Error(data.error || 'Errore nel salvare l\'iscrizione');
+                }
+            }).catch(error => {
+                console.error('Errore nell\'iscrizione:', error);
+                if (statusEl) {
+                    statusEl.textContent = '✗ Errore';
+                    statusEl.className = 'bo-notification-status error';
+                }
+            });
+        }
+        
         function disableFuelNotification(distributorId, fuelType, serviceType, statusEl) {
             // Rimuovi da localStorage
             localStorage.removeItem(`bo_notify_${distributorId}_${fuelType}_${serviceType}`);
             
-            // Rimuovi tag OneSignal
+            // Mostra stato
+            if (statusEl) {
+                statusEl.textContent = '✓ Disattivazione in corso...';
+                statusEl.className = 'bo-notification-status';
+            }
+            
+            // Verifica OneSignal
             if (typeof OneSignal !== 'undefined') {
-                const fuelKey = fuelType.toLowerCase().replace(/\s+/g, '_');
-                const tagKey = `price_drop_${fuelKey}_${serviceType}`;
-                
-                OneSignal.User.removeTag(tagKey).then(() => {
+                // Ottieni externalId da OneSignal
+                OneSignal.User.PushSubscription.getId().then(externalId => {
+                    if (!externalId) {
+                        throw new Error('ExternalId non disponibile');
+                    }
+                    
+                    // Disiscriviti tramite API subscriptions
+                    unsubscribeFromFuelNotification(externalId, distributorId, fuelType, statusEl);
+                }).catch(error => {
+                    console.error('Errore nel recupero externalId:', error);
+                    if (statusEl) {
+                        statusEl.textContent = '✗ Errore externalId';
+                        statusEl.className = 'bo-notification-status error';
+                    }
+                });
+            } else {
+                if (statusEl) {
+                    statusEl.textContent = '✓ Disattivato (locale)';
+                    statusEl.className = 'bo-notification-status';
+                }
+            }
+        }
+        
+        function unsubscribeFromFuelNotification(externalId, distributorId, fuelType, statusEl) {
+            const apiBase = '<?php echo esc_js(get_option('benzinaoggi_api_base', 'https://benzinaoggi.vercel.app')); ?>';
+            
+            fetch(`${apiBase}/api/subscriptions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: 'remove',
+                    externalId: externalId,
+                    impiantoId: distributorId,
+                    fuelType: fuelType
+                })
+            }).then(response => response.json())
+            .then(data => {
+                if (data.ok) {
                     if (statusEl) {
                         statusEl.textContent = '✓ Disattivato';
-                        statusEl.className = 'bo-notification-status active';
-                        setTimeout(() => {
-                            statusEl.textContent = '';
-                            statusEl.className = 'bo-notification-status';
-                        }, 2000);
+                        statusEl.className = 'bo-notification-status';
                     }
-                    console.log('Notifiche disattivate per:', fuelType, serviceType);
-                }).catch(error => {
-                    console.error('Errore nella disattivazione notifiche:', error);
-                });
-            }
+                    console.log('Disiscrizione completata per:', fuelType, 'distributore:', distributorId);
+                } else {
+                    throw new Error(data.error || 'Errore nel rimuovere l\'iscrizione');
+                }
+            }).catch(error => {
+                console.error('Errore nella disiscrizione:', error);
+                if (statusEl) {
+                    statusEl.textContent = '✗ Errore';
+                    statusEl.className = 'bo-notification-status error';
+                }
+            });
         }
         
         // Carica i dati quando la pagina è pronta
