@@ -874,6 +874,54 @@ class BenzinaOggiPlugin {
                 return new WP_REST_Response(['ok'=>true,'message'=>'Variations job triggered']);
             }
         ]);
+
+        // Endpoint per gestire le preferenze delle notifiche
+        register_rest_route('benzinaoggi/v1', '/notifications/preference', [
+            'methods' => 'POST',
+            'permission_callback' => '__return_true',
+            'callback' => function($request){
+                $distributor_id = sanitize_text_field($request->get_param('distributorId'));
+                $enabled = (bool) $request->get_param('enabled');
+                
+                if (!$distributor_id) {
+                    return new WP_REST_Response(['ok' => false, 'error' => 'distributorId required'], 400);
+                }
+                
+                // Salva la preferenza nel database
+                $preferences = get_option('benzinaoggi_notification_preferences', []);
+                $preferences[$distributor_id] = $enabled;
+                update_option('benzinaoggi_notification_preferences', $preferences);
+                
+                return new WP_REST_Response([
+                    'ok' => true, 
+                    'message' => 'Preferenza salvata',
+                    'distributorId' => $distributor_id,
+                    'enabled' => $enabled
+                ]);
+            }
+        ]);
+
+        // Endpoint per ottenere le preferenze delle notifiche
+        register_rest_route('benzinaoggi/v1', '/notifications/preference', [
+            'methods' => 'GET',
+            'permission_callback' => '__return_true',
+            'callback' => function($request){
+                $distributor_id = sanitize_text_field($request->get_param('distributorId'));
+                
+                if (!$distributor_id) {
+                    return new WP_REST_Response(['ok' => false, 'error' => 'distributorId required'], 400);
+                }
+                
+                $preferences = get_option('benzinaoggi_notification_preferences', []);
+                $enabled = isset($preferences[$distributor_id]) ? $preferences[$distributor_id] : false;
+                
+                return new WP_REST_Response([
+                    'ok' => true,
+                    'distributorId' => $distributor_id,
+                    'enabled' => $enabled
+                ]);
+            }
+        ]);
     }
 
     public function enqueue_assets() {
@@ -1069,6 +1117,30 @@ class BenzinaOggiPlugin {
         $newPrice = isset($variation['newPrice']) ? $variation['newPrice'] : 0;
         $priceDiff = $oldPrice - $newPrice;
         $percentageDiff = $oldPrice > 0 ? (($priceDiff / $oldPrice) * 100) : 0;
+        
+        // Controlla se ci sono utenti che hanno abilitato le notifiche per questo distributore
+        $distributorId = isset($variation['impiantoId']) ? $variation['impiantoId'] : (isset($variation['distributorId']) ? $variation['distributorId'] : '');
+        if (!$distributorId) {
+            $this->log_progress('No distributor ID found in variation, skipping notification');
+            return;
+        }
+        
+        // Verifica se ci sono preferenze attive per questo distributore
+        $preferences = get_option('benzinaoggi_notification_preferences', []);
+        $hasActiveSubscribers = false;
+        
+        // Controlla se almeno un utente ha abilitato le notifiche per questo distributore
+        foreach ($preferences as $prefDistributorId => $enabled) {
+            if ($enabled && $prefDistributorId == $distributorId) {
+                $hasActiveSubscribers = true;
+                break;
+            }
+        }
+        
+        if (!$hasActiveSubscribers) {
+            $this->log_progress("No active subscribers for distributor $distributorId, skipping notification");
+            return;
+        }
 
         $title = "💰 Prezzo $fuelType sceso!";
         $message = "$distributorName: $fuelType da €" . number_format($oldPrice, 3) . " a €" . number_format($newPrice, 3) . " (-" . number_format($percentageDiff, 1) . "%)";
