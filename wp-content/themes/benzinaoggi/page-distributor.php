@@ -5,22 +5,11 @@
  * Template personalizzato per le pagine dei distributori di carburante.
  * Questo template viene utilizzato automaticamente per le pagine che contengono
  * il shortcode [carburante_distributor impianto_id=XXXXX]
- * 
- * Per personalizzare questo template, copialo nella directory del tuo tema attivo.
  */
 
 // Prevenire accesso diretto
 if (!defined('ABSPATH')) {
     exit;
-}
-
-// Carica il plugin BenzinaOggi se disponibile
-if (!class_exists('BenzinaOggiPlugin')) {
-    // Fallback se il plugin non è disponibile
-    $logo_url = get_template_directory_uri() . '/benzinaoggi-templates/logo-default.svg';
-} else {
-    $plugin = new BenzinaOggiPlugin();
-    $logo_url = $plugin->get_logo_url();
 }
 
 // Ottieni l'impianto_id dal contenuto della pagina
@@ -41,15 +30,22 @@ if (!$impianto_id) {
     return;
 }
 
-// Logo già caricato sopra
+// Carica il plugin per accedere alle funzioni
+$plugin = new BenzinaOggiPlugin();
+$logo_url = $plugin->get_logo_url();
 ?>
 
-<!DOCTYPE html>
-<html <?php language_attributes(); ?>>
-<head>
-    <meta charset="<?php bloginfo('charset'); ?>">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?php the_title(); ?> - <?php bloginfo('name'); ?></title>
+<?php
+/**
+ * Template Name: Distributore BenzinaOggi
+ * 
+ * Template personalizzato per le pagine dei distributori di carburante.
+ */
+
+get_header(); ?>
+
+<main id="main" class="site-main">
+    <div class="container">
     
     <!-- CSS del plugin -->
     <style>
@@ -210,9 +206,12 @@ if (!$impianto_id) {
             <p>Caricamento informazioni distributore...</p>
         </div>
     </div>
+</main>
 
-    <!-- JavaScript per caricare i dati -->
-    <script>
+<?php get_footer(); ?>
+
+<!-- JavaScript per caricare i dati -->
+<script>
     (function() {
         'use strict';
         
@@ -298,6 +297,4 @@ if (!$impianto_id) {
             loadDistributorData();
         }
     })();
-    </script>
-</body>
-</html>
+</script>

@@ -60,8 +60,15 @@ class BenzinaOggi_Template_Loader {
             $existing_page = get_page_by_path(get_query_var('pagename'));
             
             if ($existing_page) {
-                // Prima cerca nella directory del tema
-                $theme_template = get_template_directory() . '/benzinaoggi-templates/page-distributor.php';
+                // Prima cerca nel tema BenzinaOggi
+                $benzinaoggi_theme_template = get_theme_root() . '/benzinaoggi/page-distributor.php';
+                if (file_exists($benzinaoggi_theme_template)) {
+                    include $benzinaoggi_theme_template;
+                    exit;
+                }
+                
+                // Poi cerca nel tema attivo
+                $theme_template = get_template_directory() . '/page-distributor.php';
                 if (file_exists($theme_template)) {
                     include $theme_template;
                     exit;

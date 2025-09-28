@@ -559,8 +559,14 @@ class BenzinaOggiPlugin {
         global $post;
         
         if ($post && get_page_template_slug($post->ID) === 'page-distributor.php') {
-            // Prima cerca nella directory del tema attivo
-            $theme_template = get_template_directory() . '/benzinaoggi-templates/page-distributor.php';
+            // Prima cerca nel tema BenzinaOggi
+            $benzinaoggi_theme_template = get_theme_root() . '/benzinaoggi/page-distributor.php';
+            if (file_exists($benzinaoggi_theme_template)) {
+                return $benzinaoggi_theme_template;
+            }
+            
+            // Poi cerca nel tema attivo
+            $theme_template = get_template_directory() . '/page-distributor.php';
             if (file_exists($theme_template)) {
                 return $theme_template;
             }
