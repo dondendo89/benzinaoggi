@@ -60,7 +60,14 @@ class BenzinaOggi_Template_Loader {
             $existing_page = get_page_by_path(get_query_var('pagename'));
             
             if ($existing_page) {
-                // Usa il template personalizzato per distributori
+                // Prima cerca nella directory del tema
+                $theme_template = get_template_directory() . '/benzinaoggi-templates/page-distributor.php';
+                if (file_exists($theme_template)) {
+                    include $theme_template;
+                    exit;
+                }
+                
+                // Fallback: usa il template del plugin
                 $this->load_template('page-distributor.php', array('impianto_id' => $impianto_id));
                 exit;
             } else {

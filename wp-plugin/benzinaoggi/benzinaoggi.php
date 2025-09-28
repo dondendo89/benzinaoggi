@@ -559,6 +559,13 @@ class BenzinaOggiPlugin {
         global $post;
         
         if ($post && get_page_template_slug($post->ID) === 'page-distributor.php') {
+            // Prima cerca nella directory del tema attivo
+            $theme_template = get_template_directory() . '/benzinaoggi-templates/page-distributor.php';
+            if (file_exists($theme_template)) {
+                return $theme_template;
+            }
+            
+            // Fallback: cerca nel plugin
             $plugin_template = plugin_dir_path(__FILE__) . 'templates/page-distributor.php';
             if (file_exists($plugin_template)) {
                 return $plugin_template;
