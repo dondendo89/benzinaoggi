@@ -44,6 +44,7 @@ class BenzinaOggiPlugin {
         add_action('admin_post_benzinaoggi_import', [$this, 'handle_import_and_pages']);
         // Admin post action to create template pages
         add_action('admin_post_benzinaoggi_create_pages', [$this, 'handle_create_pages']);
+        add_action('admin_post_benzinaoggi_delete_distributor_pages', [$this, 'handle_delete_distributor_pages']);
         // Admin post action to run variations now
         add_action('admin_post_benzinaoggi_run_variations', [$this, 'handle_run_variations']);
         // Admin post action to run daily price update manually
@@ -233,9 +234,12 @@ class BenzinaOggiPlugin {
                 delete_transient('benzinaoggi_notice');
             }
             
-            if (isset($_GET['created'])) {
-                echo '<div class="notice notice-success is-dismissible"><p>Pagine create: ' . esc_html($_GET['created']) . '</p></div>';
-            }
+        if (isset($_GET['created'])) {
+            echo '<div class="notice notice-success is-dismissible"><p>Pagine create: ' . esc_html($_GET['created']) . '</p></div>';
+        }
+        if (isset($_GET['deleted_pages'])) {
+            echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($_GET['deleted_pages']) . '</p></div>';
+        }
             ?>
             
             <?php if ($active_tab == 'settings'): ?>
@@ -307,6 +311,20 @@ class BenzinaOggiPlugin {
                     </form>
                 </div>
                 
+                <h3>Gestione Pagine Distributori:</h3>
+                <div class="card" style="max-width: 600px; margin-bottom: 20px;">
+                    <h4>Elimina Pagine Distributori</h4>
+                    <p>Elimina tutte le pagine dei distributori che contengono il shortcode <code>[carburante_distributor impianto_id=]</code></p>
+                    
+                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top: 15px;" onsubmit="return confirm('Sei sicuro di voler eliminare tutte le pagine dei distributori? Questa azione non può essere annullata.');">
+                        <input type="hidden" name="action" value="benzinaoggi_delete_distributor_pages" />
+                        <?php wp_nonce_field('benzinaoggi_delete_distributor_pages'); ?>
+                        <button type="submit" class="button button-secondary" style="background-color: #dc3232; color: white; border-color: #dc3232;">
+                            🗑️ Elimina Pagine Distributori
+                        </button>
+                    </form>
+                </div>
+
                 <h3>Pagine esistenti:</h3>
                 <?php
                 $home_page = get_page_by_path('benzinaoggi-home');
@@ -461,6 +479,65 @@ class BenzinaOggiPlugin {
         $this->cron_sync_pages();
         set_transient('benzinaoggi_notice', 'Sincronizzazione pagine avviata. Verrà eseguita in background tra pochi secondi.', 30);
         wp_redirect(admin_url('options-general.php?page=benzinaoggi'));
+        exit;
+    }
+
+    public function handle_delete_distributor_pages() {
+        if (!current_user_can('manage_options')) wp_die('Not allowed');
+        check_admin_referer('benzinaoggi_delete_distributor_pages');
+        
+        $deleted_count = 0;
+        $errors = [];
+        
+        // Trova tutte le pagine che contengono il shortcode [carburante_distributor impianto_id=]
+        $pages = get_posts([
+            'post_type' => 'page',
+            'post_status' => 'publish',
+            'numberposts' => -1,
+            'meta_query' => [
+                [
+                    'key' => '_wp_page_template',
+                    'value' => 'single-distributor.php',
+                    'compare' => '='
+                ]
+            ]
+        ]);
+        
+        // Aggiungi anche le pagine che contengono il shortcode nel contenuto
+        $pages_with_shortcode = get_posts([
+            'post_type' => 'page',
+            'post_status' => 'publish',
+            'numberposts' => -1,
+            's' => '[carburante_distributor impianto_id='
+        ]);
+        
+        $all_pages = array_merge($pages, $pages_with_shortcode);
+        $all_pages = array_unique($all_pages, SORT_REGULAR);
+        
+        foreach ($all_pages as $page) {
+            // Verifica che la pagina contenga effettivamente il shortcode
+            if (strpos($page->post_content, '[carburante_distributor impianto_id=') !== false ||
+                get_page_template_slug($page->ID) === 'single-distributor.php') {
+                
+                if (wp_delete_post($page->ID, true)) {
+                    $deleted_count++;
+                } else {
+                    $errors[] = "Errore nell'eliminazione della pagina: " . $page->post_title;
+                }
+            }
+        }
+        
+        // Messaggio di risultato
+        if ($deleted_count > 0) {
+            $message = "Eliminate {$deleted_count} pagine distributori.";
+            if (!empty($errors)) {
+                $message .= " Errori: " . implode(', ', $errors);
+            }
+        } else {
+            $message = "Nessuna pagina distributore trovata da eliminare.";
+        }
+        
+        wp_redirect(admin_url('admin.php?page=benzinaoggi&deleted_pages=' . urlencode($message)));
         exit;
     }
 
