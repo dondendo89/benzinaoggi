@@ -117,23 +117,23 @@ class BenzinaOggi_Template_Loader {
         
         // Leaflet CSS e JS
         wp_enqueue_style('leaflet-css', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
-        wp_enqueue_script('leaflet-js', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', array(), '1.9.4', true);
+        wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', array(), '1.9.4', true);
         
         // Leaflet Draw
         wp_enqueue_style('leaflet-draw-css', 'https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css');
-        wp_enqueue_script('leaflet-draw-js', 'https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js', array('leaflet-js'), '1.0.4', true);
+        wp_enqueue_script('leaflet-draw-js', 'https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js', array('leaflet'), '1.0.4', true);
         
         // Leaflet Geocoder
         wp_enqueue_style('leaflet-geocoder-css', 'https://unpkg.com/leaflet-control-geocoder@1.13.0/dist/Control.Geocoder.css');
-        wp_enqueue_script('leaflet-geocoder-js', 'https://unpkg.com/leaflet-control-geocoder@1.13.0/dist/Control.Geocoder.js', array('leaflet-js'), '1.13.0', true);
+        wp_enqueue_script('leaflet-geocoder-js', 'https://unpkg.com/leaflet-control-geocoder@1.13.0/dist/Control.Geocoder.js', array('leaflet'), '1.13.0', true);
         
         // Script personalizzati
         if (is_page('benzinaoggi-home') || is_page('home-benzinaoggi')) {
-            wp_enqueue_script('benzinaoggi-home-js', plugin_dir_url(__FILE__) . 'templates/page-home.js', array('leaflet-js'), '1.0.0', true);
+            wp_enqueue_script('benzinaoggi-home-js', plugin_dir_url(__FILE__) . 'templates/page-home.js', array('leaflet'), '1.0.0', true);
         }
         
         if (is_page('benzinaoggi-risultati') || is_page('risultati-benzinaoggi')) {
-            wp_enqueue_script('benzinaoggi-risultati-js', plugin_dir_url(__FILE__) . 'templates/page-risultati.js', array('leaflet-js'), '1.0.0', true);
+            wp_enqueue_script('benzinaoggi-risultati-js', plugin_dir_url(__FILE__) . 'templates/page-risultati.js', array('leaflet'), '1.0.0', true);
         }
         
         // Debug: aggiungi script per tutte le pagine del plugin
@@ -147,7 +147,7 @@ class BenzinaOggi_Template_Loader {
             
             if (!$is_distributor_page) {
                 // Carica il JavaScript per le pagine del plugin (escluso distributore)
-                wp_enqueue_script('benzinaoggi-common-js', plugin_dir_url(__FILE__) . 'templates/page-home.js', array('leaflet-js'), '1.0.0', true);
+                wp_enqueue_script('benzinaoggi-common-js', plugin_dir_url(__FILE__) . 'templates/page-home.js', array('leaflet'), '1.0.0', true);
             }
         }
         
