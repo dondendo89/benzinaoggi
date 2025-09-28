@@ -18,6 +18,7 @@ class BenzinaOggiPlugin {
     public function __construct() {
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_init', [$this, 'settings_init']);
+        add_action('admin_enqueue_scripts', [$this, 'admin_enqueue_scripts']);
         add_shortcode('carburanti_map', [$this, 'shortcode_map']);
         add_shortcode('carburante_distributor', [$this, 'shortcode_distributor']);
         add_action('wp_enqueue_scripts', [$this, 'enqueue_assets']);
@@ -85,7 +86,16 @@ class BenzinaOggiPlugin {
     }
 
     public function add_admin_menu() {
-        add_options_page('Benzina Oggi', 'Benzina Oggi', 'manage_options', 'benzinaoggi', [$this, 'options_page']);
+        // Aggiungi il plugin nel menu principale (a sinistra) invece che nelle impostazioni
+        add_menu_page(
+            'Benzina Oggi',           // Titolo della pagina
+            'Benzina Oggi',           // Titolo del menu
+            'manage_options',         // Capability
+            'benzinaoggi',           // Slug del menu
+            [$this, 'options_page'], // Funzione callback
+            'dashicons-car',         // Icona (auto)
+            30                        // Posizione nel menu
+        );
     }
 
     public function settings_init() {
@@ -101,6 +111,13 @@ class BenzinaOggiPlugin {
         add_settings_field('webhook_secret', 'Webhook Secret', [$this, 'field_webhook_secret'], 'benzinaoggi', 'benzinaoggi_section');
         add_settings_field('api_secret', 'API Bearer Secret', [$this, 'field_api_secret'], 'benzinaoggi', 'benzinaoggi_section');
 
+        // Sezione per il logo
+        add_settings_section('benzinaoggi_logo_section', __('Logo e Branding', 'benzinaoggi'), function() {
+            echo '<p>'.esc_html__('Carica il logo da utilizzare nel template.', 'benzinaoggi').'</p>';
+        }, 'benzinaoggi');
+
+        add_settings_field('logo_url', 'Logo URL', [$this, 'field_logo_url'], 'benzinaoggi', 'benzinaoggi_logo_section');
+
         // pulsante import ora reso come form separato fuori dall'options form
     }
 
@@ -110,7 +127,8 @@ class BenzinaOggiPlugin {
             'onesignal_app_id' => '',
             'onesignal_api_key' => '',
             'webhook_secret' => '',
-            'api_secret' => ''
+            'api_secret' => '',
+            'logo_url' => ''
         ];
         $opts = get_option(self::OPTION_NAME, []);
         return wp_parse_args($opts, $defaults);
@@ -135,6 +153,65 @@ class BenzinaOggiPlugin {
     public function field_api_secret() {
         $opts = $this->get_options();
         echo '<input type="text" name="'.self::OPTION_NAME.'[api_secret]" value="'.esc_attr($opts['api_secret']).'" class="regular-text" placeholder="Bearer per API Vercel" />';
+    }
+
+    public function field_logo_url() {
+        $opts = $this->get_options();
+        $logo_url = $opts['logo_url'];
+        
+        echo '<div>';
+        echo '<input type="url" name="'.self::OPTION_NAME.'[logo_url]" value="'.esc_attr($logo_url).'" class="regular-text" placeholder="https://example.com/logo.png" />';
+        echo '<button type="button" class="button" id="upload-logo-btn">Carica Logo</button>';
+        
+        if ($logo_url) {
+            echo '<div style="margin-top: 10px;">';
+            echo '<img src="'.esc_url($logo_url).'" alt="Logo" style="max-width: 200px; max-height: 100px; border: 1px solid #ddd; padding: 5px;" />';
+            echo '</div>';
+        }
+        
+        echo '</div>';
+        
+        // JavaScript per il media uploader
+        echo '<script>
+        jQuery(document).ready(function($) {
+            $("#upload-logo-btn").click(function(e) {
+                e.preventDefault();
+                var mediaUploader = wp.media({
+                    title: "Seleziona Logo",
+                    button: {
+                        text: "Usa questo logo"
+                    },
+                    multiple: false
+                });
+                
+                mediaUploader.on("select", function() {
+                    var attachment = mediaUploader.state().get("selection").first().toJSON();
+                    $("input[name=\''.self::OPTION_NAME.'[logo_url]\']").val(attachment.url);
+                });
+                
+                mediaUploader.open();
+            });
+        });
+        </script>';
+    }
+
+    public function admin_enqueue_scripts($hook) {
+        // Carica wp.media solo nella pagina del plugin
+        if ($hook === 'toplevel_page_benzinaoggi') {
+            wp_enqueue_media();
+        }
+    }
+
+    public function get_logo_url() {
+        $opts = $this->get_options();
+        $logo_url = $opts['logo_url'];
+        
+        // Se non c'è logo personalizzato, usa quello di default
+        if (empty($logo_url)) {
+            return plugins_url('assets/logo-benzinaoggi.svg', __FILE__);
+        }
+        
+        return $logo_url;
     }
 
     public function options_page() {

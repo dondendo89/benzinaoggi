@@ -10,7 +10,11 @@ get_header(); ?>
     <header class="bo-header">
         <div class="bo-container">
             <div class="bo-logo">
-                <img src="<?php echo plugins_url('assets/logo-benzinaoggi.svg', __FILE__); ?>" alt="BenzinaOggi" class="bo-logo-img">
+                <?php 
+                $plugin = new BenzinaOggiPlugin();
+                $logo_url = $plugin->get_logo_url();
+                ?>
+                <img src="<?php echo esc_url($logo_url); ?>" alt="BenzinaOggi" class="bo-logo-img">
                 <span class="bo-logo-text">BenzinaOggi.it</span>
             </div>
             <nav class="bo-nav">

@@ -74,7 +74,12 @@
     }
 
     elements.myLocationBtn.disabled = true;
-    elements.myLocationBtn.textContent = 'Ricerca...';
+    elements.myLocationBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" width="20" height="20">
+        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+      </svg>
+      <span style="font-size: 12px;">Ricerca...</span>
+    `;
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -83,27 +88,49 @@
           lng: position.coords.longitude
         };
         
-        elements.map.setView([state.userLocation.lat, state.userLocation.lng], 13);
+        console.log('Posizione ottenuta:', state.userLocation);
+        
+        // Centra la mappa sulla posizione dell'utente
+        if (elements.map) {
+          elements.map.setView([state.userLocation.lat, state.userLocation.lng], 13);
+        }
+        
+        // Aggiorna i filtri
         state.currentFilters.location = `${state.userLocation.lat},${state.userLocation.lng}`;
         elements.locationInput.value = 'La mia posizione';
+        
+        // Cerca distributori vicini
         handleSearch();
       },
       (error) => {
         console.error('Errore geolocalizzazione:', error);
-        alert('Impossibile ottenere la posizione');
+        let errorMessage = 'Impossibile ottenere la posizione.';
+        
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'Permesso di geolocalizzazione negato. Abilita la posizione nelle impostazioni del browser.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Posizione non disponibile.';
+            break;
+          case error.TIMEOUT:
+            errorMessage = 'Timeout nella richiesta di posizione.';
+            break;
+        }
+        
+        alert(errorMessage);
       },
       {
         enableHighAccuracy: true,
-        timeout: 10000,
+        timeout: 15000,
         maximumAge: 300000
       }
     ).finally(() => {
       elements.myLocationBtn.disabled = false;
       elements.myLocationBtn.innerHTML = `
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" width="20" height="20">
           <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
         </svg>
-        La mia posizione
       `;
     });
   }
@@ -137,16 +164,23 @@
         params.append('lat', state.userLocation.lat);
         params.append('lon', state.userLocation.lng);
         params.append('radiusKm', state.currentFilters.radius);
+        console.log('Ricerca con coordinate:', state.userLocation, 'raggio:', state.currentFilters.radius);
       } else if (state.currentFilters.location) {
         params.append('city', state.currentFilters.location);
+        console.log('Ricerca per città:', state.currentFilters.location);
       }
 
       if (state.currentFilters.fuel) {
         params.append('fuel', state.currentFilters.fuel);
       }
 
-      const response = await fetch(`${config.apiBase}/api/distributors?${params}`);
+      const apiUrl = `${config.apiBase}/api/distributors?${params}`;
+      console.log('Chiamata API:', apiUrl);
+      
+      const response = await fetch(apiUrl);
       const data = await response.json();
+      
+      console.log('Risposta API:', data);
 
       if (data.ok) {
         let distributors = data.distributors || [];
@@ -283,34 +317,18 @@
 
   // Carica dati iniziali
   function loadInitialData() {
-    // Prova prima a ottenere la posizione dell'utente
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          state.userLocation = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          };
-          
-          elements.map.setView([state.userLocation.lat, state.userLocation.lng], 13);
-          state.currentFilters.location = `${state.userLocation.lat},${state.userLocation.lng}`;
-          elements.locationInput.value = 'La mia posizione';
-          searchDistributors();
-        },
-        (error) => {
-          console.log('Geolocalizzazione non disponibile, carico distributori in area predefinita');
-          // Fallback: carica distributori in area predefinita (Roma)
-          searchDistributors();
-        },
-        {
-          enableHighAccuracy: false,
-          timeout: 5000,
-          maximumAge: 300000
-        }
-      );
-    } else {
-      // Fallback: carica distributori in area predefinita
-      searchDistributors();
+    // Mostra un messaggio per invitare l'utente a usare la geolocalizzazione
+    console.log('Applicazione caricata. Clicca il pulsante di geolocalizzazione per trovare distributori vicini.');
+    
+    // Mostra un messaggio nella lista risultati
+    if (elements.resultsList) {
+      elements.resultsList.innerHTML = `
+        <div class="bo-welcome-message">
+          <h3>Benvenuto in BenzinaOggi!</h3>
+          <p>Clicca il pulsante <strong>📍</strong> accanto al campo "Dove" per trovare i distributori più vicini a te.</p>
+          <p>Oppure inserisci manualmente una città o indirizzo.</p>
+        </div>
+      `;
     }
   }
 

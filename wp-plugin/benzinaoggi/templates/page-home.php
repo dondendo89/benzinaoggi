@@ -10,7 +10,11 @@ get_header(); ?>
     <header class="bo-header">
         <div class="bo-container">
             <div class="bo-logo">
-                <img src="<?php echo plugins_url('assets/logo-benzinaoggi.svg', __FILE__); ?>" alt="BenzinaOggi" class="bo-logo-img">
+                <?php 
+                $plugin = new BenzinaOggiPlugin();
+                $logo_url = $plugin->get_logo_url();
+                ?>
+                <img src="<?php echo esc_url($logo_url); ?>" alt="BenzinaOggi" class="bo-logo-img">
                 <span class="bo-logo-text">BenzinaOggi.it</span>
             </div>
             <nav class="bo-nav">
@@ -33,7 +37,14 @@ get_header(); ?>
                     <div class="bo-search-row">
                         <div class="bo-search-field">
                             <label for="bo-location">Dove</label>
-                            <input type="text" id="bo-location" placeholder="Inserisci città, indirizzo o CAP" class="bo-input">
+                            <div class="bo-location-input-group">
+                                <input type="text" id="bo-location" placeholder="Inserisci città, indirizzo o CAP" class="bo-input">
+                                <button type="button" id="bo-my-location" class="bo-location-btn" title="Usa la mia posizione">
+                                    <svg viewBox="0 0 24 24" width="20" height="20">
+                                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                         <div class="bo-search-field">
                             <label for="bo-fuel">Carburante</label>
@@ -231,6 +242,65 @@ get_header(); ?>
     margin-bottom: 8px;
     color: #333;
     font-size: 14px;
+}
+
+.bo-location-input-group {
+    position: relative;
+    display: flex;
+}
+
+.bo-location-input-group .bo-input {
+    padding: 12px 50px 12px 16px;
+    border: 2px solid #e1e5e9;
+    border-radius: 8px;
+    font-size: 16px;
+    transition: border-color 0.3s;
+    flex: 1;
+}
+
+.bo-location-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    padding: 8px;
+    cursor: pointer;
+    color: #666;
+    border-radius: 4px;
+    transition: all 0.3s;
+}
+
+.bo-location-btn:hover {
+    background: #f0f0f0;
+    color: #2c5aa0;
+}
+
+.bo-location-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.bo-welcome-message {
+    text-align: center;
+    padding: 40px 20px;
+    background: #f8f9fa;
+    border-radius: 12px;
+    margin: 20px 0;
+}
+
+.bo-welcome-message h3 {
+    color: #2c5aa0;
+    margin-bottom: 16px;
+    font-size: 24px;
+}
+
+.bo-welcome-message p {
+    color: #666;
+    margin-bottom: 12px;
+    font-size: 16px;
+    line-height: 1.5;
 }
 
 .bo-input,
