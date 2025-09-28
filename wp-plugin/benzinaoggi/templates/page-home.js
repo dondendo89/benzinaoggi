@@ -226,19 +226,13 @@
         const comune = item.dataset.comune || '';
         
         if (impiantoId) {
-          // Cerca la pagina esistente con il formato {BANDIERA} {COMUNE}-{IMPIANTO_ID}
+          // Crea lo slug nel formato {BANDIERA}-{COMUNE}-{IMPIANTO_ID}
           const pageSlug = `${bandiera}-${comune}-${impiantoId}`.toLowerCase()
             .replace(/\s+/g, '-')
             .replace(/[^a-z0-9-]/g, '');
           
-          // Prova prima con il formato completo, poi con solo impiantoId
-          const possibleUrls = [
-            `/${pageSlug}/`,
-            `/distributore-${impiantoId}/`
-          ];
-          
-          // Per ora usa il formato dinamico, ma in futuro si può implementare la ricerca delle pagine esistenti
-          window.location.href = `/distributore-${impiantoId}/`;
+          // Usa il nuovo formato di URL
+          window.location.href = `/${pageSlug}/`;
         }
       });
     });

@@ -33,11 +33,30 @@ class BenzinaOggi_Template_Loader {
             exit;
         }
         
-        // Template per dettaglio distributore
+        // Template per dettaglio distributore - formato distributore-{ID}
         if (is_page() && preg_match('/^distributore-(\d+)$/', get_query_var('pagename'), $matches)) {
             $impianto_id = $matches[1];
             
             // Cerca prima se esiste una pagina specifica per questo distributore
+            $existing_page = get_page_by_path(get_query_var('pagename'));
+            
+            if ($existing_page) {
+                // Usa la pagina esistente con il template personalizzato
+                $this->load_template('single-distributor.php', array('impianto_id' => $impianto_id));
+                exit;
+            } else {
+                // Fallback: usa il template dinamico
+                $this->load_template('single-distributor.php', array('impianto_id' => $impianto_id));
+                exit;
+            }
+        }
+        
+        // Template per dettaglio distributore - formato {bandiera}-{comune}-{impiantoId}
+        if (is_page() && preg_match('/^([a-z0-9-]+)-(\d+)$/', get_query_var('pagename'), $matches)) {
+            $slug_part = $matches[1];
+            $impianto_id = $matches[2];
+            
+            // Cerca se esiste una pagina con questo slug
             $existing_page = get_page_by_path(get_query_var('pagename'));
             
             if ($existing_page) {
@@ -96,7 +115,11 @@ class BenzinaOggi_Template_Loader {
         }
         
         // OneSignal per le pagine che lo richiedono
-        if (is_page() && (strpos(get_query_var('pagename'), 'distributore-') === 0)) {
+        $pagename = get_query_var('pagename');
+        if (is_page() && (
+            strpos($pagename, 'distributore-') === 0 || 
+            preg_match('/^([a-z0-9-]+)-(\d+)$/', $pagename)
+        )) {
             wp_enqueue_script('onesignal-sdk', 'https://cdn.onesignal.com/sdks/OneSignalSDK.js', array(), '1.0.0', true);
         }
         
@@ -119,7 +142,8 @@ class BenzinaOggi_Template_Loader {
             is_page('home-benzinaoggi') ||
             is_page('benzinaoggi-risultati') ||
             is_page('risultati-benzinaoggi') ||
-            (is_page() && strpos($pagename, 'distributore-') === 0)
+            (is_page() && strpos($pagename, 'distributore-') === 0) ||
+            (is_page() && preg_match('/^([a-z0-9-]+)-(\d+)$/', $pagename))
         );
     }
 }
