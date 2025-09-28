@@ -16,11 +16,21 @@ export async function GET(req: NextRequest) {
     const radiusKm = radiusKmParam ? parseFloat(radiusKmParam) : undefined;
     const limit = Math.min(parseInt(searchParams.get("limit") || "200", 10), 2000);
 
+    // Build where clause for database query
+    const whereClause: any = {};
+    
+    // Only add city filter if city is specified
+    if (city) {
+      whereClause.comune = { contains: city, mode: 'insensitive' };
+    }
+    
+    // Only add brand filter if brand is specified  
+    if (brand) {
+      whereClause.bandiera = { contains: brand, mode: 'insensitive' };
+    }
+
     const distributors = await prisma.distributor.findMany({
-      where: {
-        comune: city ? { contains: city, mode: 'insensitive' } : undefined,
-        bandiera: brand ? { contains: brand, mode: 'insensitive' } : undefined,
-      },
+      where: whereClause,
       take: limit,
     });
 
