@@ -52,6 +52,18 @@
 
 /* Ensure the section after the plugin block does not overlap */
 .benzinaoggi-wrap + *{clear:both;margin-top:16px;position:relative}
+/* Defensive spacing for common theme blocks right after plugin */
+.benzinaoggi-wrap + section,
+.benzinaoggi-wrap + div,
+.benzinaoggi-wrap + .wp-block-group,
+.benzinaoggi-wrap + .wp-block-cover{
+  margin-top:64px !important;
+}
+/* Keep white canvas under plugin area so colored bands don’t bleed through */
+.site-main .benzinaoggi-wrap,
+.entry-content .benzinaoggi-wrap{
+  background:#fff;
+}
 
 
 /* Range slider nicer on mobile */
