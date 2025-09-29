@@ -880,12 +880,9 @@ class BenzinaOggiPlugin {
     public function enqueue_assets() {
         if (!is_singular()) return;
         
-        // Rileva pagina distributore da slug tipo "qualcosa-12345" o "distributore-12345"
-        $pagename = get_query_var('pagename');
-        $is_distributor_page = is_page() && (
-            (is_string($pagename) && strpos($pagename, 'distributore-') === 0) ||
-            (is_string($pagename) && preg_match('/^([a-z0-9-]+)-(\d+)$/', $pagename))
-        );
+        // Verifica se la pagina contiene lo shortcode del distributore
+        global $post;
+        $has_distributor_shortcode = ($post && has_shortcode($post->post_content, 'carburante_distributor'));
         
         // OneSignal SDK v16 (se configurato) - necessario sia per home che per dettaglio
         $opts = $this->get_options();
@@ -905,9 +902,9 @@ class BenzinaOggiPlugin {
 
         // Stili comuni
         wp_enqueue_style('benzinaoggi-style', plugins_url('public/style.css', __FILE__), [], '1.0.0');
-
-        if ($is_distributor_page) {
-            // SOLO dettaglio distributore: carica lo script specifico del plugin
+        
+        // Se la pagina ha lo shortcode del distributore, carica solo lo script dedicato
+        if ($has_distributor_shortcode) {
             wp_register_script('benzinaoggi-distributor', plugins_url('public/distributor.js', __FILE__), [], '2.0.0', true);
             wp_localize_script('benzinaoggi-distributor', 'BenzinaOggi', [
                 'apiBase' => rtrim($opts['api_base'], '/'),
@@ -916,7 +913,7 @@ class BenzinaOggiPlugin {
                 'useOwnOneSignal' => true
             ]);
             wp_enqueue_script('benzinaoggi-distributor');
-            return; // Evita di caricare le risorse della home
+            return; // Non caricare app.js per evitare conflitti
         }
         
         // Always use our own OneSignal integration (do not rely on official plugin)
@@ -931,7 +928,7 @@ class BenzinaOggiPlugin {
         wp_enqueue_style('leaflet-geocoder', 'https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css', [], null);
         wp_enqueue_script('leaflet-geocoder', 'https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js', ['leaflet'], null, true);
         
-        // (già caricato sopra se presente)
+        // (OneSignal già caricato sopra se presente)
         // App
         wp_register_script('benzinaoggi-app', plugins_url('public/app.js', __FILE__), ['leaflet'], '1.0.0', true);
         $opts = $this->get_options();
@@ -942,7 +939,7 @@ class BenzinaOggiPlugin {
             'useOwnOneSignal' => true,
         ]);
         wp_enqueue_script('benzinaoggi-app');
-        // lo script distributor è caricato nel ramo $is_distributor_page
+        // lo script distributor è caricato solo quando è presente lo shortcode
     }
 
     public function shortcode_map($atts = []) {
