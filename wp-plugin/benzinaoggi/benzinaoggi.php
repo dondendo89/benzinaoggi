@@ -21,6 +21,8 @@ class BenzinaOggiPlugin {
         add_action('admin_enqueue_scripts', [$this, 'admin_enqueue_scripts']);
         add_shortcode('carburanti_map', [$this, 'shortcode_map']);
         add_shortcode('carburante_distributor', [$this, 'shortcode_distributor']);
+        // Global styles
+        add_action('wp_enqueue_scripts', [$this, 'enqueue_global_styles'], 5);
         add_action('wp_enqueue_scripts', [$this, 'enqueue_assets']);
         add_action('rest_api_init', [$this, 'register_rest']);
         // Inject Google Analytics (gtag) in <head>
@@ -210,6 +212,12 @@ class BenzinaOggiPlugin {
         }
     }
 
+    public function enqueue_global_styles() {
+        if (is_admin()) return;
+        // Carica lo stile del plugin ovunque per lo header con logo (tema)
+        wp_enqueue_style('benzinaoggi-style', plugins_url('public/style.css', __FILE__), [], '2.0.0');
+    }
+
     public function inject_onesignal_v16() {
         if (is_admin()) return;
         $opts = $this->get_options();
@@ -367,7 +375,7 @@ class BenzinaOggiPlugin {
                         </button>
                     </form>
                 </div>
-
+                
                 <h3>Pagine esistenti:</h3>
                 <?php
                 $home_page = get_page_by_path('benzinaoggi-home');
@@ -981,21 +989,8 @@ class BenzinaOggiPlugin {
         global $post;
         $has_distributor_shortcode = ($post && has_shortcode($post->post_content, 'carburante_distributor'));
         
-        // OneSignal SDK v16 (se configurato) - necessario sia per home che per dettaglio
+        // OneSignal SDK è già iniettato globalmente in wp_head da inject_onesignal_v16()
         $opts = $this->get_options();
-        if (!empty($opts['onesignal_app_id'])) {
-            $handle = 'onesignal-v16';
-            wp_dequeue_script('onesignal-sdk');
-            wp_dequeue_script('OneSignalSDK');
-            wp_dequeue_script('onesignal-public-sdk');
-            wp_deregister_script('onesignal-sdk');
-            wp_deregister_script('OneSignalSDK');
-            wp_deregister_script('onesignal-public-sdk');
-            wp_enqueue_script($handle, 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js', [], null, false);
-            $appId = esc_js($opts['onesignal_app_id']);
-            $init = "(function(){ window.OneSignalDeferred = window.OneSignalDeferred || []; window.OneSignalDeferred.push(function(OneSignal){ try { OneSignal.init({ appId: '".$appId."', serviceWorkerPath: '/OneSignalSDKWorker.js', serviceWorkerUpdaterPath: '/OneSignalSDKUpdaterWorker.js', serviceWorkerScope: '/', allowLocalhostAsSecureOrigin: true }); } catch(e) { } }); })();";
-            wp_add_inline_script($handle, $init, 'before');
-        }
 
         // Stili comuni
         wp_enqueue_style('benzinaoggi-style', plugins_url('public/style.css', __FILE__), [], '1.0.0');

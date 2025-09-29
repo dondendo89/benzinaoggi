@@ -17,14 +17,19 @@
     var wrap = qs('#bo_distributor_detail'); if(!wrap) return;
     if(!data || !data.ok){ wrap.textContent = 'Errore nel caricamento.'; return; }
     var d = data.distributor || {};
-    var header = createEl('div', 'bo-h');
-    header.innerHTML = '<h2>'+(d.bandiera||'Distributore')+' – '+(d.comune||'')+'</h2>'+
-      '<a class="bo-back" href="/benzinaoggi-risultati/" onclick="if(document.referrer){event.preventDefault(); window.history.back();}">← Torna ai risultati</a>'+
-      '<div class="bo-grid">'
+    var header = createEl('div', 'bo-hero');
+    header.innerHTML = '<div class="bo-container">'
+      +'<h1 class="bo-title" style="margin:0 0 6px 0">'+(d.bandiera||'Distributore')+' – '+(d.comune||'')+'</h1>'
+      +'<p class="bo-subtitle" style="margin:0 0 14px 0">Informazioni e prezzi aggiornati</p>'
+      +'<a class="bo-back" href="/benzinaoggi-risultati/" onclick="if(document.referrer){event.preventDefault(); window.history.back();}">← Torna ai risultati</a>'
+      +'</div>'+
+      '<div class="bo-container" style="padding-bottom: 0">'
+      +'<div class="bo-grid">'
       +'<div><div class="bo-label">Indirizzo</div><div class="bo-value">'+(d.indirizzo||'')+'</div></div>'
       +'<div><div class="bo-label">Provincia</div><div class="bo-value">'+(d.provincia||'')+'</div></div>'
       +'<div><div class="bo-label">Gestore</div><div class="bo-value">'+(d.gestore||'')+'</div></div>'
       +'<div><div class="bo-label">Impianto ID</div><div class="bo-value">'+(d.impiantoId||'')+'</div></div>'
+      +'</div>'
       +'</div>';
 
     var actions = createEl('div','bo-actions');
@@ -36,7 +41,7 @@
     var pricesCard = createEl('div','bo-card');
     var dayTxt = data.day ? new Date(data.day).toLocaleDateString() : '';
     var subtitle = dayTxt ? ('<div style="margin-top:-6px; color:#666; font-size:0.9em;">Aggiornato al ' + dayTxt + '</div>') : '';
-    pricesCard.innerHTML = '<h3>Prezzi</h3>' + subtitle + '<p style="font-size: 0.9em; color: #666; margin-bottom: 1em;">💡 <strong>Notifiche:</strong> Abilita le notifiche del browser per ricevere avvisi quando i prezzi scendono. Clicca su "quando scende" per ogni carburante.</p>';
+    pricesCard.innerHTML = '<h3 class="bo-section-title">⛽ Prezzi Carburanti</h3>' + subtitle + '<p class="bo-hint">💡 <strong>Notifiche:</strong> Abilita le notifiche per ricevere avvisi quando i prezzi scendono. Clicca su "quando scende" per ogni carburante.</p>';
     var table = createEl('table','bo-table');
     table.innerHTML = '<thead><tr><th>Carburante</th><th>Prezzo</th><th>Servizio</th><th>Variazione</th><th>Notifica</th></tr></thead><tbody></tbody>';
     var tbody = table.querySelector('tbody');
@@ -64,6 +69,24 @@
     wrap.appendChild(actions);
     wrap.appendChild(pricesCard);
     pricesCard.appendChild(table);
+
+    // After render, try to fetch existing subscriptions per fuel to verify API connectivity
+    try {
+      var apiBaseCheck = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
+      if (apiBaseCheck && d && d.impiantoId) {
+        var fuelsSet = {};
+        (data.prices||[]).forEach(function(p){ if(p && p.fuelType){ fuelsSet[p.fuelType] = true; } });
+        Object.keys(fuelsSet).forEach(function(ft){
+          var listUrl = apiBaseCheck + '/api/subscriptions?impiantoId=' + encodeURIComponent(String(d.impiantoId)) + '&fuelType=' + encodeURIComponent(String(ft));
+          console.log('GET', listUrl);
+          fetch(listUrl, { credentials: 'omit' }).then(function(r){ return r.json().catch(function(){ return {}; }); }).then(function(res){
+            console.log('Subscriptions list response for', ft, res);
+          }).catch(function(err){ console.warn('Subscriptions list failed for', ft, err); });
+        });
+      } else if (!apiBaseCheck) {
+        console.warn('BenzinaOggi.apiBase non configurato: GET /api/subscriptions non verrà chiamato');
+      }
+    } catch(_l0){}
 
     // Unified permission banner (shown until permission is granted)
     function showPermissionBanner(){
@@ -502,9 +525,11 @@
                     var apiBaseEarly = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
                     if (!apiBaseEarly) { console.warn('BenzinaOggi.apiBase non configurato: POST /api/subscriptions potrebbe fallire'); }
                     var subUrlEarly = (apiBaseEarly || '') + '/api/subscriptions';
+                    var payloadEarly = { action: 'add', externalId: externalId, impiantoId: d.impiantoId, fuelType: fuel };
+                    console.log('POST', subUrlEarly, payloadEarly);
                     fetch(subUrlEarly, {
                       method: 'POST', headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ action: 'add', externalId: externalId, impiantoId: d.impiantoId, fuelType: fuel })
+                      body: JSON.stringify(payloadEarly)
                     }).then(function(r){ return r.json().catch(function(){ return {}; }); }).then(function(res){
                       if (res && res.ok) {
                         try {

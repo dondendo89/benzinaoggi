@@ -165,6 +165,7 @@ class BenzinaOggi_Template_Loader {
             wp_enqueue_script('benzinaoggi-distributor', plugin_dir_url(__FILE__) . 'public/distributor.js', array(), '2.0.0', true);
             wp_localize_script('benzinaoggi-distributor', 'BenzinaOggi', array(
                 'apiBase' => get_option('benzinaoggi_api_base', 'https://benzinaoggi.vercel.app'),
+                'onesignalAppId' => get_option('benzinaoggi_onesignal_app_id', ''),
             ));
         }
         

@@ -106,6 +106,55 @@ footer .powered-by{
   display: none !important;
 }
 
+/* Global: hide default page titles/breadcrumbs above our blue header */
+.entry-header,
+.entry-title,
+.wp-block-post-title,
+.breadcrumbs,
+.rank-math-breadcrumb,
+.yoast-breadcrumb,
+nav[aria-label*="breadcrumb"],
+.site-content > .page-header,
+.page .page-header {
+  display: none !important;
+}
+
+/* Ensure spacing between global header and content */
+body .bo-header + * {
+  margin-top: 12px;
+}
+
+/* Home-like hero block reused on detail */
+.bo-hero{
+  background: linear-gradient(135deg,#2c5aa0 0%,#1e3a5f 100%);
+  color:#fff;
+  padding:24px 0 12px 0;
+}
+.bo-container{ max-width:1200px; margin:0 auto; padding:0 16px; }
+.bo-section-title{ margin:0 0 8px 0; font-size:20px; color:#2c5aa0; }
+.bo-hint{ font-size:0.9em; color:#666; margin-bottom:1em; }
+
+/* Cards and grid align to home */
+.bo-grid{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.bo-card{ background:#fff; border:1px solid #e1e5e9; border-radius:12px; padding:20px; box-shadow:0 4px 6px rgba(0,0,0,0.05); }
+.bo-label{ color:#6b7280; font-weight:500; font-size:14px; }
+.bo-value{ color:#111827; font-weight:600; }
+.bo-table{ width:100%; border-collapse:collapse; }
+.bo-table th, .bo-table td{ padding:10px 8px; border-bottom:1px solid #f0f0f0; text-align:left; }
+.bo-badge{ display:inline-block; background:#eef2ff; color:#1e3a8a; padding:2px 8px; border-radius:12px; font-weight:600; font-size:12px; }
+.bo-actions{ margin:12px 0; }
+.bo-back{ display:inline-flex; align-items:center; gap:8px; background:#ffffff; color:#1e3a5f; border:1px solid rgba(255,255,255,0.6); padding:8px 12px; border-radius:8px; font-weight:600; }
+.bo-back:hover{ background:rgba(255,255,255,0.9); }
+
+/* Mobile optimizations */
+@media (max-width: 768px){
+  .bo-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .bo-table th:nth-child(3), .bo-table td:nth-child(3){ display:none; }
+  .bo-table th:nth-child(4), .bo-table td:nth-child(4){ white-space:nowrap; }
+  .bo-section-title{ font-size:18px; }
+  .bo-hero{ padding:16px 0 8px 0; }
+}
+
 /* Better spacing for distributor header container */
 .page-template-page-distributor-php .site-main .bo-container{
   margin-top: 8px;

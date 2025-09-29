@@ -203,16 +203,11 @@ $logo_url = $plugin->get_logo_url();
 
 <body <?php body_class(); ?>>
     <div class="bo-container">
-        <!-- Header -->
-        <div class="bo-header">
-            <img src="<?php echo esc_url($logo_url); ?>" alt="BenzinaOggi" class="bo-logo">
-            <h1 class="bo-title"><?php the_title(); ?></h1>
-            <p class="bo-subtitle">Informazioni e prezzi aggiornati</p>
-            <a href="<?php echo esc_url( home_url('/benzinaoggi-risultati/') ); ?>" class="bo-back" onclick="if(document.referrer){event.preventDefault(); window.history.back();}">
-                <span>←</span>
-                <span>Torna ai risultati</span>
-            </a>
-        </div>
+        <!-- Header globale già reso via wp_body_open -->
+        <a href="<?php echo esc_url( home_url('/benzinaoggi-risultati/') ); ?>" class="bo-back" onclick="if(document.referrer){event.preventDefault(); window.history.back();}" style="display:inline-flex;margin:8px 0 16px 0;">
+            <span>←</span>
+            <span style="margin-left:8px">Torna ai risultati</span>
+        </a>
         
         <!-- Contenuto principale -->
         <div id="bo-distributor-content" class="bo-loading">
