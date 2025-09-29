@@ -18,6 +18,12 @@ if (preg_match('/\[carburante_distributor\s+impianto_id="?(\d+)"?\]/', (string)$
     $impianto_id = $m[1];
 } elseif (!empty($_GET['impiantoId'])) {
     $impianto_id = sanitize_text_field($_GET['impiantoId']);
+} else {
+    // Fallback: estrai ID da slug tipo q8-rometta-43793 -> 43793
+    $slug = get_post_field('post_name', get_the_ID());
+    if (is_string($slug) && preg_match('/-(\d+)$/', $slug, $mm)) {
+        $impianto_id = $mm[1];
+    }
 }
 
 get_header(); ?>

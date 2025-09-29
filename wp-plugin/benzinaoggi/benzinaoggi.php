@@ -880,15 +880,43 @@ class BenzinaOggiPlugin {
     public function enqueue_assets() {
         if (!is_singular()) return;
         
-        // Non caricare app.js se siamo su una pagina distributore (usa iframe per mappa)
+        // Rileva pagina distributore da slug tipo "qualcosa-12345" o "distributore-12345"
         $pagename = get_query_var('pagename');
         $is_distributor_page = is_page() && (
-            strpos($pagename, 'distributore-') === 0 || 
-            preg_match('/^([a-z0-9-]+)-(\d+)$/', $pagename)
+            (is_string($pagename) && strpos($pagename, 'distributore-') === 0) ||
+            (is_string($pagename) && preg_match('/^([a-z0-9-]+)-(\d+)$/', $pagename))
         );
         
+        // OneSignal SDK v16 (se configurato) - necessario sia per home che per dettaglio
+        $opts = $this->get_options();
+        if (!empty($opts['onesignal_app_id'])) {
+            $handle = 'onesignal-v16';
+            wp_dequeue_script('onesignal-sdk');
+            wp_dequeue_script('OneSignalSDK');
+            wp_dequeue_script('onesignal-public-sdk');
+            wp_deregister_script('onesignal-sdk');
+            wp_deregister_script('OneSignalSDK');
+            wp_deregister_script('onesignal-public-sdk');
+            wp_enqueue_script($handle, 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js', [], null, false);
+            $appId = esc_js($opts['onesignal_app_id']);
+            $init = "(function(){ window.OneSignalDeferred = window.OneSignalDeferred || []; window.OneSignalDeferred.push(function(OneSignal){ try { OneSignal.init({ appId: '".$appId."', serviceWorkerPath: '/OneSignalSDKWorker.js', serviceWorkerUpdaterPath: '/OneSignalSDKUpdaterWorker.js', serviceWorkerScope: '/', allowLocalhostAsSecureOrigin: true }); } catch(e) { } }); })();";
+            wp_add_inline_script($handle, $init, 'before');
+        }
+
+        // Stili comuni
+        wp_enqueue_style('benzinaoggi-style', plugins_url('public/style.css', __FILE__), [], '1.0.0');
+
         if ($is_distributor_page) {
-            return; // Non caricare script per pagine distributore
+            // SOLO dettaglio distributore: carica lo script specifico del plugin
+            wp_register_script('benzinaoggi-distributor', plugins_url('public/distributor.js', __FILE__), [], '2.0.0', true);
+            wp_localize_script('benzinaoggi-distributor', 'BenzinaOggi', [
+                'apiBase' => rtrim($opts['api_base'], '/'),
+                'onesignalAppId' => $opts['onesignal_app_id'],
+                'onesignalOfficial' => false,
+                'useOwnOneSignal' => true
+            ]);
+            wp_enqueue_script('benzinaoggi-distributor');
+            return; // Evita di caricare le risorse della home
         }
         
         // Always use our own OneSignal integration (do not rely on official plugin)
@@ -903,24 +931,7 @@ class BenzinaOggiPlugin {
         wp_enqueue_style('leaflet-geocoder', 'https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css', [], null);
         wp_enqueue_script('leaflet-geocoder', 'https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js', ['leaflet'], null, true);
         
-        // OneSignal SDK v16 (clean minimal integration)
-        $opts = $this->get_options();
-        if (!empty($opts['onesignal_app_id'])) {
-            $handle = 'onesignal-v16';
-            // Best-effort: avoid conflicts with official plugin
-            wp_dequeue_script('onesignal-sdk');
-            wp_dequeue_script('OneSignalSDK');
-            wp_dequeue_script('onesignal-public-sdk');
-            wp_deregister_script('onesignal-sdk');
-            wp_deregister_script('OneSignalSDK');
-            wp_deregister_script('onesignal-public-sdk');
-            // enqueue v16 page SDK in header
-            wp_enqueue_script($handle, 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js', [], null, false);
-            // inline init BEFORE the SDK loads using OneSignalDeferred (minimal)
-            $appId = esc_js($opts['onesignal_app_id']);
-            $init = "(function(){ window.OneSignalDeferred = window.OneSignalDeferred || []; window.OneSignalDeferred.push(function(OneSignal){ try { OneSignal.init({ appId: '".$appId."', serviceWorkerPath: '/OneSignalSDKWorker.js', serviceWorkerUpdaterPath: '/OneSignalSDKUpdaterWorker.js', serviceWorkerScope: '/', allowLocalhostAsSecureOrigin: true }); } catch(e) { } }); })();";
-            wp_add_inline_script($handle, $init, 'before');
-        }
+        // (già caricato sopra se presente)
         // App
         wp_register_script('benzinaoggi-app', plugins_url('public/app.js', __FILE__), ['leaflet'], '1.0.0', true);
         $opts = $this->get_options();
@@ -931,20 +942,7 @@ class BenzinaOggiPlugin {
             'useOwnOneSignal' => true,
         ]);
         wp_enqueue_script('benzinaoggi-app');
-        wp_enqueue_style('benzinaoggi-style', plugins_url('public/style.css', __FILE__), [], '1.0.0');
-
-        // Distributor detail loader if shortcode present
-        global $post;
-        if ($post && has_shortcode($post->post_content, 'carburante_distributor')) {
-            wp_register_script('benzinaoggi-distributor', plugins_url('public/distributor.js', __FILE__), [], '2.0.0', true);
-            wp_localize_script('benzinaoggi-distributor', 'BenzinaOggi', [
-                'apiBase' => rtrim($opts['api_base'], '/'),
-                'onesignalAppId' => $opts['onesignal_app_id'],
-                'onesignalOfficial' => false,
-                'useOwnOneSignal' => true
-            ]);
-            wp_enqueue_script('benzinaoggi-distributor');
-        }
+        // lo script distributor è caricato nel ramo $is_distributor_page
     }
 
     public function shortcode_map($atts = []) {
