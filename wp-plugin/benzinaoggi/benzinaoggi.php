@@ -702,14 +702,20 @@ class BenzinaOggiPlugin {
         $headers = [];
         if (!empty($opts['api_secret'])) { $headers['Authorization'] = 'Bearer '.$opts['api_secret']; }
 
-        // Stato di sincronizzazione per esecuzioni a tranche
+        // Stato di sincronizzazione per esecuzioni a tranche (con versioning della logica)
         $state = get_option('benzinaoggi_sync_state', []);
-        $startIndex = intval($state['next_index'] ?? 0);
-        $accCreated = intval($state['created'] ?? 0);
-        $accSkipped = intval($state['skipped'] ?? 0);
-        $accErrors  = intval($state['errors'] ?? 0);
+        $logicVersion = 'noTitleCheck_v1';
+        $stateVersion = isset($state['logic_v']) ? $state['logic_v'] : null;
+        $resetForNewLogic = $stateVersion !== $logicVersion;
+        $startIndex = $resetForNewLogic ? 0 : intval($state['next_index'] ?? 0);
+        $accCreated = $resetForNewLogic ? 0 : intval($state['created'] ?? 0);
+        $accSkipped = $resetForNewLogic ? 0 : intval($state['skipped'] ?? 0);
+        $accErrors  = $resetForNewLogic ? 0 : intval($state['errors'] ?? 0);
         $batchSize  = 5000; // numero massimo da processare per run
 
+        if ($resetForNewLogic) {
+            $this->log_progress('Sync pagine — reset stato per nuova logica (solo controllo slug). Ricomincio da 0.');
+        }
         $this->log_progress('Sync pagine — startIndex='.$startIndex.' batchSize='.$batchSize.' (scarico elenco)…');
         $res2 = wp_remote_get($base.'/api/distributors-all', ['timeout' => 600, 'headers' => $headers]);
         if (is_wp_error($res2)) { $this->log_progress('Errore API distributors-all: '.$res2->get_error_message()); return; }
@@ -727,9 +733,9 @@ class BenzinaOggiPlugin {
             $title = trim(preg_replace('/\s+/', ' ', $rawTitle));
             if ($title === '' || empty($d['impiantoId'])) { $skipped++; continue; }
             $slug = sanitize_title($title.'-'.$d['impiantoId']);
-            $existingByTitle = get_page_by_title($title, OBJECT, 'page');
+            // Verifica solo per slug: il titolo può essere uguale per più impianti nella stessa città
             $existingBySlug  = get_page_by_path($slug, OBJECT, 'page');
-            if ($existingByTitle || $existingBySlug) { $skipped++; } else {
+            if ($existingBySlug) { $skipped++; } else {
                 $post_id = wp_insert_post([
                     'post_title' => $title,
                     'post_name'  => $slug,
@@ -757,7 +763,8 @@ class BenzinaOggiPlugin {
                 'skipped' => $accSkipped,
                 'errors'  => $accErrors,
                 'total'   => $total,
-                'when'    => current_time('mysql')
+                'when'    => current_time('mysql'),
+                'logic_v' => $logicVersion
             ], false);
             $this->log_progress('Tranche completata: next_index='.$nextIndex.' / '.$total.' (create='.$accCreated.' skipped='.$accSkipped.' errors='.$accErrors.'). Reschedulo…');
             // pianifica subito la prossima tranche
