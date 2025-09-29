@@ -70,23 +70,7 @@
     wrap.appendChild(pricesCard);
     pricesCard.appendChild(table);
 
-    // After render, try to fetch existing subscriptions per fuel to verify API connectivity
-    try {
-      var apiBaseCheck = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
-      if (apiBaseCheck && d && d.impiantoId) {
-        var fuelsSet = {};
-        (data.prices||[]).forEach(function(p){ if(p && p.fuelType){ fuelsSet[p.fuelType] = true; } });
-        Object.keys(fuelsSet).forEach(function(ft){
-          var listUrl = apiBaseCheck + '/api/subscriptions?impiantoId=' + encodeURIComponent(String(d.impiantoId)) + '&fuelType=' + encodeURIComponent(String(ft));
-          console.log('GET', listUrl);
-          fetch(listUrl, { credentials: 'omit' }).then(function(r){ return r.json().catch(function(){ return {}; }); }).then(function(res){
-            console.log('Subscriptions list response for', ft, res);
-          }).catch(function(err){ console.warn('Subscriptions list failed for', ft, err); });
-        });
-      } else if (!apiBaseCheck) {
-        console.warn('BenzinaOggi.apiBase non configurato: GET /api/subscriptions non verrà chiamato');
-      }
-    } catch(_l0){}
+    // Note: call /api/subscriptions only when user selects a specific fuel (on checkbox toggle)
 
     // Unified permission banner (shown until permission is granted)
     function showPermissionBanner(){
@@ -270,13 +254,18 @@
     var useOneSignal = window.BenzinaOggi && BenzinaOggi.onesignalAppId && window.OneSignal;
 
     // Generate/load persistent externalId for this browser
-    function getExternalId(){
-      try {
-        var k='bo_ext_id'; var v=localStorage.getItem(k);
-        if (!v) { v = 'bo_'+Math.random().toString(36).slice(2)+'_'+Date.now().toString(36); localStorage.setItem(k, v); }
-        return v;
-      } catch(_) { return null; }
+  function getExternalId(){
+    var gen = function(){ return 'bo_'+Math.random().toString(36).slice(2)+'_'+Date.now().toString(36); };
+    try {
+      var k='bo_ext_id'; var v=localStorage.getItem(k);
+      if (!v) { v = gen(); try { localStorage.setItem(k, v); } catch(_s){} }
+      return v || gen();
+    } catch(_) {
+      // localStorage unavailable (private mode, etc.): return ephemeral id for this session
+      if (!window.__bo_ext_ephemeral) { window.__bo_ext_ephemeral = gen(); }
+      return window.__bo_ext_ephemeral;
     }
+  }
     var externalId = getExternalId();
     var useBrowserNotifications = !useOneSignal && 'Notification' in window;
     
@@ -448,7 +437,7 @@
       
       // (removed per-distributor checkbox handling)
 
-      // Pre-sync fuel checkboxes from existing tags (v16 or v15)
+    // Pre-sync fuel checkboxes from existing tags (v16 or v15)
       try {
         osExec(async function(){
           try {
@@ -467,7 +456,7 @@
                 } else {
                   // Fallback to localStorage persistence
                   try {
-                    var k1 = 'bo_notify_'+norm;
+                    var k1 = 'bo_notify_'+String(d && d.impiantoId)+'_'+norm;
                     var v1 = localStorage.getItem(k1) === '1';
                     if (v1) {
                       cbSync.checked = true;
@@ -482,12 +471,39 @@
         });
       } catch (_e) {}
 
-      qsa('input[type=checkbox][data-fuel]', wrap).forEach(function(cb){
+    // After render, verify server state for each fuel (to persist across refresh)
+    try {
+      var apiBaseInit = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
+      if (apiBaseInit && d && d.impiantoId && externalId) {
+        qsa('input[type=checkbox][data-fuel]', wrap).forEach(function(cb){
+          var fuel = cb.getAttribute('data-fuel') || '';
+          var norm = fuel.toLowerCase().replace(/\s+/g, '_');
+          var listUrl = apiBaseInit + '/api/subscriptions?impiantoId=' + encodeURIComponent(String(d.impiantoId)) + '&fuelType=' + encodeURIComponent(String(fuel));
+          fetch(listUrl, { credentials: 'omit' }).then(function(r){ return r.json().catch(function(){ return {}; }); }).then(function(res){
+            var st = cb.parentNode.querySelector('.notif-status');
+            var isSub = !!(res && Array.isArray(res.externalIds) && res.externalIds.indexOf(externalId) !== -1);
+            if (isSub) {
+              cb.checked = true;
+              try { localStorage.setItem('bo_notify_'+String(d.impiantoId)+'_'+norm, '1'); } catch(_ls){}
+              if (st) { st.textContent = '✓ Attivato per ' + fuel; st.style.display='inline'; st.style.color = '#28a745'; }
+            } else {
+              cb.checked = !!(localStorage.getItem('bo_notify_'+String(d.impiantoId)+'_'+norm) === '1');
+              if (!cb.checked && st) st.style.display='none';
+            }
+          }).catch(function(){ /* ignore */ });
+        });
+      }
+    } catch(_pref){}
+
+    qsa('input[type=checkbox][data-fuel]', wrap).forEach(function(cb){
         cb.addEventListener('change', function(){
           var fuel = this.getAttribute('data-fuel');
           var tagKey = 'price_drop_'+fuel;
           var statusEl = this.parentNode.querySelector('.notif-status');
           var labelEl = this.parentNode.querySelector('.notif-label');
+        try { if (!externalId) { externalId = getExternalId(); } } catch(_eid){}
+        var apiBaseNow = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
+        console.log('Checkbox toggle:', { fuel: fuel, checked: this.checked, impiantoId: (d&&d.impiantoId), apiBase: apiBaseNow, externalId: externalId });
           
           console.log('Checkbox changed for fuel:', fuel, 'Element:', this);
           
@@ -525,16 +541,18 @@
                     var apiBaseEarly = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
                     if (!apiBaseEarly) { console.warn('BenzinaOggi.apiBase non configurato: POST /api/subscriptions potrebbe fallire'); }
                     var subUrlEarly = (apiBaseEarly || '') + '/api/subscriptions';
-                    var payloadEarly = { action: 'add', externalId: externalId, impiantoId: d.impiantoId, fuelType: fuel };
-                    console.log('POST', subUrlEarly, payloadEarly);
+                    var payloadEarly = { externalId: externalId, impiantoId: d.impiantoId, fuelType: fuel };
+                    console.log('POST /api/subscriptions (subscribe)', subUrlEarly, payloadEarly);
                     fetch(subUrlEarly, {
                       method: 'POST', headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(payloadEarly)
                     }).then(function(r){ return r.json().catch(function(){ return {}; }); }).then(function(res){
+                      console.log('POST /api/subscriptions subscribe response:', res);
                       if (res && res.ok) {
                         try {
                           if (statusEl) { statusEl.textContent = '✓ Attivato per ' + fuel; statusEl.style.display = 'inline'; statusEl.style.color = '#28a745'; }
                         } catch(_sx){}
+                        try { localStorage.setItem('bo_notify_'+String(d.impiantoId)+'_'+normKeyInit, '1'); } catch(_lsx){}
                       }
                     }).catch(function(err){ console.warn('Persist subscription (early) failed', err); });
                   }
@@ -636,10 +654,13 @@
                   if (externalId) {
                     var apiBaseR = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
                     var subUrlR = (apiBaseR || '') + '/api/subscriptions';
+                    var payloadR = { action: 'remove', externalId: externalId, impiantoId: (d && d.impiantoId) ? String(d.impiantoId) : undefined, fuelType: fuel };
+                    console.log('POST /api/subscriptions REMOVE', subUrlR, payloadR);
                     fetch(subUrlR, {
                       method: 'POST', headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ action: 'remove', externalId: externalId, impiantoId: (d && d.impiantoId) ? String(d.impiantoId) : undefined, fuelType: fuel })
+                      body: JSON.stringify(payloadR)
                     }).then(function(r){ return r.json().catch(function(){ return {}; }); }).then(function(res){
+                      console.log('POST /api/subscriptions REMOVE response:', res);
                       if (res && res.ok) {
                         console.log('Backend subscription removed for', d.impiantoId, fuel);
                       }
@@ -661,7 +682,7 @@
                 // Remove local persistence
                 try {
                   var normKeyR = fuel.toLowerCase().replace(/\s+/g, '_');
-                  localStorage.removeItem('bo_notify_'+normKeyR);
+                  localStorage.removeItem('bo_notify_'+String(d && d.impiantoId)+'_'+normKeyR);
                 } catch(_rm){}
               } catch (err) {
                 console.error('OneSignal deleteTag error:', err);
