@@ -26,6 +26,20 @@ async function handleUpdate(req: NextRequest) {
 		return json({ ok: false, error: 'Missing externalId or subscriptionId' }, { status: 400 });
 	}
 
+	// 1) Ensure the user exists and is aliased by external_id (idempotent upsert)
+	const ensureUserUrl = `https://api.onesignal.com/apps/${encodeURIComponent(appId)}/users/by/external_id/${encodeURIComponent(externalId)}`;
+	const ensureUserRes = await fetch(ensureUserUrl, {
+		method: 'PUT',
+		headers: {
+			'Authorization': `Basic ${restKey}`,
+			'Content-Type': 'application/json',
+			'Accept': 'application/json'
+		},
+		// Empty object is sufficient to upsert the user keyed by external_id
+		body: JSON.stringify({})
+	});
+
+	// 2) Update the specific subscription for that user
 	const url = `https://api.onesignal.com/apps/${encodeURIComponent(appId)}/users/by/external_id/${encodeURIComponent(externalId)}/subscriptions/${encodeURIComponent(subscriptionId)}`;
 
 	const method = req.method === 'PATCH' ? 'PATCH' : 'PUT';
@@ -40,8 +54,10 @@ async function handleUpdate(req: NextRequest) {
 	});
 
 	let data: any = {};
+	let ensured: any = {};
+	try { ensured = await ensureUserRes.json(); } catch { ensured = { statusText: ensureUserRes.statusText }; }
 	try { data = await res.json(); } catch { data = { statusText: res.statusText }; }
-	return json({ ok: res.ok, status: res.status, data });
+	return json({ ok: res.ok, status: res.status, ensured: { ok: ensureUserRes.ok, status: ensureUserRes.status, data: ensured }, data });
 }
 
 export async function PUT(req: NextRequest) {

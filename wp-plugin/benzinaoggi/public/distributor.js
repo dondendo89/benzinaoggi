@@ -481,13 +481,22 @@
           var listUrl = apiBaseInit + '/api/subscriptions?impiantoId=' + encodeURIComponent(String(d.impiantoId)) + '&fuelType=' + encodeURIComponent(String(fuel));
           fetch(listUrl, { credentials: 'omit' }).then(function(r){ return r.json().catch(function(){ return {}; }); }).then(function(res){
             var st = cb.parentNode.querySelector('.notif-status');
-            var isSub = !!(res && Array.isArray(res.externalIds) && res.externalIds.indexOf(externalId) !== -1);
+            var isSub = false;
+            try {
+              if (res && Array.isArray(res.externalIds) && res.externalIds.indexOf(externalId) !== -1) isSub = true;
+              if (!isSub && (res && (res.subscribed === true || res.isSubscribed === true || res.exists === true))) isSub = true;
+              if (!isSub && res && res.ids && Array.isArray(res.ids) && res.ids.indexOf(externalId) !== -1) isSub = true;
+            } catch(_chk){}
             if (isSub) {
               cb.checked = true;
               try { localStorage.setItem('bo_notify_'+String(d.impiantoId)+'_'+norm, '1'); } catch(_ls){}
               if (st) { st.textContent = '✓ Attivato per ' + fuel; st.style.display='inline'; st.style.color = '#28a745'; }
             } else {
-              cb.checked = !!(localStorage.getItem('bo_notify_'+String(d.impiantoId)+'_'+norm) === '1');
+              // Fallbacks: impianto-scoped key, then generic key
+              var lsScoped = false, lsGeneric = false;
+              try { lsScoped = (localStorage.getItem('bo_notify_'+String(d.impiantoId)+'_'+norm) === '1'); } catch(_e1){}
+              try { lsGeneric = (localStorage.getItem('bo_notify_'+norm) === '1'); } catch(_e2){}
+              cb.checked = !!(lsScoped || lsGeneric);
               if (!cb.checked && st) st.style.display='none';
             }
           }).catch(function(){ /* ignore */ });
@@ -553,6 +562,22 @@
                           if (statusEl) { statusEl.textContent = '✓ Attivato per ' + fuel; statusEl.style.display = 'inline'; statusEl.style.color = '#28a745'; }
                         } catch(_sx){}
                         try { localStorage.setItem('bo_notify_'+String(d.impiantoId)+'_'+normKeyInit, '1'); } catch(_lsx){}
+                        // If OneSignal is available, ensure login and tag after backend save
+                        try {
+                          if (window.OneSignal && OneSignal.User) {
+                            osExec(async function(){
+                              try {
+                                if (OneSignal.login && externalId) { try { await OneSignal.login(externalId); } catch(_l){} }
+                                var tg = { };
+                                var fuelTag2 = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
+                                tg[fuelTag2] = '1';
+                                tg['price_drop_notifications'] = '1';
+                                tg['fuel_type'] = fuel.trim();
+                                try { await osSetTags(tg); } catch(_t){}
+                              } catch(_eos){}
+                            });
+                          }
+                        } catch(_on){ }
                       }
                     }).catch(function(err){ console.warn('Persist subscription (early) failed', err); });
                   }
@@ -736,6 +761,9 @@
         cb.addEventListener('change', function(){
           var fuel = this.getAttribute('data-fuel');
           var statusEl = this.parentNode.querySelector('.notif-status');
+          var apiBase = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
+          var impId = (d && d.impiantoId) ? String(d.impiantoId) : undefined;
+          try { if (!externalId) { externalId = getExternalId(); } } catch(_e){}
           
           if(this.checked){ 
             if (Notification.permission === 'granted') {
@@ -745,14 +773,38 @@
                 statusEl.style.color = '#28a745';
               }
               // Store preference in localStorage
-              localStorage.setItem('notify_' + fuel, '1');
+              try { localStorage.setItem('notify_' + fuel, '1'); } catch(_ls){}
+              // Persist to backend like OneSignal path
+              try {
+                if (apiBase && externalId && impId) {
+                  var url = apiBase + '/api/subscriptions';
+                  var body = { externalId: externalId, impiantoId: impId, fuelType: fuel };
+                  console.log('POST /api/subscriptions (browser subscribe)', url, body);
+                  fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+                    .then(function(r){ return r.json().catch(function(){ return {}; }); })
+                    .then(function(res){ console.log('subscriptions subscribe response (browser):', res); })
+                    .catch(function(err){ console.warn('subscriptions subscribe failed (browser)', err); });
+                }
+              } catch(_p){}
             } else {
               this.checked = false;
               alert('Abilita prima le notifiche del browser');
             }
           } else { 
             if(statusEl) statusEl.style.display = 'none';
-            localStorage.removeItem('notify_' + fuel);
+            try { localStorage.removeItem('notify_' + fuel); } catch(_rm){}
+            // Inform backend removal
+            try {
+              if (apiBase && externalId && impId) {
+                var urlR = apiBase + '/api/subscriptions';
+                var bodyR = { action: 'remove', externalId: externalId, impiantoId: impId, fuelType: fuel };
+                console.log('POST /api/subscriptions (browser remove)', urlR, bodyR);
+                fetch(urlR, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyR) })
+                  .then(function(r){ return r.json().catch(function(){ return {}; }); })
+                  .then(function(res){ console.log('subscriptions remove response (browser):', res); })
+                  .catch(function(err){ console.warn('subscriptions remove failed (browser)', err); });
+              }
+            } catch(_pr){}
           }
         });
       });
