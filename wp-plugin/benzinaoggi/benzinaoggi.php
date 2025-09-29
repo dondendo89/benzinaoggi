@@ -276,8 +276,17 @@ class BenzinaOggiPlugin {
                 </form>
                 <?php
                 $last = get_option('benzinaoggi_last_sync');
-                if ($last) {
-                    echo '<p>Ultima sincronizzazione: ' . esc_html($last) . '</p>';
+                if ($last && is_array($last)) {
+                    echo '<p><strong>Ultima sincronizzazione:</strong> ' . esc_html($last['when']) . '</p>';
+                    echo '<p>Statistiche: ' . intval($last['total'] ?? 0) . ' totali, ' .
+                         intval($last['created'] ?? 0) . ' create, ' .
+                         intval($last['skipped'] ?? 0) . ' saltate, ' .
+                         intval($last['errors'] ?? 0) . ' errori</p>';
+                }
+                $ongoing = get_option('benzinaoggi_sync_state');
+                if ($ongoing && is_array($ongoing)) {
+                    echo '<p><em>Sincronizzazione in corso</em>: indice ' . intval($ongoing['next_index'] ?? 0) . ' di ' . intval($ongoing['total'] ?? 0) . '</p>';
+                    echo '<p>Parziali: ' . intval($ongoing['created'] ?? 0) . ' create, ' . intval($ongoing['skipped'] ?? 0) . ' saltate, ' . intval($ongoing['errors'] ?? 0) . ' errori</p>';
                 }
                 
                 $lastPriceUpdate = get_option('benzinaoggi_last_price_update');
@@ -688,44 +697,89 @@ class BenzinaOggiPlugin {
         $base = rtrim($opts['api_base'], '/');
         if (!$base) return;
         @ignore_user_abort(true);
-        @set_time_limit(900);
-        $this->log_progress('Inizio sync: scarico elenco distributori…');
+        @set_time_limit(3600);
+        @ini_set('memory_limit', '512M');
         $headers = [];
-        $optsCfg = $this->get_options();
-        if (!empty($optsCfg['api_secret'])) { $headers['Authorization'] = 'Bearer '.$optsCfg['api_secret']; }
-        $res2 = wp_remote_get($base.'/api/distributors-all', ['timeout' => 300, 'headers' => $headers]);
-        if (is_wp_error($res2)) return;
+        if (!empty($opts['api_secret'])) { $headers['Authorization'] = 'Bearer '.$opts['api_secret']; }
+
+        // Stato di sincronizzazione per esecuzioni a tranche
+        $state = get_option('benzinaoggi_sync_state', []);
+        $startIndex = intval($state['next_index'] ?? 0);
+        $accCreated = intval($state['created'] ?? 0);
+        $accSkipped = intval($state['skipped'] ?? 0);
+        $accErrors  = intval($state['errors'] ?? 0);
+        $batchSize  = 5000; // numero massimo da processare per run
+
+        $this->log_progress('Sync pagine — startIndex='.$startIndex.' batchSize='.$batchSize.' (scarico elenco)…');
+        $res2 = wp_remote_get($base.'/api/distributors-all', ['timeout' => 600, 'headers' => $headers]);
+        if (is_wp_error($res2)) { $this->log_progress('Errore API distributors-all: '.$res2->get_error_message()); return; }
         $data = json_decode(wp_remote_retrieve_body($res2), true);
+        if (empty($data['distributors']) || !is_array($data['distributors'])) { $this->log_progress('Nessun distributore ricevuto.'); return; }
+
+        $total = count($data['distributors']);
+        $end = min($startIndex + $batchSize, $total);
         $created = 0; $skipped = 0; $errors = 0;
-        if (!empty($data['distributors'])) {
-            $total = count($data['distributors']);
-            $this->log_progress('Totale da processare: '.$total);
-            foreach ($data['distributors'] as $i => $d) {
-                $rawTitle = trim(($d['bandiera'] ?: 'Distributore').' '.($d['comune'] ?: ''));
-                $title = trim(preg_replace('/\s+/', ' ', $rawTitle));
-                if ($title === '' || empty($d['impiantoId'])) { $skipped++; continue; }
-                $slug = sanitize_title($title.'-'.$d['impiantoId']);
-                $existingByTitle = get_page_by_title($title, OBJECT, 'page');
-                $existingBySlug  = get_page_by_path($slug, OBJECT, 'page');
-                if ($existingByTitle || $existingBySlug) { $skipped++; } else {
-                    $post_id = wp_insert_post([
-                        'post_title' => $title,
-                        'post_name'  => $slug,
-                        'post_type'  => 'page',
-                        'post_status'=> 'publish',
-                        'post_content' => '[carburante_distributor impianto_id="'.$d['impiantoId'].'"]',
-                        'page_template' => 'page-distributor.php'
-                    ], true);
-                    if (is_wp_error($post_id)) { $errors++; $this->log_progress('Errore creazione pagina impianto '.$d['impiantoId'].': '.$post_id->get_error_message()); }
-                    else { $created++; }
-                }
-                if ( ($i+1) % 500 === 0 ) {
-                    $this->log_progress('Avanzamento: '.($i+1).' / '.$total.' — create: '.$created.' — skipped: '.$skipped.' — errors: '.$errors);
-                }
+        $this->log_progress('Totale='.$total.' — Elaboro da '.$startIndex.' a '.($end-1));
+
+        for ($i = $startIndex; $i < $end; $i++) {
+            $d = $data['distributors'][$i];
+            $rawTitle = trim(($d['bandiera'] ?: 'Distributore').' '.($d['comune'] ?: ''));
+            $title = trim(preg_replace('/\s+/', ' ', $rawTitle));
+            if ($title === '' || empty($d['impiantoId'])) { $skipped++; continue; }
+            $slug = sanitize_title($title.'-'.$d['impiantoId']);
+            $existingByTitle = get_page_by_title($title, OBJECT, 'page');
+            $existingBySlug  = get_page_by_path($slug, OBJECT, 'page');
+            if ($existingByTitle || $existingBySlug) { $skipped++; } else {
+                $post_id = wp_insert_post([
+                    'post_title' => $title,
+                    'post_name'  => $slug,
+                    'post_type'  => 'page',
+                    'post_status'=> 'publish',
+                    'post_content' => '[carburante_distributor impianto_id="'.$d['impiantoId'].'"]',
+                    'page_template' => 'page-distributor.php'
+                ], true);
+                if (is_wp_error($post_id)) { $errors++; $this->log_progress('Errore crea pagina impianto '.$d['impiantoId'].': '.$post_id->get_error_message()); }
+                else { $created++; }
+            }
+            if ( (($i+1) % 500) === 0 ) {
+                $this->log_progress('Avanzamento parziale: '.($i+1).' / '.$total.' — create: '.($accCreated+$created).' — skipped: '.($accSkipped+$skipped).' — errors: '.($accErrors+$errors));
             }
         }
-        update_option('benzinaoggi_last_sync', [ 'when' => current_time('mysql'), 'created' => $created, 'skipped' => $skipped, 'errors' => $errors ]);
-        $this->log_progress('Completato. Create: '.$created.' — skipped: '.$skipped.' — errors: '.$errors);
+
+        // Aggiorna accumulati e next index
+        $accCreated += $created; $accSkipped += $skipped; $accErrors += $errors;
+        $nextIndex = $end;
+
+        if ($nextIndex < $total) {
+            update_option('benzinaoggi_sync_state', [
+                'next_index' => $nextIndex,
+                'created' => $accCreated,
+                'skipped' => $accSkipped,
+                'errors'  => $accErrors,
+                'total'   => $total,
+                'when'    => current_time('mysql')
+            ], false);
+            $this->log_progress('Tranche completata: next_index='.$nextIndex.' / '.$total.' (create='.$accCreated.' skipped='.$accSkipped.' errors='.$accErrors.'). Reschedulo…');
+            // pianifica subito la prossima tranche
+            if (!wp_next_scheduled('benzinaoggi_sync_pages')) {
+                wp_schedule_single_event(time() + 5, 'benzinaoggi_sync_pages');
+            } else {
+                // comunque prova a spawnare
+                if (function_exists('spawn_cron')) { @spawn_cron(time() + 1); }
+            }
+            return; // esci, continuerà alla prossima run
+        }
+
+        // Finito
+        delete_option('benzinaoggi_sync_state');
+        update_option('benzinaoggi_last_sync', [
+            'when' => current_time('mysql'),
+            'created' => $accCreated,
+            'skipped' => $accSkipped,
+            'errors' => $accErrors,
+            'total' => $total
+        ], false);
+        $this->log_progress('Sync completato. Create: '.$accCreated.' — skipped: '.$accSkipped.' — errors: '.$accErrors.' — total: '.$total);
     }
 
     private function next_run_5am() {
