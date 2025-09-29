@@ -218,9 +218,10 @@ class BenzinaOggiPlugin {
         // Avoid duplicate if already printed
         static $printed = false; if ($printed) return; $printed = true;
         echo "\n<!-- OneSignal v16 (page SDK) -->\n";
+        echo "<link rel=\"preconnect\" href=\"https://cdn.onesignal.com\" crossorigin>\n";
         echo "<script src=\"https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js\" async></script>\n";
         $app = esc_js($appId);
-        $init = "(function(){ window.OneSignalDeferred = window.OneSignalDeferred || []; window.OneSignalDeferred.push(function(OneSignal){ try { OneSignal.init({ appId: '$app', serviceWorkerPath: '/OneSignalSDKWorker.js', serviceWorkerUpdaterPath: '/OneSignalSDKUpdaterWorker.js', serviceWorkerScope: '/', allowLocalhostAsSecureOrigin: true }); } catch(e){} }); })();";
+        $init = "(function(){\n  window.OneSignalDeferred = window.OneSignalDeferred || [];\n  window.OneSignalDeferred.push(function(OneSignal){ try { OneSignal.init({ appId: '$app', serviceWorkerPath: '/OneSignalSDKWorker.js', serviceWorkerUpdaterWorkerPath: '/OneSignalSDKUpdaterWorker.js', serviceWorkerUpdaterPath: '/OneSignalSDKUpdaterWorker.js', serviceWorkerScope: '/', allowLocalhostAsSecureOrigin: true }); } catch(e){} });\n  // Fallback loader if CDN blocked\n  function ensureOS(){ try { if (window.OneSignal && (window.OneSignal.Notifications||window.OneSignal.push)) return; var s=document.createElement('script'); s.src='https://onesignal.com/sdks/web/v16/OneSignalSDK.page.js'; s.async=true; document.head.appendChild(s); } catch(_){} }\n  setTimeout(function(){ if(!(window.OneSignal&& (window.OneSignal.Notifications||window.OneSignal.push))){ ensureOS(); } }, 1500);\n})();";
         echo '<script>'.$init.'</script>' . "\n";
     }
 
