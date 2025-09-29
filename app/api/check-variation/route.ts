@@ -53,10 +53,10 @@ export async function GET(req: NextRequest) {
           const normalizedFuelType = normalizeFuelName(miseFuel.name);
           if (fuelType && normalizedFuelType !== fuelType) continue;
           
-          let dbPrice = dbPrices.find(p => 
+          let dbPrice: { fuelType: string; price: number; isSelfService: boolean } | null = dbPrices.find(p => 
             p.fuelType === normalizedFuelType && 
             p.isSelfService === miseFuel.isSelf
-          );
+          ) || null;
 
           // Fallback: use the most recent DB price if today's price is missing
           if (!dbPrice) {
@@ -70,9 +70,10 @@ export async function GET(req: NextRequest) {
               orderBy: { day: 'desc' }
             });
             if (!latest) continue;
-            dbPrice = { fuelType: normalizedFuelType, price: latest.price, isSelfService: miseFuel.isSelf } as any;
+            dbPrice = { fuelType: normalizedFuelType, price: latest.price, isSelfService: miseFuel.isSelf };
           }
 
+          if (!dbPrice) continue;
           const difference = miseFuel.price - dbPrice.price;
           const hasChanged = Math.abs(difference) > 0.001;
 
