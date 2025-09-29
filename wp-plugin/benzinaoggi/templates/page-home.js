@@ -331,6 +331,15 @@
     if (elements.markers.length > 0) {
       elements.map.fitBounds(bounds, { padding: [20, 20] });
     }
+
+    // Assicura spazio per footer: imposta padding-bottom dinamico in base alla lista
+    try {
+      const wrap = document.querySelector('.benzinaoggi-wrap');
+      const listHeight = elements.resultsList ? elements.resultsList.scrollHeight : 0;
+      if (wrap) {
+        wrap.style.paddingBottom = Math.min(Math.max(listHeight * 0.05, 16), 64) + 'px';
+      }
+    } catch(_) {}
   }
 
   // Carica dati iniziali
@@ -347,6 +356,11 @@
           <p>Oppure inserisci manualmente una città o indirizzo.</p>
         </div>
       `;
+      // Mantiene spazio sotto la lista iniziale per non sovrapporre il footer
+      try {
+        const wrap = document.querySelector('.benzinaoggi-wrap');
+        if (wrap) { wrap.style.paddingBottom = '48px'; }
+      } catch(_) {}
     }
   }
 
