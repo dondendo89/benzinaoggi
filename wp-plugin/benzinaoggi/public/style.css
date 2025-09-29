@@ -89,12 +89,16 @@ footer .powered-by{
 }
 
 /* Ensure distributor template shows full theme header/footer */
+.site-header{display:block !important;visibility:visible !important}
 .page-template-page-distributor-php .site-branding .site-title,
 .page-template-page-distributor-php .site-branding .site-description,
 .page-template-page-distributor-php footer .site-info,
 .page-template-page-distributor-php footer .powered-by{
   display: revert !important;
 }
+
+/* Hide footer credits globally while keeping footer visible */
+body footer .site-info, body footer .site-info *, body footer .powered-by{display:none !important}
 
 /* Mobile-first improvements */
 @media (max-width: 768px){
