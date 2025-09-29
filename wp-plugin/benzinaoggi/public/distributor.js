@@ -32,11 +32,7 @@
     }
 
     // Per-distributor notification opt-in
-    var distNotifWrap = createEl('div');
-    distNotifWrap.style.marginTop = '8px';
-    var distChkId = 'bo_notify_distributor_'+(d.impiantoId||'');
-    distNotifWrap.innerHTML = '<label><input type="checkbox" id="'+distChkId+'" /> Notifiche variazione prezzi per questo impianto</label>';
-    actions.appendChild(distNotifWrap);
+    // (removed per-distributor checkbox UI)
 
     var pricesCard = createEl('div','bo-card');
     var dayTxt = data.day ? new Date(data.day).toLocaleDateString() : '';
@@ -453,10 +449,7 @@
                 if (tagsInit && (tagsInit[tagNameInit] === '1' || tagsInit[tagNameInit] === 1)) {
                   distCb.checked = true;
                 } else {
-                  try {
-                    var loc = localStorage.getItem('bo_notify_distributor_'+String(d.impiantoId));
-                    if (loc === '1') { distCb.checked = true; }
-                  } catch(_ls){}
+                  // removed legacy per-distributor checkbox state
                 }
               } catch(_ignore){}
             });
@@ -488,8 +481,6 @@
                       }
                     } catch(_v){}
                     self.checked = true;
-                    try { localStorage.setItem('bo_notify_distributor_'+String(d.impiantoId), '1'); } catch(_s){}
-                  });
                 });
               }).then(function(){
                 console.log('Distributor tag set ok:', tagName);
@@ -498,7 +489,6 @@
               });
             } else {
               osDeleteTag(tagName).catch(function(err){ console.warn('Distributor tag delete error', err); });
-              try { localStorage.removeItem('bo_notify_distributor_'+String(d.impiantoId)); } catch(_r){}
             }
           });
         }
