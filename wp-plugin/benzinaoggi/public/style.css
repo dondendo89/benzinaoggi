@@ -86,3 +86,16 @@ footer .powered-by{
   color: inherit !important;
 }
 
+/* Mobile-first improvements */
+@media (max-width: 768px){
+  .bo-header{border-radius:10px;padding:16px;margin-bottom:16px}
+  .bo-title{font-size:22px}
+  .bo-subtitle{font-size:14px}
+  .bo-card{padding:10px}
+  .bo-grid{grid-template-columns:1fr}
+  .bo-actions{gap:6px}
+}
+
+/* Ensure consistent page spacing like home */
+.site-main .bo-container{padding-left:16px;padding-right:16px}
+
