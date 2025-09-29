@@ -86,6 +86,14 @@ footer .powered-by{
   color: inherit !important;
 }
 
+/* Ensure distributor template shows full theme header/footer */
+.page-template-page-distributor-php .site-branding .site-title,
+.page-template-page-distributor-php .site-branding .site-description,
+.page-template-page-distributor-php footer .site-info,
+.page-template-page-distributor-php footer .powered-by{
+  display: revert !important;
+}
+
 /* Mobile-first improvements */
 @media (max-width: 768px){
   .bo-header{border-radius:10px;padding:16px;margin-bottom:16px}
