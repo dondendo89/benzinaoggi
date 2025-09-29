@@ -63,3 +63,9 @@ footer .powered-by {
   display: none !important;
 }
 
+/* Align footer colors with theme (avoid unintended overrides on plugin pages) */
+.site-footer{
+  background-color: var(--wp--preset--color--background, initial) !important;
+  color: var(--wp--preset--color--foreground, inherit) !important;
+}
+
