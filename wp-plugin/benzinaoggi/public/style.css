@@ -55,3 +55,11 @@ input[type="range"]#bo_radius_km{appearance:none;-webkit-appearance:none;height:
 input[type="range"]#bo_radius_km::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#0ea5e9;border:none}
 input[type="range"]#bo_radius_km::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#0ea5e9;border:none}
 
+/* Hide site title/description in header and credit line in footer on plugin pages */
+.site-branding .site-title,
+.site-branding .site-description,
+footer .site-info,
+footer .powered-by {
+  display: none !important;
+}
+
