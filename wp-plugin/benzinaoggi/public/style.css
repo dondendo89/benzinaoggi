@@ -55,23 +55,17 @@ input[type="range"]#bo_radius_km{appearance:none;-webkit-appearance:none;height:
 input[type="range"]#bo_radius_km::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#0ea5e9;border:none}
 input[type="range"]#bo_radius_km::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#0ea5e9;border:none}
 
-/* Hide theme header/title and footer credits on plugin pages/templates */
-.page-template-page-distributor-php .site-branding,
-.page-template-page-distributor-php .site-title,
-.page-template-page-distributor-php .site-description,
-.page-template-page-distributor-php .entry-header,
-.page-template-page-distributor-php .entry-title,
-.page-template-page-distributor-php .site-footer .site-info,
-/* Shortcode-driven pages: hide when plugin wrapper is present */
-body .benzinaoggi-wrap ~ .entry-header,
-body .benzinaoggi-wrap ~ .site-footer .site-info,
-body .bo-distributor ~ .entry-header,
-body .bo-distributor ~ .site-footer .site-info {
+/* Hide theme header/title and footer credits site-wide */
+.site-branding .site-title,
+.site-branding .site-description,
+footer .site-info,
+footer .powered-by{
   display: none !important;
 }
 
 /* Align footer colors with theme (avoid unintended overrides on plugin pages) */
-.page-template-page-distributor-php .site-footer{
+/* Make footer inherit theme colors site-wide */
+.site-footer{
   background-color: inherit !important;
   color: inherit !important;
 }
