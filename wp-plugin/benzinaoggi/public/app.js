@@ -46,8 +46,9 @@
     }
 
     function buildPageUrl(d){
-      var title = ((d.bandiera||'Distributore') + ' ' + (d.comune||'')).trim();
-      var slug = slugify(title + '-' + (d.impiantoId||''));
+      var bandiera = (d.bandiera || 'Distributore');
+      var comune = (d.comune || '');
+      var slug = slugify(bandiera + '-' + comune + '-' + (d.impiantoId||''));
       return (window.location.origin || '') + '/' + slug + '/';
     }
 

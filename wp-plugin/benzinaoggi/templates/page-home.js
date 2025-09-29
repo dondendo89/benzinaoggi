@@ -313,7 +313,13 @@
         `);
         
         marker.on('click', () => {
-          window.location.href = `/distributore-${distributor.impiantoId}/`;
+          const bandiera = (distributor.bandiera || 'Distributore');
+          const comune = (distributor.comune || '').toString();
+          const pageSlug = `${bandiera}-${comune}-${distributor.impiantoId}`
+            .toLowerCase()
+            .replace(/\s+/g, '-')
+            .replace(/[^a-z0-9-]/g, '');
+          window.location.href = `/${pageSlug}/`;
         });
         
         elements.markers.push(marker);

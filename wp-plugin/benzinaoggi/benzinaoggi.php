@@ -1134,7 +1134,18 @@ class BenzinaOggiPlugin {
                 'externalIdsCount' => count($externalIds)
             ),
             // Deep link to distributor page using impiantoId
-            'url' => home_url('/distributore-' . (isset($variation['impiantoId']) ? $variation['impiantoId'] : ''))
+            // Deep link to pretty slug bandiera-comune-id if available via variation; fallback to /distributore-ID
+            'url' => (function() use ($variation) {
+                $id = isset($variation['impiantoId']) ? $variation['impiantoId'] : '';
+                $band = isset($variation['distributorName']) ? $variation['distributorName'] : '';
+                $com = isset($variation['comune']) ? $variation['comune'] : '';
+                $base = home_url('/');
+                if ($band && $com && $id) {
+                    $slug = sanitize_title($band . '-' . $com . '-' . $id);
+                    return trailingslashit($base . $slug);
+                }
+                return home_url('/distributore-' . $id);
+            })()
         );
 
         $response = wp_remote_post('https://onesignal.com/api/v1/notifications', [
