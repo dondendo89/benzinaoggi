@@ -40,6 +40,26 @@ body {
     text-align: center;
 }
 
+/* Global BenzinaOggi header block */
+.bo-header {
+    text-align: center;
+    margin-bottom: 20px;
+    padding: 16px;
+    background: linear-gradient(135deg, #2c5aa0 0%, #1e3a5f 100%);
+    color: #fff;
+    border-radius: 12px;
+}
+.bo-title {
+    font-size: 28px;
+    margin: 0 0 8px 0;
+    font-weight: 600;
+}
+.bo-subtitle {
+    font-size: 16px;
+    opacity: 0.9;
+    margin: 0;
+}
+
 .site-title {
     font-size: 2.5rem;
     margin-bottom: 10px;
@@ -69,4 +89,8 @@ body {
     .site-title {
         font-size: 2rem;
     }
+
+    .bo-header{border-radius:10px;padding:14px;margin-bottom:14px}
+    .bo-title{font-size:22px}
+    .bo-subtitle{font-size:14px}
 }

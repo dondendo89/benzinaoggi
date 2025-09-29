@@ -36,8 +36,7 @@
 
     var pricesCard = createEl('div','bo-card');
     var dayTxt = data.day ? new Date(data.day).toLocaleDateString() : '';
-    var prevTxt = data.previousDay ? new Date(data.previousDay).toLocaleDateString() : null;
-    var subtitle = dayTxt ? ('<div style="margin-top:-6px; color:#666; font-size:0.9em;">Aggiornato al ' + dayTxt + (prevTxt ? ' (confronto con ' + prevTxt + ')' : '') + '</div>') : '';
+    var subtitle = dayTxt ? ('<div style="margin-top:-6px; color:#666; font-size:0.9em;">Aggiornato al ' + dayTxt + '</div>') : '';
     pricesCard.innerHTML = '<h3>Prezzi</h3>' + subtitle + '<p style="font-size: 0.9em; color: #666; margin-bottom: 1em;">💡 <strong>Notifiche:</strong> Abilita le notifiche del browser per ricevere avvisi quando i prezzi scendono. Clicca su "quando scende" per ogni carburante.</p>';
     var table = createEl('table','bo-table');
     table.innerHTML = '<thead><tr><th>Carburante</th><th>Prezzo</th><th>Servizio</th><th>Variazione</th><th>Notifica</th></tr></thead><tbody></tbody>';
