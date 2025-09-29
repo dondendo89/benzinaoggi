@@ -6,7 +6,7 @@
     apiBase: window.BenzinaOggi?.apiBase || '',
     mapCenter: [41.8719, 12.5674],
     defaultZoom: 6,
-    maxResults: 10
+    pageSize: 10
   };
 
   // Elementi DOM
@@ -30,7 +30,10 @@
       location: '',
       fuel: '',
       radius: 10
-    }
+    },
+    page: 1,
+    total: 0,
+    pageSize: config.pageSize
   };
 
   // Inizializza applicazione
@@ -178,6 +181,7 @@
     state.currentFilters.fuel = elements.fuelSelect.value;
     state.currentFilters.radius = parseInt(elements.radiusSelect.value);
     
+    state.page = 1;
     searchDistributors();
   }
 
@@ -187,7 +191,8 @@
       showLoading(true);
       
       const params = new URLSearchParams({
-        limit: config.maxResults
+        limit: String(state.pageSize),
+        page: String(state.page)
       });
 
       // Priorità: se l'utente ha inserito un nome di città, usa la ricerca per città
@@ -215,18 +220,10 @@
       console.log('Risposta API:', data);
 
       if (data.ok) {
-        let distributors = data.distributors || [];
-        
-        // Ordina per distanza se disponibile, altrimenti per ID
-        distributors.sort((a, b) => {
-          if (a.distance && b.distance) {
-            return a.distance - b.distance;
-          }
-          return (a.impiantoId || 0) - (b.impiantoId || 0);
-        });
-        
-        // Limita a 10 risultati
-        state.searchResults = distributors.slice(0, config.maxResults);
+        state.searchResults = Array.isArray(data.distributors) ? data.distributors : [];
+        state.total = Number(data.total || state.searchResults.length || 0);
+        state.page = Number(data.page || state.page);
+        state.pageSize = Number(data.pageSize || state.pageSize);
         updateResults();
         updateMap();
       } else {
@@ -246,7 +243,8 @@
     
     const count = state.searchResults.length;
     if (elements.resultsCount) {
-      elements.resultsCount.textContent = `${count} risultati`;
+      const totalPages = Math.max(1, Math.ceil((state.total || count) / state.pageSize));
+      elements.resultsCount.textContent = `${count} risultati (pagina ${state.page}/${totalPages})`;
     }
     
     if (count === 0) {
@@ -259,7 +257,7 @@
       return;
     }
     
-    elements.resultsList.innerHTML = state.searchResults.map(distributor => {
+    const itemsHtml = state.searchResults.map(distributor => {
       const prices = (distributor.prices || []).map(price => 
         `<span class="bo-price">${price.fuelType}: €${price.price.toFixed(3)}</span>`
       ).join('');
@@ -282,6 +280,19 @@
       `;
     }).join('');
 
+    // Pagination controls
+    const totalPages = Math.max(1, Math.ceil((state.total || count) / state.pageSize));
+    const canPrev = state.page > 1;
+    const canNext = state.page < totalPages;
+    const pagerHtml = `
+      <div class="bo-pager" style="display:flex;gap:8px;align-items:center;justify-content:center;margin:16px 0;">
+        <button id="bo-prev" ${canPrev ? '' : 'disabled'} style="padding:6px 10px;">← Precedente</button>
+        <span style="font-size:12px;opacity:.8">Pagina ${state.page} di ${totalPages}</span>
+        <button id="bo-next" ${canNext ? '' : 'disabled'} style="padding:6px 10px;">Successiva →</button>
+      </div>`;
+
+    elements.resultsList.innerHTML = itemsHtml + pagerHtml;
+
     // Eventi click sui risultati
     elements.resultsList.querySelectorAll('.bo-result-item').forEach(item => {
       item.addEventListener('click', () => {
@@ -300,6 +311,11 @@
         }
       });
     });
+
+    const prevBtn = document.getElementById('bo-prev');
+    const nextBtn = document.getElementById('bo-next');
+    if (prevBtn) prevBtn.addEventListener('click', function(){ if (state.page > 1) { state.page -= 1; searchDistributors(); } });
+    if (nextBtn) nextBtn.addEventListener('click', function(){ const tp = Math.max(1, Math.ceil((state.total || state.searchResults.length)/state.pageSize)); if (state.page < tp) { state.page += 1; searchDistributors(); } });
   }
 
   // Aggiorna mappa

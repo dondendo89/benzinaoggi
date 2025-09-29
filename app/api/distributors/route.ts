@@ -14,7 +14,10 @@ export async function GET(req: NextRequest) {
     const userLon = lonParam ? parseFloat(lonParam) : undefined;
     const radiusKmParam = searchParams.get("radiusKm");
     const radiusKm = radiusKmParam ? parseFloat(radiusKmParam) : undefined;
-    const limit = Math.min(parseInt(searchParams.get("limit") || "200", 10), 2000);
+    const limitParam = parseInt(searchParams.get("limit") || "50", 10);
+    const limit = Math.min(Math.max(limitParam, 1), 200);
+    const page = Math.max(parseInt(searchParams.get("page") || "1", 10), 1);
+    const skip = (page - 1) * limit;
 
     // Build where clause for database query
     const whereClause: any = {};
@@ -29,9 +32,11 @@ export async function GET(req: NextRequest) {
       whereClause.bandiera = { contains: brand, mode: 'insensitive' };
     }
 
+    const total = await prisma.distributor.count({ where: whereClause });
     const distributors = await prisma.distributor.findMany({
       where: whereClause,
       take: limit,
+      skip,
     });
 
     // Fetch latest two distinct days to allow fallback when some distributors have no price today
@@ -104,7 +109,7 @@ export async function GET(req: NextRequest) {
       result = [...enriched].sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
     }
 
-    return NextResponse.json({ ok: true, day, count: result.length, distributors: result });
+    return NextResponse.json({ ok: true, day, count: result.length, total, page, pageSize: limit, distributors: result });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
   }
