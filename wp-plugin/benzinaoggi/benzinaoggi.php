@@ -25,6 +25,8 @@ class BenzinaOggiPlugin {
         add_action('rest_api_init', [$this, 'register_rest']);
         // Inject Google Analytics (gtag) in <head>
         add_action('wp_head', [$this, 'inject_gtag']);
+        // Ensure OneSignal v16 SDK is present site-wide (if configured)
+        add_action('wp_head', [$this, 'inject_onesignal_v16']);
         
         // Inizializza template loader
         new BenzinaOggi_Template_Loader();
@@ -206,6 +208,20 @@ class BenzinaOggiPlugin {
         if ($hook === 'toplevel_page_benzinaoggi') {
             wp_enqueue_media();
         }
+    }
+
+    public function inject_onesignal_v16() {
+        if (is_admin()) return;
+        $opts = $this->get_options();
+        $appId = trim($opts['onesignal_app_id'] ?? '');
+        if (!$appId) return;
+        // Avoid duplicate if already printed
+        static $printed = false; if ($printed) return; $printed = true;
+        echo "\n<!-- OneSignal v16 (page SDK) -->\n";
+        echo "<script src=\"https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js\" async></script>\n";
+        $app = esc_js($appId);
+        $init = "(function(){ window.OneSignalDeferred = window.OneSignalDeferred || []; window.OneSignalDeferred.push(function(OneSignal){ try { OneSignal.init({ appId: '$app', serviceWorkerPath: '/OneSignalSDKWorker.js', serviceWorkerUpdaterPath: '/OneSignalSDKUpdaterWorker.js', serviceWorkerScope: '/', allowLocalhostAsSecureOrigin: true }); } catch(e){} }); })();";
+        echo '<script>'.$init.'</script>' . "\n";
     }
 
     public function inject_gtag() {
