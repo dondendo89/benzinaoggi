@@ -1,4 +1,4 @@
-.benzinaoggi-wrap{border:1px solid #e2e8f0;padding:12px;border-radius:8px;position:relative;overflow:hidden;margin-bottom:24px}
+.benzinaoggi-wrap{border:1px solid #e2e8f0;padding:12px;border-radius:8px;position:relative;overflow:hidden;margin-bottom:24px;background:#fff}
 .benzinaoggi-wrap .filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;position:sticky;top:0;background:#fff;z-index:5;padding-top:8px}
 .benzinaoggi-wrap .filters input[type="text"],
 .benzinaoggi-wrap .filters select,
@@ -48,6 +48,7 @@
 
 /* Map sizing on desktop to avoid overlapping footer */
 #bo_map{height:58vh !important;min-height:380px;max-height:640px}
+.benzinaoggi-wrap::after{content:"";display:block;clear:both}
 
 
 /* Range slider nicer on mobile */
