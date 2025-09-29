@@ -19,6 +19,7 @@
     var d = data.distributor || {};
     var header = createEl('div', 'bo-h');
     header.innerHTML = '<h2>'+(d.bandiera||'Distributore')+' – '+(d.comune||'')+'</h2>'+
+      '<a class="bo-back" href="/benzinaoggi-risultati/" onclick="if(document.referrer){event.preventDefault(); window.history.back();}">← Torna ai risultati</a>'+
       '<div class="bo-grid">'
       +'<div><div class="bo-label">Indirizzo</div><div class="bo-value">'+(d.indirizzo||'')+'</div></div>'
       +'<div><div class="bo-label">Provincia</div><div class="bo-value">'+(d.provincia||'')+'</div></div>'
@@ -27,9 +28,7 @@
       +'</div>';
 
     var actions = createEl('div','bo-actions');
-    if(d.latitudine && d.longitudine){
-      var a = createEl('a'); a.href = mapsUrl(d.latitudine, d.longitudine); a.target='_blank'; a.rel='noopener'; a.textContent='Apri in Google Maps'; actions.appendChild(a);
-    }
+    // Rimuoviamo la mappa/azioni per rispecchiare la home: nessuna mappa nel dettaglio
 
     // Per-distributor notification opt-in
     // (removed per-distributor checkbox UI)

@@ -59,6 +59,20 @@ $logo_url = $plugin->get_logo_url();
             color: white;
             border-radius: 12px;
         }
+        .bo-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: #ffffff;
+            color: #1e3a5f;
+            border: 1px solid rgba(255,255,255,0.6);
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 12px;
+        }
+        .bo-back:hover { background: rgba(255,255,255,0.9); }
         
         .bo-logo {
             max-height: 60px;
@@ -194,6 +208,10 @@ $logo_url = $plugin->get_logo_url();
             <img src="<?php echo esc_url($logo_url); ?>" alt="BenzinaOggi" class="bo-logo">
             <h1 class="bo-title"><?php the_title(); ?></h1>
             <p class="bo-subtitle">Informazioni e prezzi aggiornati</p>
+            <a href="<?php echo esc_url( home_url('/benzinaoggi-risultati/') ); ?>" class="bo-back" onclick="if(document.referrer){event.preventDefault(); window.history.back();}">
+                <span>←</span>
+                <span>Torna ai risultati</span>
+            </a>
         </div>
         
         <!-- Contenuto principale -->
