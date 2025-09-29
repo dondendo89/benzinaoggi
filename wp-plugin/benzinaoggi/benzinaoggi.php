@@ -23,6 +23,8 @@ class BenzinaOggiPlugin {
         add_shortcode('carburante_distributor', [$this, 'shortcode_distributor']);
         add_action('wp_enqueue_scripts', [$this, 'enqueue_assets']);
         add_action('rest_api_init', [$this, 'register_rest']);
+        // Inject Google Analytics (gtag) in <head>
+        add_action('wp_head', [$this, 'inject_gtag']);
         
         // Inizializza template loader
         new BenzinaOggi_Template_Loader();
@@ -204,6 +206,18 @@ class BenzinaOggiPlugin {
         if ($hook === 'toplevel_page_benzinaoggi') {
             wp_enqueue_media();
         }
+    }
+
+    public function inject_gtag() {
+        // Google tag (gtag.js)
+        echo "\n<!-- Google tag (gtag.js) -->\n";
+        echo "<script async src=\"https://www.googletagmanager.com/gtag/js?id=G-2YRVTC8RPV\"></script>\n";
+        echo "<script>\n";
+        echo "  window.dataLayer = window.dataLayer || [];\n";
+        echo "  function gtag(){dataLayer.push(arguments);}\n";
+        echo "  gtag('js', new Date());\n\n";
+        echo "  gtag('config', 'G-2YRVTC8RPV');\n";
+        echo "</script>\n";
     }
 
     public function get_logo_url() {
