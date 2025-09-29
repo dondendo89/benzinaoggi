@@ -17,6 +17,19 @@
     var wrap = qs('#bo_distributor_detail'); if(!wrap) return;
     if(!data || !data.ok){ wrap.textContent = 'Errore nel caricamento.'; return; }
     var d = data.distributor || {};
+    // Ensure externalId is available before any server syncs
+    function getExternalId(){
+      var gen = function(){ return 'bo_'+Math.random().toString(36).slice(2)+'_'+Date.now().toString(36); };
+      try {
+        var k='bo_ext_id'; var v=localStorage.getItem(k);
+        if (!v) { v = gen(); try { localStorage.setItem(k, v); } catch(_s){} }
+        return v || gen();
+      } catch(_) {
+        if (!window.__bo_ext_ephemeral) { window.__bo_ext_ephemeral = gen(); }
+        return window.__bo_ext_ephemeral;
+      }
+    }
+    var externalId = getExternalId();
     var header = createEl('div', 'bo-hero');
     header.innerHTML = '<div class="bo-container">'
       +'<h1 class="bo-title" style="margin:0 0 6px 0">'+(d.bandiera||'Distributore')+' – '+(d.comune||'')+'</h1>'
@@ -329,20 +342,7 @@
       }
     } catch(_afe){}
 
-    // Generate/load persistent externalId for this browser
-  function getExternalId(){
-    var gen = function(){ return 'bo_'+Math.random().toString(36).slice(2)+'_'+Date.now().toString(36); };
-    try {
-      var k='bo_ext_id'; var v=localStorage.getItem(k);
-      if (!v) { v = gen(); try { localStorage.setItem(k, v); } catch(_s){} }
-      return v || gen();
-    } catch(_) {
-      // localStorage unavailable (private mode, etc.): return ephemeral id for this session
-      if (!window.__bo_ext_ephemeral) { window.__bo_ext_ephemeral = gen(); }
-      return window.__bo_ext_ephemeral;
-    }
-  }
-    var externalId = getExternalId();
+  // externalId already initialized above
     var useBrowserNotifications = !useOneSignal && 'Notification' in window;
     
     console.log('OneSignal check:', {
@@ -707,8 +707,15 @@
                   // Add dynamic tag for specific fuel type
                   var fuelTag = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
                   tags[fuelTag] = '1';
-                  // no per-distributor combo tag
-                  try {} catch(_c){}
+                  // Add per-distributor+fuel tag
+                  try {
+                    var impIdForTag = (d && d.impiantoId) ? String(d.impiantoId) : '';
+                    if (impIdForTag) {
+                      var fuelNormForTag = fuel.toLowerCase().replace(/\s+/g, '_');
+                      var impFuelTag = 'notify_imp_' + impIdForTag + '_' + fuelNormForTag;
+                      tags[impFuelTag] = '1';
+                    }
+                  } catch(_c){}
                   
                   // Backend subscription has already been attempted optimistically above
 
@@ -779,8 +786,16 @@
                   }
                 } catch(_cr){}
                 
-                // Delete OneSignal tags (both general fuel tag and specific distributor+fuel tag)
+                // Delete OneSignal tags (general fuel tag and specific distributor+fuel tag)
                 var deletePromises = [osDeleteTag(tagToDelete)];
+                try {
+                  var impIdDel = (d && d.impiantoId) ? String(d.impiantoId) : '';
+                  if (impIdDel) {
+                    var fuelNormDel = fuel.toLowerCase().replace(/\s+/g, '_');
+                    var delCombo = 'notify_imp_' + impIdDel + '_' + fuelNormDel;
+                    deletePromises.push(osDeleteTag(delCombo));
+                  }
+                } catch(_del){}
                 
                 Promise.all(deletePromises).then(function(){
                   console.log('All tags deleted successfully for fuel:', fuel, 'distributor:', d.impiantoId);
