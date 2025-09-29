@@ -633,7 +633,8 @@ class BenzinaOggiPlugin {
         try {
             // STEP 1: Aggiorna prezzi usando API MISE diretta (sempre)
             $this->log_progress('STEP 1: Aggiornamento prezzi con API MISE diretta...');
-            $response = wp_remote_get($api_base . '/api/cron/update-prices-daily?limit=2000&force=true', [
+            // Esegui aggiornamento MISE per TUTTI i distributori con paginazione
+            $response = wp_remote_get($api_base . '/api/cron/update-prices-daily?all=true&force=true', [
                 'timeout' => 300, // 5 minuti timeout
                 'headers' => [
                     'Authorization' => 'Bearer ' . ($this->get_options()['api_secret'] ?? ''),

@@ -9,6 +9,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const limit = parseInt(searchParams.get('limit') || '2000'); // Default 2000 distributori per 5 minuti
+    const processAll = (searchParams.get('all') || '').toLowerCase() === 'true';
     const force = searchParams.get('force') === 'true' || true; // Sempre forzare aggiornamento
     const dryRun = searchParams.get('dryRun') === 'true';
     
@@ -16,13 +17,30 @@ export async function GET(req: NextRequest) {
     console.log(`[CRON] Processing up to ${limit} distributors, force: ${force}, dryRun: ${dryRun}`);
     
     // Ottieni distributori da aggiornare
-    const distributors = await prisma.distributor.findMany({
-      select: { id: true, impiantoId: true, bandiera: true, comune: true },
-      take: limit,
-      orderBy: { id: 'asc' } // Processa in ordine per consistenza
-    });
-    
-    console.log(`[CRON] Found ${distributors.length} distributors to process`);
+    let distributors: Array<{ id: number; impiantoId: number; bandiera: string | null; comune: string | null }> = [];
+    if (!processAll) {
+      distributors = await prisma.distributor.findMany({
+        select: { id: true, impiantoId: true, bandiera: true, comune: true },
+        take: limit,
+        orderBy: { id: 'asc' }
+      });
+      console.log(`[CRON] Found ${distributors.length} distributors to process (limited mode)`);
+    } else {
+      // Pagina tutti i distributori in batch
+      console.log('[CRON] Processing ALL distributors with pagination');
+      const total = await prisma.distributor.count();
+      const pageSize = 1000;
+      for (let offset = 0; offset < total; offset += pageSize) {
+        const page = await prisma.distributor.findMany({
+          select: { id: true, impiantoId: true, bandiera: true, comune: true },
+          orderBy: { id: 'asc' },
+          skip: offset,
+          take: pageSize
+        });
+        distributors.push(...page);
+      }
+      console.log(`[CRON] Found ${distributors.length} distributors to process (all mode)`);
+    }
     
     const results = {
       totalProcessed: 0,
@@ -60,32 +78,15 @@ export async function GET(req: NextRequest) {
             };
           }
           
-          // Prezzi locali per oggi
-          const localPrices = await prisma.price.findMany({
-            where: {
-              distributorId: distributor.id,
-              day: today
-            }
-          });
-          
-          // Confronta prezzi
-          const comparisons = comparePrices(localPrices, miseData.fuels);
-          const changes = comparisons.filter(c => c.hasChanged);
-          
-          if (changes.length === 0 && !force && localPrices.length > 0) {
-            return {
-              impiantoId: distributor.impiantoId,
-              status: 'no_changes',
-              message: 'Prices match MISE data'
-            };
-          }
+          // Confronta contro l'ultimo prezzo DB (qualunque giorno)
+          let changesCount = 0;
           
           if (dryRun) {
             return {
               impiantoId: distributor.impiantoId,
               status: 'dry_run',
-              message: `Would update ${miseData.fuels.length} prices`,
-              changes: changes.length
+              message: `Would check ${miseData.fuels.length} prices against latest DB`,
+              changes: miseData.fuels.length
             };
           }
           
@@ -97,10 +98,19 @@ export async function GET(req: NextRequest) {
             const normalizedFuel = normalizeFuelName(fuel.name);
             
             try {
-              const existing = localPrices.find(p => 
-                p.fuelType === normalizedFuel && 
-                p.isSelfService === fuel.isSelf
-              );
+              // Trova ultimo prezzo noto per quel fuel/self (qualunque giorno)
+              const existingLatest = await prisma.price.findFirst({
+                where: {
+                  distributorId: distributor.id,
+                  fuelType: normalizedFuel,
+                  isSelfService: fuel.isSelf
+                },
+                orderBy: { day: 'desc' }
+              });
+              const hasChanged = !existingLatest || Math.abs(existingLatest.price - fuel.price) > 0.001;
+              if (!hasChanged && !force) {
+                continue; // nessun update necessario
+              }
               
               const result = await prisma.price.upsert({
                 where: {
@@ -125,13 +135,14 @@ export async function GET(req: NextRequest) {
                 }
               });
               
-              if (existing) {
-                if (Math.abs(existing.price - fuel.price) > 0.001) {
+              if (existingLatest) {
+                if (Math.abs(existingLatest.price - fuel.price) > 0.001) {
                   updatedCount++;
                 }
               } else {
                 createdCount++;
               }
+              changesCount++;
               
             } catch (error) {
               console.error(`[CRON] Error updating price for ${distributor.impiantoId} ${normalizedFuel}:`, error);
@@ -151,7 +162,7 @@ export async function GET(req: NextRequest) {
             message: `Updated ${updatedCount} prices, created ${createdCount} prices`,
             updated: updatedCount,
             created: createdCount,
-            changes: changes.length
+            changes: changesCount
           };
           
         } catch (error) {

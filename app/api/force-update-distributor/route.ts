@@ -32,120 +32,52 @@ export async function POST(req: NextRequest) {
       });
     }
     
-    // Prezzi locali per oggi
+    // Confronta rispetto all'ultimo DB (qualsiasi giorno) e upsert su oggi
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
-    const localPrices = await prisma.price.findMany({
-      where: {
-        distributorId: distributor.id,
-        day: today
-      }
-    });
-    
-    // Confronta prezzi
-    const comparisons = comparePrices(localPrices, miseData.fuels);
-    const changes = comparisons.filter(c => c.hasChanged);
-    
-    if (changes.length === 0 && !force) {
-      return NextResponse.json({
-        ok: true,
-        message: 'Nessuna differenza rilevata tra prezzi locali e MISE',
-        comparisons: comparisons,
-        miseData: {
-          name: miseData.name,
-          brand: miseData.brand,
-          fuels: miseData.fuels.map(f => ({
-            name: f.name,
-            price: f.price,
-            isSelf: f.isSelf
-          }))
-        }
-      });
-    }
-    
-    // Aggiorna prezzi nel database
-    const updatedPrices = [];
-    const createdPrices = [];
-    
+    let updatedCount = 0;
+    let createdCount = 0;
     for (const fuel of miseData.fuels) {
       const normalizedFuel = normalizeFuelName(fuel.name);
-      
-      try {
-        const result = await prisma.price.upsert({
-          where: {
-            Price_unique_day: {
-              distributorId: distributor.id,
-              fuelType: normalizedFuel,
-              day: today,
-              isSelfService: fuel.isSelf
-            }
-          },
-          update: {
-            price: fuel.price,
-            communicatedAt: new Date()
-          },
-          create: {
+      const existingLatest = await prisma.price.findFirst({
+        where: {
+          distributorId: distributor.id,
+          fuelType: normalizedFuel,
+          isSelfService: fuel.isSelf
+        },
+        orderBy: { day: 'desc' }
+      });
+      const hasChanged = !existingLatest || Math.abs(existingLatest.price - fuel.price) > 0.001;
+      if (!hasChanged && !force) continue;
+      await prisma.price.upsert({
+        where: {
+          Price_unique_day: {
             distributorId: distributor.id,
             fuelType: normalizedFuel,
-            price: fuel.price,
             day: today,
-            isSelfService: fuel.isSelf,
-            communicatedAt: new Date()
+            isSelfService: fuel.isSelf
           }
-        });
-        
-        // Verifica se è stato creato o aggiornato
-        const existing = localPrices.find(p => 
-          p.fuelType === normalizedFuel && 
-          p.isSelfService === fuel.isSelf
-        );
-        
-        if (existing) {
-          if (Math.abs(existing.price - fuel.price) > 0.001) {
-            updatedPrices.push({
-              fuelType: normalizedFuel,
-              isSelfService: fuel.isSelf,
-              oldPrice: existing.price,
-              newPrice: fuel.price,
-              difference: fuel.price - existing.price
-            });
-          }
-        } else {
-          createdPrices.push({
-            fuelType: normalizedFuel,
-            isSelfService: fuel.isSelf,
-            price: fuel.price
-          });
+        },
+        update: {
+          price: fuel.price,
+          communicatedAt: new Date()
+        },
+        create: {
+          distributorId: distributor.id,
+          fuelType: normalizedFuel,
+          price: fuel.price,
+          day: today,
+          isSelfService: fuel.isSelf,
+          communicatedAt: new Date()
         }
-        
-      } catch (error) {
-        console.error(`Error updating price for ${normalizedFuel}:`, error);
+      });
+      if (existingLatest) {
+        if (Math.abs(existingLatest.price - fuel.price) > 0.001) updatedCount++;
+      } else {
+        createdCount++;
       }
     }
-    
-    return NextResponse.json({
-      ok: true,
-      distributor: {
-        id: distributor.id,
-        impiantoId: distributor.impiantoId,
-        bandiera: distributor.bandiera
-      },
-      miseData: {
-        name: miseData.name,
-        brand: miseData.brand,
-        address: miseData.address
-      },
-      changes: changes,
-      updatedPrices,
-      createdPrices,
-      summary: {
-        totalMiseFuels: miseData.fuels.length,
-        updatedCount: updatedPrices.length,
-        createdCount: createdPrices.length,
-        changesDetected: changes.length
-      }
-    });
+    return NextResponse.json({ ok: true, updated: updatedCount, created: createdCount });
     
   } catch (e: any) {
     return NextResponse.json({ 
