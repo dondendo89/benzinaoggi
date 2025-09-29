@@ -99,6 +99,11 @@ footer .powered-by{
 
 /* Hide footer credits globally while keeping footer visible */
 body footer .site-info, body footer .site-info *, body footer .powered-by{display:none !important}
+/* Extra footer credits variants */
+footer .credits, .site-footer .credits, .footer-credits, .powered-by-wordpress, footer a[href*="wordpress.org"]{display:none !important}
+
+/* Hide breadcrumb bars injected by themes/SEO plugins */
+.breadcrumbs, .breadcrumb, nav[aria-label="Breadcrumbs"], .rank-math-breadcrumb, .yoast-breadcrumb{display:none !important}
 
 /* Mobile-first improvements */
 @media (max-width: 768px){
