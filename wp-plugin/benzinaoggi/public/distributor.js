@@ -72,6 +72,33 @@
 
     // Note: call /api/subscriptions only when user selects a specific fuel (on checkbox toggle)
 
+    // Always sync checkbox state from server regardless of OneSignal availability
+    (function syncFromServerAlways(){
+      try {
+        var apiBaseInitA = (window.BenzinaOggi && BenzinaOggi.apiBase) || '';
+        if (!apiBaseInitA || !(d && d.impiantoId) || !externalId) return;
+        qsa('input[type=checkbox][data-fuel]', wrap).forEach(function(cb){
+          var fuelA = cb.getAttribute('data-fuel') || '';
+          var normA = fuelA.toLowerCase().replace(/\s+/g, '_');
+          var listUrlA = apiBaseInitA + '/api/subscriptions?impiantoId=' + encodeURIComponent(String(d.impiantoId)) + '&fuelType=' + encodeURIComponent(String(fuelA)) + '&externalId=' + encodeURIComponent(String(externalId||''));
+          fetch(listUrlA, { credentials: 'omit' }).then(function(r){ return r.json().catch(function(){ return {}; }); }).then(function(res){
+            var stA = cb.parentNode.querySelector('.notif-status');
+            var isSubA = false;
+            try {
+              if (res && Array.isArray(res.externalIds) && res.externalIds.indexOf(externalId) !== -1) isSubA = true;
+              if (!isSubA && (res && (res.subscribed === true || res.isSubscribed === true || res.exists === true))) isSubA = true;
+              if (!isSubA && res && res.ids && Array.isArray(res.ids) && res.ids.indexOf(externalId) !== -1) isSubA = true;
+            } catch(_chkA){}
+            if (isSubA) {
+              cb.checked = true;
+              try { localStorage.setItem('bo_notify_'+String(d.impiantoId)+'_'+normA, '1'); } catch(_lsA){}
+              if (stA) { stA.textContent = '✓ Attivato per ' + fuelA; stA.style.display='inline'; stA.style.color = '#28a745'; }
+            }
+          }).catch(function(){ /* ignore */ });
+        });
+      } catch(_syncA){}
+    })();
+
     // Unified permission banner (shown until permission is granted)
     function showPermissionBanner(){
       try {
@@ -252,6 +279,55 @@
 
     // Check if OneSignal is available, otherwise use browser notifications
     var useOneSignal = window.BenzinaOggi && BenzinaOggi.onesignalAppId && window.OneSignal;
+    // Force-init v16 if SDK present but appId missing (temporary safety net)
+    try {
+      if (!useOneSignal && window.OneSignal && typeof OneSignal.init === 'function') {
+        var forcedAppId = (window.BenzinaOggi && BenzinaOggi.onesignalAppId) 
+          || (window.__BO_FORCE_APP_ID) 
+          || (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID) 
+          || 'fbcac040-1f81-466f-bf58-238a594af041';
+        // avoid double init
+        var alreadyV16 = !!(OneSignal && OneSignal.Notifications);
+        var alreadyInitialized = !!(OneSignal && OneSignal.initialized);
+        if (!alreadyV16 && !alreadyInitialized && forcedAppId) {
+          try {
+            OneSignal.init({ appId: forcedAppId });
+            // mark as usable for this session
+            useOneSignal = true;
+          } catch(_oi){}
+        }
+      }
+    } catch(_fi){}
+
+    // After v16 is ready, auto-login and upsert subscription to attach externalId server-side
+    try {
+      if (window.OneSignal) {
+        window.OneSignalDeferred = window.OneSignalDeferred || [];
+        window.OneSignalDeferred.push(async function(OS){
+          try {
+            if (!OS) return;
+            try { await OS.initialized; } catch(_ign){}
+            var extNow = externalId;
+            if (OS.login && extNow) {
+              try { await OS.login(extNow); } catch(_l){}
+            }
+            if (OS.Notifications && OS.Notifications.requestPermission) {
+              try { await OS.Notifications.requestPermission(); } catch(_p){}
+            }
+            var sidNow = null;
+            try { sidNow = await (OS.User && OS.User.PushSubscription && OS.User.PushSubscription.getId ? OS.User.PushSubscription.getId() : null); } catch(_sid){}
+            if (sidNow && (window.BenzinaOggi && BenzinaOggi.apiBase)) {
+              try {
+                var u = BenzinaOggi.apiBase + '/api/onesignal/update-subscription';
+                var body = { externalId: extNow, subscriptionId: sidNow, body: { enabled: true } };
+                fetch(u, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+                  .catch(function(){});
+              } catch(_f){}
+            }
+          } catch(_e){}
+        });
+      }
+    } catch(_afe){}
 
     // Generate/load persistent externalId for this browser
   function getExternalId(){
@@ -478,7 +554,7 @@
         qsa('input[type=checkbox][data-fuel]', wrap).forEach(function(cb){
           var fuel = cb.getAttribute('data-fuel') || '';
           var norm = fuel.toLowerCase().replace(/\s+/g, '_');
-          var listUrl = apiBaseInit + '/api/subscriptions?impiantoId=' + encodeURIComponent(String(d.impiantoId)) + '&fuelType=' + encodeURIComponent(String(fuel));
+          var listUrl = apiBaseInit + '/api/subscriptions?impiantoId=' + encodeURIComponent(String(d.impiantoId)) + '&fuelType=' + encodeURIComponent(String(fuel)) + '&externalId=' + encodeURIComponent(String(externalId||''));
           fetch(listUrl, { credentials: 'omit' }).then(function(r){ return r.json().catch(function(){ return {}; }); }).then(function(res){
             var st = cb.parentNode.querySelector('.notif-status');
             var isSub = false;
@@ -589,6 +665,13 @@
                 return;
               }
               
+              // Ensure OneSignal user is logged-in with externalId (saves external_id server-side)
+              try {
+                osExec(async function(){
+                  try { if (OneSignal && OneSignal.login && externalId) { await OneSignal.login(externalId); } } catch(_eL){}
+                });
+              } catch(_elog){}
+
               // From here on, proceed with OneSignal permission + tag flow
               
             } catch(errInit) { console.error('setTag init error', errInit); }
@@ -772,8 +855,13 @@
                 statusEl.style.display = 'inline';
                 statusEl.style.color = '#28a745';
               }
-              // Store preference in localStorage
-              try { localStorage.setItem('notify_' + fuel, '1'); } catch(_ls){}
+              // Store preference in localStorage (use same keys as OS path)
+              try {
+                var normB = (fuel||'').toLowerCase().replace(/\s+/g, '_');
+                localStorage.setItem('notify_' + fuel, '1'); // legacy
+                localStorage.setItem('bo_notify_'+String(impId)+'_'+normB, '1');
+                localStorage.setItem('bo_notify_'+normB, '1');
+              } catch(_ls){}
               // Persist to backend like OneSignal path
               try {
                 if (apiBase && externalId && impId) {
@@ -792,7 +880,12 @@
             }
           } else { 
             if(statusEl) statusEl.style.display = 'none';
-            try { localStorage.removeItem('notify_' + fuel); } catch(_rm){}
+            try {
+              localStorage.removeItem('notify_' + fuel);
+              var normBR = (fuel||'').toLowerCase().replace(/\s+/g, '_');
+              localStorage.removeItem('bo_notify_'+String(impId)+'_'+normBR);
+              localStorage.removeItem('bo_notify_'+normBR);
+            } catch(_rm){}
             // Inform backend removal
             try {
               if (apiBase && externalId && impId) {
