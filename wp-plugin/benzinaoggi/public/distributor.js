@@ -269,13 +269,8 @@
     });
     
     if(useOneSignal){
-      var isV16 = !!(window.OneSignal && OneSignal.Notifications && typeof OneSignal.Notifications.requestPermission === 'function');
-      var isV15 = !!(window.OneSignal && typeof OneSignal.isPushNotificationsEnabled === 'function' && !isV16);
-      
-      // If v15 is present (official plugin), do NOT touch v16-only APIs
-      if (isV15) {
-        console.log('OneSignal v15 detected; skipping v16 auto-prompt');
-      }
+      var isV16 = !!(window.OneSignal && OneSignal.Notifications);
+      var isV15 = false; // force v16-only path
       // Auto prompt once per session on page load (v15/v16)
       try {
         var promptKey = 'bo_prompt_shown_session';
@@ -336,10 +331,9 @@
       
       // Wait for OneSignal to be completely ready
       var waitForOneSignal = function() {
-        var readyV16 = !!(window.OneSignal && OneSignal.Notifications && typeof OneSignal.Notifications.requestPermission === 'function');
-        var readyV15 = !!(window.OneSignal && typeof OneSignal.isPushNotificationsEnabled === 'function');
-        if (readyV16 || readyV15) {
-          console.log('OneSignal is ready (', readyV16 ? 'v16' : 'v15', '), checking permissions...');
+        var readyV16 = !!(window.OneSignal && OneSignal.Notifications);
+        if (readyV16) {
+          console.log('OneSignal is ready ( v16 ), checking permissions...');
           
           // Use a more reliable method to check permissions
           try {
