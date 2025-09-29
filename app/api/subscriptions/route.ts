@@ -74,6 +74,17 @@ export async function POST(req: NextRequest) {
           headers: { 'Authorization': `Basic ${restKey}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify({})
         });
+        // If not found, try to CREATE the user explicitly with identity.external_id
+        if (r.status === 404) {
+          const createUrl = `https://api.onesignal.com/apps/${encodeURIComponent(appId)}/users`;
+          const createRes = await fetch(createUrl, {
+            method: 'POST',
+            headers: { 'Authorization': `Basic ${restKey}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ identity: { external_id: externalId } })
+          });
+          const created = await (async () => { try { return await createRes.json(); } catch { return { statusText: createRes.statusText }; } })();
+          return NextResponse.json({ ok: true, saved: true, onesignal: { ok: createRes.ok, status: createRes.status, created } });
+        }
         const ensured = await (async () => { try { return await r.json(); } catch { return { statusText: r.statusText }; } })();
         return NextResponse.json({ ok: true, saved: true, onesignal: { ok: r.ok, status: r.status, ensured } });
       }
