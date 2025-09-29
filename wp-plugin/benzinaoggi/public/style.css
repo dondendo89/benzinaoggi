@@ -97,6 +97,20 @@ footer .powered-by{
   display: revert !important;
 }
 
+/* Distributor pages: hide duplicate theme texts above our bo-header */
+.page-template-page-distributor-php .site-branding .site-title,
+.page-template-page-distributor-php .site-branding .site-title a,
+.page-template-page-distributor-php .site-branding .site-description,
+.page-template-page-distributor-php .entry-header,
+.page-template-page-distributor-php .entry-title{
+  display: none !important;
+}
+
+/* Better spacing for distributor header container */
+.page-template-page-distributor-php .site-main .bo-container{
+  margin-top: 8px;
+}
+
 /* Hide footer credits globally while keeping footer visible */
 body footer .site-info, body footer .site-info *, body footer .powered-by{display:none !important}
 /* Extra footer credits variants */

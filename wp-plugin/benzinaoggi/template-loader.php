@@ -115,6 +115,9 @@ class BenzinaOggi_Template_Loader {
             return;
         }
         
+        // CSS comune del plugin (per garantire coerenza grafica su tutte le pagine del plugin)
+        wp_enqueue_style('benzinaoggi-style', plugin_dir_url(__FILE__) . 'public/style.css', array(), '2.0.0');
+
         // Leaflet CSS e JS
         wp_enqueue_style('leaflet-css', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
         wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', array(), '1.9.4', true);
@@ -151,13 +154,18 @@ class BenzinaOggi_Template_Loader {
             }
         }
         
-        // OneSignal per le pagine che lo richiedono
+        // Asset specifici per pagina distributore
         $pagename = get_query_var('pagename');
-        if (is_page() && (
+        $is_distributor_page = is_page() && (
             strpos($pagename, 'distributore-') === 0 || 
             preg_match('/^([a-z0-9-]+)-(\d+)$/', $pagename)
-        )) {
-            wp_enqueue_script('onesignal-sdk', 'https://cdn.onesignal.com/sdks/OneSignalSDK.js', array(), '1.0.0', true);
+        );
+        if ($is_distributor_page) {
+            // JS dettaglio distributore
+            wp_enqueue_script('benzinaoggi-distributor', plugin_dir_url(__FILE__) . 'public/distributor.js', array(), '2.0.0', true);
+            wp_localize_script('benzinaoggi-distributor', 'BenzinaOggi', array(
+                'apiBase' => get_option('benzinaoggi_api_base', 'https://benzinaoggi.vercel.app'),
+            ));
         }
         
         // Localizza script
@@ -178,7 +186,7 @@ class BenzinaOggi_Template_Loader {
         }
         
         // Localizza anche lo script comune
-        if ($is_plugin_page) {
+        if ($is_plugin_page && wp_script_is('benzinaoggi-common-js', 'enqueued')) {
             wp_localize_script('benzinaoggi-common-js', 'BenzinaOggi', array(
                 'apiBase' => get_option('benzinaoggi_api_base', 'https://benzinaoggi.vercel.app'),
                 'ajaxUrl' => admin_url('admin-ajax.php'),
