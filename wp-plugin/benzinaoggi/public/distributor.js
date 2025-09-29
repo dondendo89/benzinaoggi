@@ -350,26 +350,8 @@
             osIsEnabled().then(function(isEnabled) {
               console.log('Push notifications enabled:', isEnabled);
               if (!isEnabled) {
-                // Show message to enable notifications
-                var notifMsg = createEl('div', 'bo-notif-warning');
-                notifMsg.innerHTML = '<p style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 4px; margin: 10px 0; color: #856404;">🔔 <strong>Abilita le notifiche:</strong> Per ricevere avvisi sui prezzi, clicca su "Consenti" quando il browser te lo chiede.</p><button id="bo-enable-notifications" style="background: #007cba; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 5px;">Abilita Notifiche</button>';
-                wrap.insertBefore(notifMsg, wrap.firstChild);
-                
-                var enableBtn = notifMsg.querySelector('#bo-enable-notifications');
-                if (enableBtn) {
-                  enableBtn.addEventListener('click', function() {
-                    try {
-                      osPrompt().then(function() {
-                        console.log('Notification prompt shown');
-                        notifMsg.style.display = 'none';
-                      }).catch(function(err) {
-                        console.error('Error showing notification prompt:', err);
-                      });
-                    } catch (err) {
-                      console.error('Error requesting notifications:', err);
-                    }
-                  });
-                }
+                // Use unified banner and fallback to browser prompt if SDK not ready
+                showPermissionBanner();
               }
             }).catch(function(err) {
               console.error('Error checking push notifications:', err);
