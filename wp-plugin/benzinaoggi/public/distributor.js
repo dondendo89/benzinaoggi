@@ -431,68 +431,7 @@
         });
       }
       
-      // Handle per-distributor checkbox (notify_distributor_<impiantoId>)
-      try {
-        var distCb = document.getElementById(distChkId);
-        if (distCb && d.impiantoId) {
-          // Sync initial state from existing tags
-          try {
-            osExec(async function(){
-              try {
-                var tagNameInit = 'notify_distributor_' + String(d.impiantoId);
-                var tagsInit = null;
-                if (OneSignal && OneSignal.User && OneSignal.User.getTags) {
-                  tagsInit = await OneSignal.User.getTags();
-                } else if (OneSignal && OneSignal.getTags) {
-                  tagsInit = await OneSignal.getTags();
-                }
-                if (tagsInit && (tagsInit[tagNameInit] === '1' || tagsInit[tagNameInit] === 1)) {
-                  distCb.checked = true;
-                } else {
-                  // removed legacy per-distributor checkbox state
-                }
-              } catch(_ignore){}
-            });
-          } catch(_e){}
-
-          distCb.addEventListener('change', function(){
-            var tagName = 'notify_distributor_' + String(d.impiantoId);
-            if (this.checked) {
-              var self = this;
-              osIsEnabled().then(function(isEnabled){
-                var ensurePermission = isEnabled ? osEnsureSubscribed() : (osPrompt().then(osEnsureSubscribed));
-                return ensurePermission.then(function(){
-                  return osIsEnabled();
-                }).then(function(enabledAfter){
-                  if (!enabledAfter) {
-                    self.checked = false;
-                    throw new Error('permission-denied');
-                  }
-                  return osSetTags((function(){ var t={}; t[tagName]='1'; if(d&&d.impiantoId){ t['impianto_id']=String(d.impiantoId); } return t; })()).then(async function(){
-                    try {
-                      // verify tag was set; retry once if missing
-                      var ok = false;
-                      if (OneSignal.User && OneSignal.User.getTags) {
-                        var tg = await OneSignal.User.getTags();
-                        ok = tg && (tg[tagName] === '1' || tg[tagName] === 1);
-                      }
-                      if (!ok) {
-                        await osSetTags((function(){ var t={}; t[tagName]='1'; if(d&&d.impiantoId){ t['impianto_id']=String(d.impiantoId); } return t; })());
-                      }
-                    } catch(_v){}
-                    self.checked = true;
-                });
-              }).then(function(){
-                console.log('Distributor tag set ok:', tagName);
-              }).catch(function(err){
-                console.warn('Distributor tag opt-in error', err);
-              });
-            } else {
-              osDeleteTag(tagName).catch(function(err){ console.warn('Distributor tag delete error', err); });
-            }
-          });
-        }
-      } catch(e) { console.warn('Distributor checkbox setup error', e); }
+      // (removed per-distributor checkbox handling)
 
       // Pre-sync fuel checkboxes from existing tags (v16 or v15)
       try {
@@ -506,8 +445,7 @@
                 var fSync = cbSync.getAttribute('data-fuel') || '';
                 var norm = fSync.toLowerCase().replace(/\s+/g, '_');
                 var tagFuel = 'notify_' + norm;
-                var combo = (d && d.impiantoId) ? ('notify_distributor_' + String(d.impiantoId) + '_' + norm) : null;
-                if ((tagsInit2[tagFuel] === '1' || tagsInit2[tagFuel] === 1) || (combo && (tagsInit2[combo] === '1' || tagsInit2[combo] === 1))) {
+                if ((tagsInit2[tagFuel] === '1' || tagsInit2[tagFuel] === 1)) {
                   cbSync.checked = true;
                   var stSync = cbSync.parentNode.querySelector('.notif-status');
                   if (stSync) { stSync.textContent = '✓ Attivato per ' + fSync; stSync.style.display='inline'; stSync.style.color = '#28a745'; }
@@ -515,10 +453,8 @@
                   // Fallback to localStorage persistence
                   try {
                     var k1 = 'bo_notify_'+norm;
-                    var k2 = d && d.impiantoId ? ('bo_notify_'+String(d.impiantoId)+'_'+norm) : null;
                     var v1 = localStorage.getItem(k1) === '1';
-                    var v2 = k2 ? (localStorage.getItem(k2) === '1') : false;
-                    if (v1 || v2) {
+                    if (v1) {
                       cbSync.checked = true;
                       var stSync2 = cbSync.parentNode.querySelector('.notif-status');
                       if (stSync2) { stSync2.textContent = '✓ Attivato per ' + fSync; stSync2.style.display='inline'; stSync2.style.color = '#28a745'; }
@@ -562,7 +498,6 @@
               try {
                 var normKeyInit = fuel.toLowerCase().replace(/\s+/g, '_');
                 localStorage.setItem('bo_notify_'+normKeyInit, '1');
-                if (d && d.impiantoId) { localStorage.setItem('bo_notify_'+String(d.impiantoId)+'_'+normKeyInit, '1'); }
               } catch(_p0){}
 
               // Send subscription to backend immediately (optimistic), regardless of OneSignal readiness
@@ -626,15 +561,8 @@
                   // Add dynamic tag for specific fuel type
                   var fuelTag = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
                   tags[fuelTag] = '1';
-                  // Add combined distributor+fuel tag so we can target that exact pair
-                  try {
-                    if (d && d.impiantoId) {
-                      var fuelNorm = fuel.toLowerCase().replace(/\s+/g, '_');
-                      var combo = 'notify_distributor_' + String(d.impiantoId) + '_' + fuelNorm;
-                      tags[combo] = '1';
-                      tags['impianto_id'] = String(d.impiantoId);
-                    }
-                  } catch(_){}
+                  // no per-distributor combo tag
+                  try {} catch(_c){}
                   
                   // Backend subscription has already been attempted optimistically above
 
@@ -646,7 +574,6 @@
                         var tg = await OneSignal.User.getTags();
                         var fuelNormV = fuel.toLowerCase().replace(/\s+/g, '_');
                         var needs = [ 'price_drop_notifications', 'fuel_type', 'notify_'+fuelNormV ];
-                        if (d && d.impiantoId) { needs.push('notify_distributor_'+String(d.impiantoId)+'_'+fuelNormV); }
                         var ok = needs.every(function(k){ return tg && (tg[k] === '1' || tg[k] === 1 || tg[k] === fuel || tg[k] === fuel.trim()); });
                         if (!ok) { await osSetTags(tags); }
                       }
@@ -686,12 +613,6 @@
               try {
                 // Delete specific fuel notification tag
                 var tagToDelete = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
-                // Delete combined distributor+fuel tag (this is the key one for per-distributor targeting)
-                var comboDel = null;
-                if (d && d.impiantoId) {
-                  var fuelNorm2 = fuel.toLowerCase().replace(/\s+/g, '_');
-                  comboDel = 'notify_distributor_' + String(d.impiantoId) + '_' + fuelNorm2;
-                }
                 
                 // Inform backend remove FIRST (this stops notifications for this specific impianto+fuel)
                 try {
@@ -700,7 +621,7 @@
                     var subUrlR = (apiBaseR || '') + '/api/subscriptions';
                     fetch(subUrlR, {
                       method: 'POST', headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ action: 'remove', externalId: externalId, impiantoId: d.impiantoId, fuelType: fuel })
+                      body: JSON.stringify({ action: 'remove', externalId: externalId, impiantoId: (d && d.impiantoId) ? String(d.impiantoId) : undefined, fuelType: fuel })
                     }).then(function(r){ return r.json().catch(function(){ return {}; }); }).then(function(res){
                       if (res && res.ok) {
                         console.log('Backend subscription removed for', d.impiantoId, fuel);
@@ -711,9 +632,6 @@
                 
                 // Delete OneSignal tags (both general fuel tag and specific distributor+fuel tag)
                 var deletePromises = [osDeleteTag(tagToDelete)];
-                if (comboDel) {
-                  deletePromises.push(osDeleteTag(comboDel));
-                }
                 
                 Promise.all(deletePromises).then(function(){
                   console.log('All tags deleted successfully for fuel:', fuel, 'distributor:', d.impiantoId);
@@ -727,7 +645,6 @@
                 try {
                   var normKeyR = fuel.toLowerCase().replace(/\s+/g, '_');
                   localStorage.removeItem('bo_notify_'+normKeyR);
-                  if (d && d.impiantoId) { localStorage.removeItem('bo_notify_'+String(d.impiantoId)+'_'+normKeyR); }
                 } catch(_rm){}
               } catch (err) {
                 console.error('OneSignal deleteTag error:', err);
