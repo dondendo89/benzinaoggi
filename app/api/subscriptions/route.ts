@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
     const externalId = String(body?.externalId || "").trim();
     const impiantoId = Number(body?.impiantoId);
     const fuelType = String(body?.fuelType || "").trim();
+    const subscriptionId = (body?.subscriptionId ? String(body.subscriptionId).trim() : undefined);
     if (!externalId || !impiantoId || !fuelType) {
       return NextResponse.json({ ok: false, error: "Missing externalId|impiantoId|fuelType" }, { status: 400 });
     }
@@ -83,9 +84,31 @@ export async function POST(req: NextRequest) {
             body: JSON.stringify({ identity: { external_id: externalId } })
           });
           const created = await (async () => { try { return await createRes.json(); } catch { return { statusText: createRes.statusText }; } })();
+          // If we also received a subscriptionId, attempt to update that subscription for this externalId
+          if (subscriptionId) {
+            const subUrl = `https://api.onesignal.com/apps/${encodeURIComponent(appId)}/users/by/external_id/${encodeURIComponent(externalId)}/subscriptions/${encodeURIComponent(subscriptionId)}`;
+            const subRes = await fetch(subUrl, {
+              method: 'PUT',
+              headers: { 'Authorization': `Basic ${restKey}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+              body: JSON.stringify({ enabled: true })
+            });
+            const subData = await (async () => { try { return await subRes.json(); } catch { return { statusText: subRes.statusText }; } })();
+            return NextResponse.json({ ok: true, saved: true, onesignal: { ok: subRes.ok, status: subRes.status, created, subscription: { id: subscriptionId, data: subData } } });
+          }
           return NextResponse.json({ ok: true, saved: true, onesignal: { ok: createRes.ok, status: createRes.status, created } });
         }
         const ensured = await (async () => { try { return await r.json(); } catch { return { statusText: r.statusText }; } })();
+        // If subscriptionId provided, also update that subscription
+        if (subscriptionId) {
+          const subUrl = `https://api.onesignal.com/apps/${encodeURIComponent(appId)}/users/by/external_id/${encodeURIComponent(externalId)}/subscriptions/${encodeURIComponent(subscriptionId)}`;
+          const subRes = await fetch(subUrl, {
+            method: 'PUT',
+            headers: { 'Authorization': `Basic ${restKey}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ enabled: true })
+          });
+          const subData = await (async () => { try { return await subRes.json(); } catch { return { statusText: subRes.statusText }; } })();
+          return NextResponse.json({ ok: true, saved: true, onesignal: { ok: subRes.ok, status: subRes.status, ensured, subscription: { id: subscriptionId, data: subData } } });
+        }
         return NextResponse.json({ ok: true, saved: true, onesignal: { ok: r.ok, status: r.status, ensured } });
       }
     } catch(_e) {
