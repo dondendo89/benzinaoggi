@@ -343,13 +343,6 @@ get_header(); ?>
     fill: currentColor;
 }
 
-/* Bottone Visualizza tutti */
-.bo-view-all-btn:hover {
-    background: #1e3a5f !important;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(44, 90, 160, 0.3);
-}
-
 /* Layout risultati */
 .bo-results-section {
     padding: 40px 0;

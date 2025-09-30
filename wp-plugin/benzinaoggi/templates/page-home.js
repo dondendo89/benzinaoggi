@@ -5,7 +5,8 @@
   const config = {
     apiBase: window.BenzinaOggi?.apiBase || '',
     mapCenter: [41.8719, 12.5674],
-    defaultZoom: 6
+    defaultZoom: 6,
+    maxResults: 10  // Mostra solo 10 risultati più vicini
   };
 
   // Elementi DOM
@@ -29,38 +30,12 @@
       location: '',
       fuel: '',
       radius: 10
-    },
-    cityLocation: null, // Coordinate della città cercata
-    page: 1,
-    total: 0,
-    pageSize: 20,
-    allResults: [] // Tutti i risultati dall'API
-  };
-
-  // Funzione per ottenere le coordinate di una città
-  async function getCityCoordinates(cityName) {
-    try {
-      // Usa Nominatim (OpenStreetMap) per il geocoding
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityName)}&countrycodes=it&limit=1`);
-      const data = await response.json();
-      
-      if (data && data.length > 0) {
-        return {
-          lat: parseFloat(data[0].lat),
-          lng: parseFloat(data[0].lon)
-        };
-      }
-      return null;
-    } catch (error) {
-      console.error('Errore geocoding:', error);
-      return null;
     }
-  }
+  };
 
   // Inizializzazione
   function init() {
-    // Inizializza la mappa solo se l'elemento esiste
-    if (!elements.map && document.getElementById('bo_map')) {
+    if (!elements.map) {
       initMap();
     }
     bindEvents();
@@ -69,15 +44,8 @@
 
   // Inizializza mappa
   function initMap() {
-    // Verifica se l'elemento mappa esiste
-    const mapElement = document.getElementById('bo_map');
-    if (!mapElement) {
-      console.log('Elemento mappa non trovato, skip inizializzazione');
-      return;
-    }
-    
     // Controlla se la mappa è già stata inizializzata
-    if (elements.map || mapElement._leaflet_id) {
+    if (elements.map || document.getElementById('bo_map')._leaflet_id) {
       console.log('Mappa già inizializzata, skip');
       return;
     }
@@ -143,14 +111,6 @@
         
         // Cerca distributori vicini
         handleSearch();
-        
-        // Reset del pulsante
-        elements.myLocationBtn.disabled = false;
-        elements.myLocationBtn.innerHTML = `
-          <svg viewBox="0 0 24 24" width="20" height="20">
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-          </svg>
-        `;
       },
       (error) => {
         console.error('Errore geolocalizzazione:', error);
@@ -169,21 +129,20 @@
         }
         
         alert(errorMessage);
-        
-        // Reset del pulsante anche in caso di errore
-        elements.myLocationBtn.disabled = false;
-        elements.myLocationBtn.innerHTML = `
-          <svg viewBox="0 0 24 24" width="20" height="20">
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-          </svg>
-        `;
       },
       {
         enableHighAccuracy: true,
         timeout: 15000,
         maximumAge: 300000
       }
-    );
+    ).finally(() => {
+      elements.myLocationBtn.disabled = false;
+      elements.myLocationBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="20" height="20">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+        </svg>
+      `;
+    });
   }
 
   // Ricerca
@@ -207,22 +166,14 @@
     try {
       showLoading(true);
       
-      const params = new URLSearchParams();
-      // Non inviamo limit per ottenere tutti i risultati
+      const params = new URLSearchParams({
+        limit: config.maxResults
+      });
 
       // Priorità: se l'utente ha inserito un nome di città, usa la ricerca per città
       if (state.currentFilters.location && !state.userLocation) {
         params.append('city', state.currentFilters.location);
         console.log('Ricerca per città:', state.currentFilters.location);
-        
-        // Ottieni le coordinate della città per applicare il raggio
-        state.cityLocation = await getCityCoordinates(state.currentFilters.location);
-        if (state.cityLocation) {
-          params.append('lat', state.cityLocation.lat);
-          params.append('lon', state.cityLocation.lng);
-          params.append('radiusKm', state.currentFilters.radius);
-          console.log('Coordinate città trovate:', state.cityLocation, 'raggio:', state.currentFilters.radius);
-        }
       } else if (state.userLocation) {
         // Solo se l'utente ha usato la geolocalizzazione, usa le coordinate
         params.append('lat', state.userLocation.lat);
@@ -244,21 +195,18 @@
       console.log('Risposta API:', data);
 
       if (data.ok) {
-        state.allResults = Array.isArray(data.distributors) ? data.distributors : [];
-        state.total = state.allResults.length;
-        state.page = 1; // Reset alla prima pagina
-        console.log('Distributori trovati:', state.total);
+        let distributors = data.distributors || [];
         
         // Ordina per distanza se disponibile, altrimenti per ID
-        state.allResults.sort((a, b) => {
+        distributors.sort((a, b) => {
           if (a.distance && b.distance) {
             return a.distance - b.distance;
           }
           return (a.impiantoId || 0) - (b.impiantoId || 0);
         });
         
-        // Mostra tutti i risultati
-        state.searchResults = state.allResults;
+        // Limita a 10 risultati
+        state.searchResults = distributors.slice(0, config.maxResults);
         updateResults();
         updateMap();
       } else {
@@ -276,21 +224,10 @@
   function updateResults() {
     if (!elements.resultsList) return;
 
-    const totalResults = state.total;
-    
-    // Sulla homepage mostra solo i primi 5 risultati
-    const homePageLimit = 5;
-    state.searchResults = state.allResults.slice(0, homePageLimit);
-    const currentPageCount = state.searchResults.length;
+    const count = state.searchResults.length;
+    elements.resultsCount.textContent = `${count} risultato${count !== 1 ? 'i' : ''}`;
 
-    // Aggiorna il contatore
-    if (totalResults > homePageLimit) {
-      elements.resultsCount.textContent = `${homePageLimit} di ${totalResults} distributori trovati`;
-    } else {
-      elements.resultsCount.textContent = `${totalResults} distributori trovati`;
-    }
-
-    if (totalResults === 0) {
+    if (count === 0) {
       elements.resultsList.innerHTML = `
         <div class="bo-no-results">
           <h3>Nessun distributore trovato</h3>
@@ -300,7 +237,7 @@
       return;
     }
 
-    const itemsHtml = state.searchResults.map(distributor => {
+    elements.resultsList.innerHTML = state.searchResults.map(distributor => {
       const prices = (distributor.prices || []).map(price => `
         <div class="bo-price-item">
           <div class="bo-price-label">${price.fuelType}</div>
@@ -326,27 +263,6 @@
         </div>
       `;
     }).join('');
-
-    // Bottone "Visualizza tutti" se ci sono più di 5 risultati
-    const viewAllButton = totalResults > homePageLimit ? `
-      <div class="bo-view-all-container" style="text-align: center; margin: 20px 0;">
-        <button onclick="viewAllResults()" class="bo-view-all-btn" style="
-          background: #2c5aa0;
-          color: white;
-          border: none;
-          padding: 12px 24px;
-          border-radius: 8px;
-          font-size: 16px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: background 0.3s;
-        ">
-          Visualizza tutti i ${totalResults} distributori
-        </button>
-      </div>
-    ` : '';
-
-    elements.resultsList.innerHTML = itemsHtml + viewAllButton;
 
     // Eventi click sui risultati
     elements.resultsList.querySelectorAll('.bo-result-item').forEach(item => {
@@ -456,59 +372,6 @@
       btn.textContent = show ? 'Ricerca...' : 'Cerca';
     }
   }
-
-  // Funzioni di paginazione (globali per essere accessibili dai button onclick)
-  window.prevPage = function() {
-    const totalPages = Math.max(1, Math.ceil(state.total / state.pageSize));
-    if (state.page > 1) {
-      state.page -= 1;
-      updateResults(); // Solo aggiorna i risultati, non richiama l'API
-      updateMap();
-    }
-  };
-
-  window.nextPage = function() {
-    const totalPages = Math.max(1, Math.ceil(state.total / state.pageSize));
-    if (state.page < totalPages) {
-      state.page += 1;
-      updateResults(); // Solo aggiorna i risultati, non richiama l'API
-      updateMap();
-    }
-  };
-
-  // Funzione per visualizzare tutti i risultati (globale per essere accessibile dal button onclick)
-  window.viewAllResults = function() {
-    // Costruisci i parametri di ricerca per la pagina risultati
-    const params = new URLSearchParams();
-    
-    if (state.currentFilters.location) {
-      params.append('location', state.currentFilters.location);
-    }
-    
-    if (state.currentFilters.fuel) {
-      params.append('fuel', state.currentFilters.fuel);
-    }
-    
-    if (state.currentFilters.radius) {
-      params.append('radius', state.currentFilters.radius);
-    }
-    
-    // Se abbiamo coordinate utente, aggiungile
-    if (state.userLocation) {
-      params.append('lat', state.userLocation.lat);
-      params.append('lng', state.userLocation.lng);
-    }
-    
-    // Se abbiamo coordinate città, aggiungile
-    if (state.cityLocation) {
-      params.append('cityLat', state.cityLocation.lat);
-      params.append('cityLng', state.cityLocation.lng);
-    }
-    
-    // Naviga alla pagina risultati con i parametri
-    const resultsUrl = `/benzinaoggi-risultati/?${params.toString()}`;
-    window.location.href = resultsUrl;
-  };
 
   // Inizializza quando il DOM è pronto
   if (document.readyState === 'loading') {

@@ -287,6 +287,34 @@
       "description": "Sincronizza prezzi con API MISE diretta. Confronta prezzi locali con dati MISE in tempo reale."
     },
     {
+      "name": "Sync MISE Prices (ALL + force body)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"force\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/sync-mise-prices?all=true",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "sync-mise-prices"
+          ],
+          "query": [
+            { "key": "all", "value": "true" }
+          ]
+        }
+      },
+      "description": "Esegue la sincronizzazione prezzi per TUTTI i distributori (batch). Usa confronto MISE vs ultimo prezzo DB; inserisce/aggiorna il prezzo di oggi se cambiato. Forza update via JSON body {force:true}."
+    },
+    {
       "name": "Check MISE Variations",
       "request": {
         "method": "GET",
@@ -397,6 +425,31 @@
         }
       },
       "description": "Job automatico per aggiornare prezzi giornalmente alle 6:00. Usa API MISE per dati real-time. Processa distributori in batch."
+    },
+    {
+      "name": "Daily Price Update (All distributors)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/cron/update-prices-daily?all=true&force=true",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "cron",
+            "update-prices-daily"
+          ],
+          "query": [
+            { "key": "all", "value": "true", "description": "Processa tutti i distributori con paginazione" },
+            { "key": "force", "value": "true", "description": "Forza aggiornamento anche senza differenze" }
+          ]
+        }
+      },
+      "description": "Esegue il cron giornaliero per TUTTI i distributori (modalità all=true). Forza update per scrivere i prezzi odierni."
     },
     {
       "name": "Cron Job Setup",

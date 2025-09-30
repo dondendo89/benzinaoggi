@@ -42,4 +42,3 @@ prisma/_migrations_backup/
 *.local
 *.bak
 *.tmp
-.vercel
