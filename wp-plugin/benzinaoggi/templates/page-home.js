@@ -260,17 +260,18 @@
     if (!elements.resultsList) return;
 
     const totalResults = state.total;
-    const totalPages = Math.max(1, Math.ceil(totalResults / state.pageSize));
-
-    // Calcola i risultati per la pagina corrente
-    const startIndex = (state.page - 1) * state.pageSize;
-    const endIndex = startIndex + state.pageSize;
-    state.searchResults = state.allResults.slice(startIndex, endIndex);
-
+    
+    // Sulla homepage mostra solo i primi 5 risultati
+    const homePageLimit = 5;
+    state.searchResults = state.allResults.slice(0, homePageLimit);
     const currentPageCount = state.searchResults.length;
 
     // Aggiorna il contatore
-    elements.resultsCount.textContent = `${totalResults} risultati totali (pagina ${state.page}/${totalPages} - ${currentPageCount} mostrati)`;
+    if (totalResults > homePageLimit) {
+      elements.resultsCount.textContent = `${homePageLimit} di ${totalResults} distributori trovati`;
+    } else {
+      elements.resultsCount.textContent = `${totalResults} distributori trovati`;
+    }
 
     if (totalResults === 0) {
       elements.resultsList.innerHTML = `
@@ -309,18 +310,26 @@
       `;
     }).join('');
 
-    // Pagination controls
-    const canPrev = state.page > 1;
-    const canNext = state.page < totalPages;
-    const pagerHtml = totalResults > state.pageSize ? `
-      <div class="bo-pager" style="display:flex;gap:8px;align-items:center;justify-content:center;margin:16px 0;">
-        <button onclick="prevPage()" ${!canPrev ? 'disabled' : ''} style="padding:8px 12px;border:1px solid #ddd;background:${!canPrev ? '#f5f5f5' : '#fff'};cursor:${!canPrev ? 'not-allowed' : 'pointer'};">‹ Precedente</button>
-        <span style="font-size:12px;opacity:.8">Pagina ${state.page} di ${totalPages}</span>
-        <button onclick="nextPage()" ${!canNext ? 'disabled' : ''} style="padding:8px 12px;border:1px solid #ddd;background:${!canNext ? '#f5f5f5' : '#fff'};cursor:${!canNext ? 'not-allowed' : 'pointer'};">Successiva ›</button>
+    // Bottone "Visualizza tutti" se ci sono più di 5 risultati
+    const viewAllButton = totalResults > homePageLimit ? `
+      <div class="bo-view-all-container" style="text-align: center; margin: 20px 0;">
+        <button onclick="viewAllResults()" class="bo-view-all-btn" style="
+          background: #2c5aa0;
+          color: white;
+          border: none;
+          padding: 12px 24px;
+          border-radius: 8px;
+          font-size: 16px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background 0.3s;
+        ">
+          Visualizza tutti i ${totalResults} distributori
+        </button>
       </div>
     ` : '';
 
-    elements.resultsList.innerHTML = itemsHtml + pagerHtml;
+    elements.resultsList.innerHTML = itemsHtml + viewAllButton;
 
     // Eventi click sui risultati
     elements.resultsList.querySelectorAll('.bo-result-item').forEach(item => {
@@ -448,6 +457,40 @@
       updateResults(); // Solo aggiorna i risultati, non richiama l'API
       updateMap();
     }
+  };
+
+  // Funzione per visualizzare tutti i risultati (globale per essere accessibile dal button onclick)
+  window.viewAllResults = function() {
+    // Costruisci i parametri di ricerca per la pagina risultati
+    const params = new URLSearchParams();
+    
+    if (state.currentFilters.location) {
+      params.append('location', state.currentFilters.location);
+    }
+    
+    if (state.currentFilters.fuel) {
+      params.append('fuel', state.currentFilters.fuel);
+    }
+    
+    if (state.currentFilters.radius) {
+      params.append('radius', state.currentFilters.radius);
+    }
+    
+    // Se abbiamo coordinate utente, aggiungile
+    if (state.userLocation) {
+      params.append('lat', state.userLocation.lat);
+      params.append('lng', state.userLocation.lng);
+    }
+    
+    // Se abbiamo coordinate città, aggiungile
+    if (state.cityLocation) {
+      params.append('cityLat', state.cityLocation.lat);
+      params.append('cityLng', state.cityLocation.lng);
+    }
+    
+    // Naviga alla pagina risultati con i parametri
+    const resultsUrl = `/benzinaoggi-risultati/?${params.toString()}`;
+    window.location.href = resultsUrl;
   };
 
   // Inizializza quando il DOM è pronto
