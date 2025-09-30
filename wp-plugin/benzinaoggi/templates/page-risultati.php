@@ -6,23 +6,6 @@ Template Name: Risultati Ricerca
 get_header(); ?>
 
 <div class="benzinaoggi-results">
-    <!-- Header -->
-    <header class="bo-header">
-        <div class="bo-container">
-            <div class="bo-logo">
-                <?php 
-                $plugin = new BenzinaOggiPlugin();
-                $logo_url = $plugin->get_logo_url();
-                ?>
-                <img src="<?php echo esc_url($logo_url); ?>" alt="BenzinaOggi" class="bo-logo-img">
-                <span class="bo-logo-text">BenzinaOggi.it</span>
-            </div>
-            <nav class="bo-nav">
-                <a href="<?php echo home_url(); ?>" class="bo-nav-link">← Nuova ricerca</a>
-            </nav>
-        </div>
-    </header>
-
     <!-- Filtri e controlli -->
     <div class="bo-filters-bar">
         <div class="bo-container">
@@ -162,22 +145,6 @@ get_header(); ?>
     max-width: 1200px;
     margin: 0 auto;
     padding: 0 20px;
-}
-
-/* Header */
-.bo-header {
-    background: #fff;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    position: sticky;
-    top: 0;
-    z-index: 1000;
-}
-
-.bo-header .bo-container {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 15px 20px;
 }
 
 .bo-logo {

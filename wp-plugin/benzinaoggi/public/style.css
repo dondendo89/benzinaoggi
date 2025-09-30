@@ -97,7 +97,6 @@ footer .powered-by{
   display: revert !important;
 }
 
-/* Distributor pages: hide duplicate theme texts above our bo-header */
 /* Removed hiding of theme branding/titles to ensure only theme header shows */
 
 /* Hide breadcrumbs but keep page titles for theme consistency */
@@ -113,24 +112,6 @@ nav[aria-label*="breadcrumb"] {
 .page-template-page-distributor-php .entry-title,
 .page-template-page-distributor-php .wp-block-post-title {
   display: none !important;
-}
-
-/* Global bo-header styles */
-.bo-header {
-  background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
-  color: white;
-  padding: 16px 0;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-
-.bo-header .bo-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .bo-logo {
@@ -222,35 +203,7 @@ nav[aria-label*="breadcrumb"] {
   color: white;
 }
 
-/* Mobile responsive */
-@media (max-width: 768px) {
-  .bo-header .bo-container {
-    flex-direction: column;
-    gap: 16px;
-  }
-  
-  .bo-nav {
-    gap: 16px;
-  }
-  
-  .bo-logo-text {
-    font-size: 20px;
-  }
-  
-  .bo-hero-title {
-    font-size: 32px;
-  }
-  
-  .bo-hero-subtitle {
-    font-size: 18px;
-  }
-  
-  .bo-search-form {
-    padding: 20px;
-  }
-}
-
-/* Ensure spacing handled by theme; no custom bo-header spacing */
+/* Ensure spacing handled by theme;  spacing */
 .bo-hero .bo-subtitle{ color:#444; }
 .bo-container{ max-width:1200px; margin:0 auto; padding:0 16px; }
 .bo-section-title{ margin:0 0 8px 0; font-size:20px; color:#2c5aa0; }
@@ -289,16 +242,6 @@ footer .credits, .site-footer .credits, .footer-credits, .powered-by-wordpress, 
 
 /* Hide breadcrumb bars injected by themes/SEO plugins */
 .breadcrumbs, .breadcrumb, nav[aria-label="Breadcrumbs"], .rank-math-breadcrumb, .yoast-breadcrumb{display:none !important}
-
-/* Mobile-first improvements */
-@media (max-width: 768px){
-  .bo-header{border-radius:10px;padding:16px;margin-bottom:16px}
-  .bo-title{font-size:22px}
-  .bo-subtitle{font-size:14px}
-  .bo-card{padding:10px}
-  .bo-grid{grid-template-columns:1fr}
-  .bo-actions{gap:6px}
-}
 
 /* Ensure consistent page spacing like home */
 .site-main .bo-container{padding-left:16px;padding-right:16px}

@@ -123,21 +123,6 @@ get_header(); ?>
     padding: 0 20px;
 }
 
-/* Header */
-.bo-header {
-    background: #fff;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    position: sticky;
-    top: 0;
-    z-index: 1000;
-}
-
-.bo-header .bo-container {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 15px 20px;
-}
 
 .bo-logo {
     display: flex;

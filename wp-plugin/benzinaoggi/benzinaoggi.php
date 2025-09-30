@@ -32,9 +32,7 @@ class BenzinaOggiPlugin {
         
         // Inizializza template loader
         new BenzinaOggi_Template_Loader();
-        
-        // Show bo-header on all pages
-        add_action('wp_body_open', [$this, 'render_global_header']);
+    
         
         // Cron to check variations
         add_action('benzinaoggi_check_variations', [$this, 'cron_check_variations']);
@@ -418,30 +416,6 @@ class BenzinaOggiPlugin {
         echo "  gtag('js', new Date());\n\n";
         echo "  gtag('config', 'G-2YRVTC8RPV');\n";
         echo "</script>\n";
-    }
-
-    public function render_global_header() {
-        // Only show on frontend, not in admin
-        if (is_admin()) {
-            return;
-        }
-        
-        $logo_url = $this->get_logo_url();
-        ?>
-        <header class="bo-header">
-            <div class="bo-container">
-                <div class="bo-logo">
-                    <img src="<?php echo esc_url($logo_url); ?>" alt="BenzinaOggi" class="bo-logo-img">
-                    <span class="bo-logo-text">BenzinaOggi.it</span>
-                </div>
-                <nav class="bo-nav">
-                    <a href="<?php echo esc_url(home_url('/benzinaoggi-home/')); ?>" class="bo-nav-link">Cerca</a>
-                    <a href="<?php echo esc_url(home_url('/benzinaoggi-risultati/')); ?>" class="bo-nav-link">Prezzi</a>
-                    <a href="#notizie" class="bo-nav-link">Notizie</a>
-                </nav>
-            </div>
-        </header>
-        <?php
     }
 
     public function get_logo_url() {

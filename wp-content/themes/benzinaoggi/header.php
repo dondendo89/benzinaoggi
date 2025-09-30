@@ -14,14 +14,7 @@
 <div id="page" class="site">
     <header id="masthead" class="site-header">
         <div class="container">
-            <div class="bo-header">
-                <h1 class="bo-title">
-                    <?php if (is_singular()) { the_title(); } else { bloginfo('name'); } ?>
-                </h1>
-                <p class="bo-subtitle">
-                    <?php echo esc_html( get_bloginfo('description') ); ?>
-                </p>
-            </div>
+
             <div class="site-branding">
                 <?php if (is_home() && is_front_page()) : ?>
                     <h1 class="site-title">
