@@ -5,8 +5,7 @@
   const config = {
     apiBase: window.BenzinaOggi?.apiBase || '',
     mapCenter: [41.8719, 12.5674],
-    defaultZoom: 6,
-    maxResults: 10  // Mostra solo 10 risultati più vicini
+    defaultZoom: 6
   };
 
   // Elementi DOM
@@ -30,8 +29,33 @@
       location: '',
       fuel: '',
       radius: 10
-    }
+    },
+    cityLocation: null, // Coordinate della città cercata
+    page: 1,
+    total: 0,
+    pageSize: 20,
+    allResults: [] // Tutti i risultati dall'API
   };
+
+  // Funzione per ottenere le coordinate di una città
+  async function getCityCoordinates(cityName) {
+    try {
+      // Usa Nominatim (OpenStreetMap) per il geocoding
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityName)}&countrycodes=it&limit=1`);
+      const data = await response.json();
+      
+      if (data && data.length > 0) {
+        return {
+          lat: parseFloat(data[0].lat),
+          lng: parseFloat(data[0].lon)
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Errore geocoding:', error);
+      return null;
+    }
+  }
 
   // Inizializzazione
   function init() {
@@ -166,14 +190,22 @@
     try {
       showLoading(true);
       
-      const params = new URLSearchParams({
-        limit: config.maxResults
-      });
+      const params = new URLSearchParams();
+      // Non inviamo limit per ottenere tutti i risultati
 
       // Priorità: se l'utente ha inserito un nome di città, usa la ricerca per città
       if (state.currentFilters.location && !state.userLocation) {
         params.append('city', state.currentFilters.location);
         console.log('Ricerca per città:', state.currentFilters.location);
+        
+        // Ottieni le coordinate della città per applicare il raggio
+        state.cityLocation = await getCityCoordinates(state.currentFilters.location);
+        if (state.cityLocation) {
+          params.append('lat', state.cityLocation.lat);
+          params.append('lon', state.cityLocation.lng);
+          params.append('radiusKm', state.currentFilters.radius);
+          console.log('Coordinate città trovate:', state.cityLocation, 'raggio:', state.currentFilters.radius);
+        }
       } else if (state.userLocation) {
         // Solo se l'utente ha usato la geolocalizzazione, usa le coordinate
         params.append('lat', state.userLocation.lat);
@@ -195,18 +227,21 @@
       console.log('Risposta API:', data);
 
       if (data.ok) {
-        let distributors = data.distributors || [];
+        state.allResults = Array.isArray(data.distributors) ? data.distributors : [];
+        state.total = state.allResults.length;
+        state.page = 1; // Reset alla prima pagina
+        console.log('Distributori trovati:', state.total);
         
         // Ordina per distanza se disponibile, altrimenti per ID
-        distributors.sort((a, b) => {
+        state.allResults.sort((a, b) => {
           if (a.distance && b.distance) {
             return a.distance - b.distance;
           }
           return (a.impiantoId || 0) - (b.impiantoId || 0);
         });
         
-        // Limita a 10 risultati
-        state.searchResults = distributors.slice(0, config.maxResults);
+        // Mostra tutti i risultati
+        state.searchResults = state.allResults;
         updateResults();
         updateMap();
       } else {
@@ -224,10 +259,20 @@
   function updateResults() {
     if (!elements.resultsList) return;
 
-    const count = state.searchResults.length;
-    elements.resultsCount.textContent = `${count} risultato${count !== 1 ? 'i' : ''}`;
+    const totalResults = state.total;
+    const totalPages = Math.max(1, Math.ceil(totalResults / state.pageSize));
 
-    if (count === 0) {
+    // Calcola i risultati per la pagina corrente
+    const startIndex = (state.page - 1) * state.pageSize;
+    const endIndex = startIndex + state.pageSize;
+    state.searchResults = state.allResults.slice(startIndex, endIndex);
+
+    const currentPageCount = state.searchResults.length;
+
+    // Aggiorna il contatore
+    elements.resultsCount.textContent = `${totalResults} risultati totali (pagina ${state.page}/${totalPages} - ${currentPageCount} mostrati)`;
+
+    if (totalResults === 0) {
       elements.resultsList.innerHTML = `
         <div class="bo-no-results">
           <h3>Nessun distributore trovato</h3>
@@ -237,7 +282,7 @@
       return;
     }
 
-    elements.resultsList.innerHTML = state.searchResults.map(distributor => {
+    const itemsHtml = state.searchResults.map(distributor => {
       const prices = (distributor.prices || []).map(price => `
         <div class="bo-price-item">
           <div class="bo-price-label">${price.fuelType}</div>
@@ -263,6 +308,19 @@
         </div>
       `;
     }).join('');
+
+    // Pagination controls
+    const canPrev = state.page > 1;
+    const canNext = state.page < totalPages;
+    const pagerHtml = totalResults > state.pageSize ? `
+      <div class="bo-pager" style="display:flex;gap:8px;align-items:center;justify-content:center;margin:16px 0;">
+        <button onclick="prevPage()" ${!canPrev ? 'disabled' : ''} style="padding:8px 12px;border:1px solid #ddd;background:${!canPrev ? '#f5f5f5' : '#fff'};cursor:${!canPrev ? 'not-allowed' : 'pointer'};">‹ Precedente</button>
+        <span style="font-size:12px;opacity:.8">Pagina ${state.page} di ${totalPages}</span>
+        <button onclick="nextPage()" ${!canNext ? 'disabled' : ''} style="padding:8px 12px;border:1px solid #ddd;background:${!canNext ? '#f5f5f5' : '#fff'};cursor:${!canNext ? 'not-allowed' : 'pointer'};">Successiva ›</button>
+      </div>
+    ` : '';
+
+    elements.resultsList.innerHTML = itemsHtml + pagerHtml;
 
     // Eventi click sui risultati
     elements.resultsList.querySelectorAll('.bo-result-item').forEach(item => {
@@ -372,6 +430,25 @@
       btn.textContent = show ? 'Ricerca...' : 'Cerca';
     }
   }
+
+  // Funzioni di paginazione (globali per essere accessibili dai button onclick)
+  window.prevPage = function() {
+    const totalPages = Math.max(1, Math.ceil(state.total / state.pageSize));
+    if (state.page > 1) {
+      state.page -= 1;
+      updateResults(); // Solo aggiorna i risultati, non richiama l'API
+      updateMap();
+    }
+  };
+
+  window.nextPage = function() {
+    const totalPages = Math.max(1, Math.ceil(state.total / state.pageSize));
+    if (state.page < totalPages) {
+      state.page += 1;
+      updateResults(); // Solo aggiorna i risultati, non richiama l'API
+      updateMap();
+    }
+  };
 
   // Inizializza quando il DOM è pronto
   if (document.readyState === 'loading') {

@@ -91,9 +91,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Optional server-side radius filter if user lat/lon and radius provided
-    // Se viene specificato il comune, la ricerca è per comune (non per via):
-    // ignora eventuale filtro raggio per rispettare il requisito
-    const radiusFiltered = (city ? false : (userLat != null && userLon != null && radiusKm != null))
+    const radiusFiltered = (userLat != null && userLon != null && radiusKm != null)
       ? filtered.filter(d => {
           const dist = haversine(d.latitudine, d.longitudine, userLat, userLon);
           return dist != null && dist <= radiusKm!;
@@ -112,8 +110,10 @@ export async function GET(req: NextRequest) {
       result = [...enriched].sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
     }
 
-    const totalPages = limit ? Math.max(1, Math.ceil(total / limit)) : 1;
-    return NextResponse.json({ ok: true, day, count: result.length, total, page, pageSize: limit || total, totalPages, distributors: result });
+    // Aggiorna total per riflettere il filtro raggio
+    const actualTotal = radiusFiltered.length;
+    const totalPages = limit ? Math.max(1, Math.ceil(actualTotal / limit)) : 1;
+    return NextResponse.json({ ok: true, day, count: result.length, total: actualTotal, page, pageSize: limit || actualTotal, totalPages, distributors: result });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
   }

@@ -34,8 +34,29 @@
     page: 1,
     total: 0,
     pageSize: config.pageSize,
-    allResults: [] // Tutti i risultati dall'API
+    allResults: [], // Tutti i risultati dall'API
+    cityLocation: null // Coordinate della città cercata
   };
+
+  // Funzione per ottenere le coordinate di una città
+  async function getCityCoordinates(cityName) {
+    try {
+      // Usa Nominatim (OpenStreetMap) per il geocoding
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityName)}&countrycodes=it&limit=1`);
+      const data = await response.json();
+      
+      if (data && data.length > 0) {
+        return {
+          lat: parseFloat(data[0].lat),
+          lng: parseFloat(data[0].lon)
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Errore geocoding:', error);
+      return null;
+    }
+  }
 
   // Inizializza applicazione
   function init() {
@@ -198,6 +219,15 @@
       if (state.currentFilters.location && !state.userLocation) {
         params.append('city', state.currentFilters.location);
         console.log('Ricerca per città:', state.currentFilters.location);
+        
+        // Ottieni le coordinate della città per applicare il raggio
+        state.cityLocation = await getCityCoordinates(state.currentFilters.location);
+        if (state.cityLocation) {
+          params.append('lat', state.cityLocation.lat);
+          params.append('lon', state.cityLocation.lng);
+          params.append('radiusKm', state.currentFilters.radius);
+          console.log('Coordinate città trovate:', state.cityLocation, 'raggio:', state.currentFilters.radius);
+        }
       } else if (state.userLocation) {
         // Solo se l'utente ha usato la geolocalizzazione, usa le coordinate
         params.append('lat', state.userLocation.lat);
