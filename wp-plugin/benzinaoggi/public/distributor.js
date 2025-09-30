@@ -30,13 +30,13 @@
       }
     }
     var externalId = getExternalId();
-    var header = createEl('div', 'bo-hero');
+    var header = createEl('div');
     header.innerHTML = '<div class="bo-container">'
       +'<h1 class="bo-title" style="margin:0 0 6px 0">'+(d.bandiera||'Distributore')+' – '+(d.comune||'')+'</h1>'
-      +'<p class="bo-subtitle" style="margin:0 0 14px 0">Informazioni e prezzi aggiornati</p>'
+      +'<p class="bo-subtitle" style="margin:0 0 14px 0;color:#444">Informazioni e prezzi aggiornati</p>'
       +'<a class="bo-back" href="/benzinaoggi-risultati/" onclick="if(document.referrer){event.preventDefault(); window.history.back();}">← Torna ai risultati</a>'
-      +'</div>'+
-      '<div class="bo-container" style="padding-bottom: 0">'
+      +'</div>'
+      +'<div class="bo-container" style="padding-bottom:0">'
       +'<div class="bo-grid">'
       +'<div><div class="bo-label">Indirizzo</div><div class="bo-value">'+(d.indirizzo||'')+'</div></div>'
       +'<div><div class="bo-label">Provincia</div><div class="bo-value">'+(d.provincia||'')+'</div></div>'
@@ -60,7 +60,8 @@
     var tbody = table.querySelector('tbody');
     (data.prices||[]).forEach(function(p){
       var tr = createEl('tr');
-      var id='notif_'+p.fuelType.replace(/[^a-z0-9]/gi,'_');
+      var fuelKey = (p.fuelType || '') + ' ' + (p.isSelfService ? 'Self' : 'Servito');
+      var id='notif_'+fuelKey.replace(/[^a-z0-9]/gi,'_');
       var arrow = '';
       var deltaTxt = '';
       if (typeof p.delta === 'number' && p.variation) {
@@ -73,7 +74,7 @@
         '<td>'+fmt(p.price)+'</td>'+
         '<td>'+(p.isSelfService ? 'Self' : 'Servito')+'</td>'+
         '<td>'+(arrow ? (arrow+' '+deltaTxt) : '-')+'</td>'+
-        '<td><label><input type="checkbox" id="'+id+'" data-fuel="'+p.fuelType+'"/> <span class="notif-label">quando scende</span> <span class="notif-status" style="display:none; color: #28a745; font-size: 0.9em;">✓ Attivato</span></label></td>';
+        '<td><label><input type="checkbox" id="'+id+'" data-fuel="'+fuelKey+'"/> <span class="notif-label">quando scende</span> <span class="notif-status" style="display:none; color: #28a745; font-size: 0.9em;">✓ Attivato</span></label></td>';
       tbody.appendChild(tr);
     });
 
@@ -145,8 +146,7 @@
       } catch(_e) { return null; }
     }
 
-    // Try to show banner immediately after render
-    showPermissionBanner();
+    // Notifications banner disabled on detail page per requirements
 
     // Global guard map to avoid duplicate subscription POSTs per (impiantoId,fuel)
     try { window.__boSubSent = window.__boSubSent || {}; } catch(_g){}
@@ -421,14 +421,10 @@
         if (readyV16) {
           console.log('OneSignal is ready ( v16 ), checking permissions...');
           
-          // Use a more reliable method to check permissions
+          // Silent check; do not show banner on detail page
           try {
             osIsEnabled().then(function(isEnabled) {
               console.log('Push notifications enabled:', isEnabled);
-              if (!isEnabled) {
-                // Use unified banner and fallback to browser prompt if SDK not ready
-                showPermissionBanner();
-              }
             }).catch(function(err) {
               console.error('Error checking push notifications:', err);
             });
@@ -648,10 +644,10 @@
                               try {
                                 if (OneSignal.login && externalId) { try { await OneSignal.login(externalId); } catch(_l){} }
                                 var tg = { };
-                                var fuelTag2 = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
+                var fuelTag2 = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
                                 tg[fuelTag2] = '1';
                                 tg['price_drop_notifications'] = '1';
-                                tg['fuel_type'] = fuel.trim();
+                tg['fuel_type'] = fuel.trim();
                                 try { await osSetTags(tg); } catch(_t){}
                               } catch(_eos){}
                             });

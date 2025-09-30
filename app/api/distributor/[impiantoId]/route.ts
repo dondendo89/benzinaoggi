@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/src/lib/db";
+import { getMiseServiceArea, normalizeFuelName } from "@/src/lib/mise";
 
 export async function GET(req: NextRequest, { params }: { params: { impiantoId: string } }) {
   try {
@@ -49,6 +50,19 @@ export async function GET(req: NextRequest, { params }: { params: { impiantoId: 
       }
     }
 
+    // Optionally enrich with live MISE comparison for current day
+    let miseByKey: Map<string, number> | null = null;
+    try {
+      const mise = await getMiseServiceArea(distributor.impiantoId);
+      if (mise && Array.isArray(mise.fuels)) {
+        miseByKey = new Map<string, number>();
+        for (const f of mise.fuels) {
+          const key = `${normalizeFuelName(f.name)}|${f.isSelf ? 1 : 0}`;
+          miseByKey.set(key, Number(f.price));
+        }
+      }
+    } catch {}
+
     const pricesWithVariation = prices.map(p => {
       const key = `${p.fuelType}|${p.isSelfService ? 1 : 0}`;
       const prev = prevPricesByKey.get(key);
@@ -57,6 +71,15 @@ export async function GET(req: NextRequest, { params }: { params: { impiantoId: 
       if (prev) {
         delta = Number((p.price - prev.price).toFixed(3));
         direction = delta > 0 ? 'up' : delta < 0 ? 'down' : 'same';
+      }
+      // If MISE has a different price for same fuel/self today, override variation/delta to reflect live change
+      if (miseByKey && miseByKey.has(key)) {
+        const misePrice = miseByKey.get(key)!;
+        const diffLive = Number((misePrice - p.price).toFixed(3));
+        if (Math.abs(diffLive) > 0.001) {
+          delta = Math.abs(diffLive);
+          direction = diffLive > 0 ? 'up' : 'down';
+        }
       }
       return {
         ...p,

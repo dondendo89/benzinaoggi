@@ -33,190 +33,23 @@ if (!$impianto_id) {
 // Carica il plugin per accedere alle funzioni
 $plugin = new BenzinaOggiPlugin();
 $logo_url = $plugin->get_logo_url();
+
+get_header();
 ?>
 
-<!DOCTYPE html>
-<html <?php language_attributes(); ?>>
-<head>
-    <meta charset="<?php bloginfo('charset'); ?>">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?php the_title(); ?> - <?php bloginfo('name'); ?></title>
+<div class="bo-container">
+    <a href="<?php echo esc_url( home_url('/benzinaoggi-risultati/') ); ?>" class="bo-back" onclick="if(document.referrer){event.preventDefault(); window.history.back();}" style="display:inline-flex;margin:8px 0 16px 0;">
+        <span>←</span>
+        <span style="margin-left:8px">Torna ai risultati</span>
+    </a>
     
-    <!-- CSS del plugin -->
-    <style>
-        .bo-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-        
-        .bo-header {
-            text-align: center;
-            margin-bottom: 30px;
-            padding: 20px;
-            background: linear-gradient(135deg, #2c5aa0 0%, #1e3a5f 100%);
-            color: white;
-            border-radius: 12px;
-        }
-        .bo-back {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            background: #ffffff;
-            color: #1e3a5f;
-            border: 1px solid rgba(255,255,255,0.6);
-            padding: 8px 12px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            margin-top: 12px;
-        }
-        .bo-back:hover { background: rgba(255,255,255,0.9); }
-        
-        .bo-logo {
-            max-height: 60px;
-            margin-bottom: 15px;
-        }
-        
-        .bo-title {
-            font-size: 28px;
-            margin: 0 0 10px 0;
-            font-weight: 600;
-        }
-        
-        .bo-subtitle {
-            font-size: 16px;
-            opacity: 0.9;
-            margin: 0;
-        }
-        
-        .bo-content {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-bottom: 30px;
-        }
-        
-        .bo-info-card {
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            border: 1px solid #e1e5e9;
-        }
-        
-        .bo-info-card h3 {
-            color: #2c5aa0;
-            margin: 0 0 15px 0;
-            font-size: 20px;
-            font-weight: 600;
-        }
-        
-        .bo-info-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #f0f0f0;
-        }
-        
-        .bo-info-item:last-child {
-            border-bottom: none;
-        }
-        
-        .bo-info-label {
-            font-weight: 500;
-            color: #666;
-        }
-        
-        .bo-info-value {
-            font-weight: 600;
-            color: #333;
-        }
-        
-        .bo-prices {
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            border: 1px solid #e1e5e9;
-        }
-        
-        .bo-price-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 0;
-            border-bottom: 1px solid #f0f0f0;
-        }
-        
-        .bo-price-item:last-child {
-            border-bottom: none;
-        }
-        
-        .bo-fuel-type {
-            font-weight: 600;
-            color: #333;
-        }
-        
-        .bo-price {
-            font-size: 24px;
-            font-weight: 700;
-            color: #2c5aa0;
-        }
-        
-        .bo-self-service {
-            background: #e8f4fd;
-            color: #2c5aa0;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 500;
-        }
-        
-        .bo-loading {
-            text-align: center;
-            padding: 40px;
-            color: #666;
-        }
-        
-        .bo-error {
-            background: #fee;
-            color: #c33;
-            padding: 20px;
-            border-radius: 8px;
-            text-align: center;
-        }
-        
-        @media (max-width: 768px) {
-            .bo-content {
-                grid-template-columns: 1fr;
-                gap: 20px;
-            }
-            
-            .bo-container {
-                padding: 15px;
-            }
-        }
-    </style>
-</head>
-
-<body <?php body_class(); ?>>
-    <div class="bo-container">
-        <!-- Header globale già reso via wp_body_open -->
-        <a href="<?php echo esc_url( home_url('/benzinaoggi-risultati/') ); ?>" class="bo-back" onclick="if(document.referrer){event.preventDefault(); window.history.back();}" style="display:inline-flex;margin:8px 0 16px 0;">
-            <span>←</span>
-            <span style="margin-left:8px">Torna ai risultati</span>
-        </a>
-        
-        <!-- Contenuto principale -->
-        <div id="bo-distributor-content" class="bo-loading">
-            <p>Caricamento informazioni distributore...</p>
-        </div>
+    <!-- Contenuto principale -->
+    <div id="bo-distributor-content" class="bo-loading">
+        <p>Caricamento informazioni distributore...</p>
     </div>
+</div>
 
-    <!-- JavaScript per caricare i dati -->
-    <script>
+<script>
     (function() {
         'use strict';
         
@@ -279,15 +112,21 @@ $logo_url = $plugin->get_logo_url();
                     <!-- Prezzi carburanti -->
                     <div class="bo-prices">
                         <h3>⛽ Prezzi Carburanti</h3>
-                        ${prices.length > 0 ? prices.map(price => `
+                        ${prices.length > 0 ? prices.map(price => {
+                            const v = price.variation;
+                            const delta = Number(price.delta || 0);
+                            const arrow = v === 'down' ? '⬇️' : (v === 'up' ? '⬆️' : '');
+                            const deltaTxt = arrow ? `${arrow} ${(Math.abs(delta)).toFixed(3)}` : '-';
+                            return `
                             <div class="bo-price-item">
                                 <div>
                                     <div class="bo-fuel-type">${price.fuelType}</div>
                                     ${price.isSelfService ? '<span class="bo-self-service">Self</span>' : ''}
                                 </div>
-                                <div class="bo-price">€${price.price.toFixed(3)}</div>
-                            </div>
-                        `).join('') : '<p>Nessun prezzo disponibile</p>'}
+                                <div class="bo-price">€${Number(price.price).toFixed(3)}</div>
+                                <div style="min-width:80px;text-align:right;color:${v==='down'?'#16a34a':v==='up'?'#dc2626':'#666'}">${deltaTxt}</div>
+                            </div>`;
+                        }).join('') : '<p>Nessun prezzo disponibile</p>'}
                     </div>
                 </div>
             `;
@@ -302,6 +141,6 @@ $logo_url = $plugin->get_logo_url();
             loadDistributorData();
         }
     })();
-    </script>
-</body>
-</html>
+</script>
+
+<?php get_footer();

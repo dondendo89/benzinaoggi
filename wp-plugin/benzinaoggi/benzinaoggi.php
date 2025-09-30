@@ -640,14 +640,16 @@ class BenzinaOggiPlugin {
         
         try {
             // STEP 1: Aggiorna prezzi usando API MISE diretta (sempre)
-            $this->log_progress('STEP 1: Aggiornamento prezzi con API MISE diretta...');
-            // Esegui aggiornamento MISE per TUTTI i distributori con paginazione
-            $response = wp_remote_get($api_base . '/api/cron/update-prices-daily?all=true&force=true', [
+            $this->log_progress('STEP 1: Aggiornamento prezzi (sync-mise-prices)...');
+            // Esegui aggiornamento MISE per TUTTI i distributori usando il nuovo endpoint
+            $response = wp_remote_post($api_base . '/api/sync-mise-prices?all=true', [
                 'timeout' => 300, // 5 minuti timeout
                 'headers' => [
                     'Authorization' => 'Bearer ' . ($this->get_options()['api_secret'] ?? ''),
+                    'Content-Type' => 'application/json',
                     'User-Agent' => 'BenzinaOggi-WordPress/1.0'
-                ]
+                ],
+                'body' => wp_json_encode([ 'force' => true ])
             ]);
             
             if (is_wp_error($response)) {
