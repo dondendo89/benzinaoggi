@@ -143,6 +143,14 @@
         
         // Cerca distributori vicini
         handleSearch();
+        
+        // Reset del pulsante
+        elements.myLocationBtn.disabled = false;
+        elements.myLocationBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+          </svg>
+        `;
       },
       (error) => {
         console.error('Errore geolocalizzazione:', error);
@@ -161,20 +169,21 @@
         }
         
         alert(errorMessage);
+        
+        // Reset del pulsante anche in caso di errore
+        elements.myLocationBtn.disabled = false;
+        elements.myLocationBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+          </svg>
+        `;
       },
       {
         enableHighAccuracy: true,
         timeout: 15000,
         maximumAge: 300000
       }
-    ).finally(() => {
-      elements.myLocationBtn.disabled = false;
-      elements.myLocationBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" width="20" height="20">
-          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-        </svg>
-      `;
-    });
+    );
   }
 
   // Ricerca
