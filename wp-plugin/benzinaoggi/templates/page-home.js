@@ -6,7 +6,7 @@
     apiBase: window.BenzinaOggi?.apiBase || '',
     mapCenter: [41.8719, 12.5674],
     defaultZoom: 6,
-    maxResults: 10  // Mostra solo 10 risultati più vicini
+    pageSize: 20  // Risultati per pagina
   };
 
   // Elementi DOM
@@ -30,6 +30,12 @@
       location: '',
       fuel: '',
       radius: 10
+    },
+    pagination: {
+      currentPage: 1,
+      totalPages: 1,
+      totalResults: 0,
+      pageSize: config.pageSize
     }
   };
 
@@ -161,6 +167,7 @@
     const radius = parseInt(elements.radiusSelect?.value) || 10;
 
     state.currentFilters = { location, fuel, radius };
+    state.pagination.currentPage = 1; // Reset alla prima pagina
 
     if (!location && !state.userLocation) {
       alert('Inserisci una località o usa "La mia posizione"');
@@ -176,7 +183,8 @@
       showLoading(true);
       
       const params = new URLSearchParams({
-        limit: config.maxResults
+        limit: state.pagination.pageSize,
+        page: state.pagination.currentPage
       });
 
       // Priorità: se l'utente ha inserito un nome di città, usa la ricerca per città
@@ -214,8 +222,11 @@
           return (a.impiantoId || 0) - (b.impiantoId || 0);
         });
         
-        // Limita a 10 risultati
-        state.searchResults = distributors.slice(0, config.maxResults);
+        // Aggiorna stato paginazione
+        state.searchResults = distributors;
+        state.pagination.totalResults = data.total || distributors.length;
+        state.pagination.totalPages = data.totalPages || Math.ceil(state.pagination.totalResults / state.pagination.pageSize);
+        
         updateResults();
         updateMap();
       } else {
@@ -234,7 +245,11 @@
     if (!elements.resultsList) return;
 
     const count = state.searchResults.length;
-    elements.resultsCount.textContent = `${count} risultato${count !== 1 ? 'i' : ''}`;
+    const totalResults = state.pagination.totalResults;
+    const currentPage = state.pagination.currentPage;
+    const totalPages = state.pagination.totalPages;
+    
+    elements.resultsCount.textContent = `${count} risultati (pagina ${currentPage}/${totalPages}) - Totale: ${totalResults}`;
 
     if (count === 0) {
       elements.resultsList.innerHTML = `
@@ -246,7 +261,7 @@
       return;
     }
 
-    elements.resultsList.innerHTML = state.searchResults.map(distributor => {
+    const itemsHtml = state.searchResults.map(distributor => {
       const prices = (distributor.prices || []).map(price => `
         <div class="bo-price-item">
           <div class="bo-price-label">${price.fuelType}</div>
@@ -273,6 +288,18 @@
       `;
     }).join('');
 
+    // Controlli paginazione
+    const canPrev = currentPage > 1;
+    const canNext = currentPage < totalPages;
+    const pagerHtml = `
+      <div class="bo-pager" style="display:flex;gap:8px;align-items:center;justify-content:center;margin:16px 0;">
+        <button id="bo-prev" ${canPrev ? '' : 'disabled'} style="padding:6px 10px;">← Precedente</button>
+        <span style="font-size:12px;opacity:.8">Pagina ${currentPage} di ${totalPages}</span>
+        <button id="bo-next" ${canNext ? '' : 'disabled'} style="padding:6px 10px;">Successiva →</button>
+      </div>`;
+
+    elements.resultsList.innerHTML = itemsHtml + pagerHtml;
+
     // Eventi click sui risultati
     elements.resultsList.querySelectorAll('.bo-result-item').forEach(item => {
       item.addEventListener('click', () => {
@@ -290,6 +317,22 @@
           window.location.href = `/${pageSlug}/`;
         }
       });
+    });
+
+    // Eventi paginazione
+    const prevBtn = document.getElementById('bo-prev');
+    const nextBtn = document.getElementById('bo-next');
+    if (prevBtn) prevBtn.addEventListener('click', () => {
+      if (state.pagination.currentPage > 1) {
+        state.pagination.currentPage -= 1;
+        searchDistributors();
+      }
+    });
+    if (nextBtn) nextBtn.addEventListener('click', () => {
+      if (state.pagination.currentPage < state.pagination.totalPages) {
+        state.pagination.currentPage += 1;
+        searchDistributors();
+      }
     });
   }
 
