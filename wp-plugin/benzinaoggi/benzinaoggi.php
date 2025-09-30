@@ -51,6 +51,16 @@ class BenzinaOggiPlugin {
         // Admin post action to create template pages
         add_action('admin_post_benzinaoggi_create_pages', [$this, 'handle_create_pages']);
         add_action('admin_post_benzinaoggi_delete_distributor_pages', [$this, 'handle_delete_distributor_pages']);
+        // Admin post action to generate SEO description via Gemini
+        add_action('admin_post_benzinaoggi_generate_seo', [$this, 'handle_generate_seo_description']);
+        // Add row action in Pages list
+        add_filter('page_row_actions', [$this, 'add_generate_seo_row_action'], 10, 2);
+        // Add meta box in page editor
+        add_action('add_meta_boxes', [$this, 'register_seo_metabox']);
+        // Ensure pages support excerpt so we can save meta description there
+        add_action('init', function(){
+            add_post_type_support('page', 'excerpt');
+        });
         // Registra template personalizzato
         add_filter('theme_page_templates', [$this, 'add_custom_page_template']);
         add_filter('page_template', [$this, 'load_custom_page_template']);
@@ -58,6 +68,8 @@ class BenzinaOggiPlugin {
         add_action('admin_post_benzinaoggi_run_variations', [$this, 'handle_run_variations']);
         // Admin post action to run daily price update manually
         add_action('admin_post_benzinaoggi_run_daily_update', [$this, 'handle_run_daily_update']);
+        // Bulk generate SEO for all pages
+        add_action('admin_post_benzinaoggi_generate_seo_all', [$this, 'handle_generate_seo_all']);
         // Single-run cron to sync pages
         add_action('benzinaoggi_sync_pages', [$this, 'cron_sync_pages']);
         // Ensure daily sync at 05:00 local time
@@ -83,6 +95,147 @@ class BenzinaOggiPlugin {
         add_action('init', [$this, 'register_sw_rewrites']);
         register_activation_hook(__FILE__, [$this, 'activate_flush_rewrites']);
         register_deactivation_hook(__FILE__, [$this, 'deactivate_flush_rewrites']);
+    }
+
+    /**
+     * Trim intelligente: tenta di mantenere frasi complete sotto un limite
+     */
+    private function smart_trim_sentence($text, $maxLen = 156) {
+        $text = trim(preg_replace('/\s+/', ' ', (string)$text));
+        if ($text === '') return $text;
+        if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+            if (mb_strlen($text, 'UTF-8') <= $maxLen) return rtrim($text, ",; ") . (preg_match('/[\.!?]$/u', $text) ? '' : '.');
+            $cut = mb_substr($text, 0, $maxLen, 'UTF-8');
+        } else {
+            if (strlen($text) <= $maxLen) return rtrim($text, ",; ") . (preg_match('/[\.!?]$/', $text) ? '' : '.');
+            $cut = substr($text, 0, $maxLen);
+        }
+        // prova a tagliare all'ultima punteggiatura forte
+        $pos = max(strrpos($cut, '.'), strrpos($cut, '!'), strrpos($cut, '?'));
+        if ($pos !== false && $pos > 20) {
+            return trim(substr($cut, 0, $pos + 1));
+        }
+        // altrimenti taglia all'ultimo spazio e chiudi con punto
+        $sp = strrpos($cut, ' ');
+        $res = $sp ? substr($cut, 0, $sp) : $cut;
+        return rtrim($res, ",; ") . '.';
+    }
+    /**
+     * Bulk: genera descrizione SEO per tutte le pagine pubblicate
+     */
+    public function handle_generate_seo_all() {
+        if (!current_user_can('manage_options')) wp_die('Not allowed');
+        check_admin_referer('bo_generate_seo_all');
+        @ignore_user_abort(true);
+        @set_time_limit(600);
+        $opts = $this->get_options();
+        if (empty($opts['gemini_api_key'])) {
+            wp_die('Configura prima la Google Gemini API Key nelle impostazioni.');
+        }
+        $pages = get_posts(array(
+            'post_type' => 'page',
+            'post_status' => 'publish',
+            'numberposts' => -1,
+            'fields' => 'ids'
+        ));
+        $count = 0; $errors = 0;
+        foreach ($pages as $pid) {
+            // Reindirizza tramite stessa action singola per riusare la logica e nonce dinamico non necessario in bulk
+            try {
+                $this->generate_seo_for_post($pid);
+                $count++;
+            } catch (Exception $e) {
+                $errors++;
+            }
+            // Breve pausa per evitare rate limit
+            usleep(120000); // 120ms
+        }
+        set_transient('benzinaoggi_notice', 'SEO generata per '.$count.' pagine (errori: '.$errors.').', 30);
+        wp_redirect(admin_url('options-general.php?page=benzinaoggi&tab=seo'));
+        exit;
+    }
+
+    /**
+     * Refactor: logica di generazione riusabile programmaticamente
+     */
+    private function generate_seo_for_post($post_id) {
+        $post_id = intval($post_id);
+        $opts = $this->get_options();
+        $api_key = trim($opts['gemini_api_key'] ?? '');
+        if (!$api_key) throw new Exception('Missing Gemini API Key');
+        $post = get_post($post_id);
+        if (!$post || $post->post_type !== 'page') throw new Exception('Invalid post');
+
+        $site_name = get_bloginfo('name');
+        $title = get_the_title($post_id);
+        $permalink = get_permalink($post_id);
+        $prompt = sprintf(
+            "Scrivi una descrizione SEO breve (max 160 parole, tono informativo, italiano) per una pagina di un sito che si chiama '%s'. Usa solo le informazioni che puoi dedurre dal titolo.\n\nTitolo: %s\nURL: %s\n\nRequisiti:\n- Evita keyword stuffing\n- Frasi naturali e utili per l'utente\n- Includi una call-to-action leggera\n- Non inventare dati specifici non presenti nel titolo\n- Restituisci solo il testo della descrizione, senza markdown",
+            $site_name,
+            $title,
+            $permalink
+        );
+
+        // Model discovery (riusa la stessa logica dell'handler)
+        $chosen_model = get_transient('bo_gemini_model');
+        if (!$chosen_model) {
+            $models_url = add_query_arg('key', rawurlencode($api_key), 'https://generativelanguage.googleapis.com/v1/models');
+            $list = wp_remote_get($models_url, [ 'timeout' => 20 ]);
+            if (!is_wp_error($list) && wp_remote_retrieve_response_code($list) === 200) {
+                $j = json_decode(wp_remote_retrieve_body($list), true);
+                $models = isset($j['models']) && is_array($j['models']) ? $j['models'] : [];
+                $eligible = array_filter($models, function($m){
+                    $methods = isset($m['supportedGenerationMethods']) ? $m['supportedGenerationMethods'] : [];
+                    return !empty($m['name']) && is_array($methods) && in_array('generateContent', $methods, true);
+                });
+                usort($eligible, function($a, $b){
+                    $an = strtolower($a['name']); $bn = strtolower($b['name']);
+                    $aFlash = strpos($an, 'flash') !== false ? 1 : 0;
+                    $bFlash = strpos($bn, 'flash') !== false ? 1 : 0;
+                    if ($aFlash !== $bFlash) return $bFlash - $aFlash;
+                    return strcmp($bn, $an);
+                });
+                if (!empty($eligible)) {
+                    $parts = explode('/', $eligible[0]['name']);
+                    $chosen_model = end($parts);
+                }
+            }
+            if (!$chosen_model) $chosen_model = 'gemini-1.5-flash';
+            set_transient('bo_gemini_model', $chosen_model, HOUR_IN_SECONDS);
+        }
+        $endpoint = add_query_arg('key', rawurlencode($api_key), 'https://generativelanguage.googleapis.com/v1/models/' . rawurlencode($chosen_model) . ':generateContent');
+        $body = array('contents' => array(array('role' => 'user','parts' => array(array('text' => $prompt)))));
+        $resp = wp_remote_post($endpoint, array('timeout' => 30,'headers' => array('Content-Type' => 'application/json'),'body' => wp_json_encode($body)));
+        if (is_wp_error($resp)) throw new Exception('Gemini error');
+        if (wp_remote_retrieve_response_code($resp) < 200 || wp_remote_retrieve_response_code($resp) >= 300) throw new Exception('Gemini HTTP error');
+        $json = json_decode(wp_remote_retrieve_body($resp), true);
+        $generated = !empty($json['candidates'][0]['content']['parts'][0]['text']) ? trim($json['candidates'][0]['content']['parts'][0]['text']) : '';
+        if (!$generated) throw new Exception('No text');
+
+        $plain = trim(preg_replace('/\s+/', ' ', wp_strip_all_tags($generated)));
+        $limit = 100;
+        if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+            $metaDesc = mb_strlen($plain, 'UTF-8') > $limit ? (mb_substr($plain, 0, $limit, 'UTF-8')) : $plain;
+        } else {
+            $metaDesc = strlen($plain) > $limit ? substr($plain, 0, $limit) : $plain;
+        }
+        wp_update_post(array('ID' => $post_id,'post_excerpt' => wp_slash($metaDesc)));
+        update_post_meta($post_id, 'bo_seo_description', wp_kses_post($generated));
+        update_post_meta($post_id, '_yoast_wpseo_metadesc', $metaDesc);
+        update_post_meta($post_id, '_rank_math_description', $metaDesc);
+        update_post_meta($post_id, '_aioseo_description', $metaDesc);
+
+        $content = (string) get_post_field('post_content', $post_id);
+        $new_block = "<!-- SEO: Generated by Gemini -->\n<p class=\"bo-seo-description\">" . wp_kses_post($generated) . "</p>\n";
+        $shortcode_pattern = '/(\[carburante_distributor\s+impianto_id="?\d+"?\])/i';
+        if (preg_match($shortcode_pattern, $content, $m, PREG_OFFSET_CAPTURE)) {
+            $pos = $m[0][1] + strlen($m[0][0]);
+            $head = substr($content, 0, $pos);
+            $content = rtrim($head) . "\n\n" . $new_block;
+        } else {
+            $content = rtrim($content) . "\n\n" . $new_block;
+        }
+        wp_update_post(array('ID' => $post_id,'post_content' => wp_slash($content)));
     }
 
     private function log_progress($message) {
@@ -120,6 +273,7 @@ class BenzinaOggiPlugin {
         add_settings_field('onesignal_api_key', 'OneSignal REST API Key', [$this, 'field_onesignal_api_key'], 'benzinaoggi', 'benzinaoggi_section');
         add_settings_field('webhook_secret', 'Webhook Secret', [$this, 'field_webhook_secret'], 'benzinaoggi', 'benzinaoggi_section');
         add_settings_field('api_secret', 'API Bearer Secret', [$this, 'field_api_secret'], 'benzinaoggi', 'benzinaoggi_section');
+        add_settings_field('gemini_api_key', 'Google Gemini API Key', [$this, 'field_gemini_api_key'], 'benzinaoggi', 'benzinaoggi_section');
 
         // Sezione per il logo
         add_settings_section('benzinaoggi_logo_section', __('Logo e Branding', 'benzinaoggi'), function() {
@@ -138,7 +292,8 @@ class BenzinaOggiPlugin {
             'onesignal_api_key' => '',
             'webhook_secret' => '',
             'api_secret' => '',
-            'logo_url' => ''
+            'logo_url' => '',
+            'gemini_api_key' => ''
         ];
         $opts = get_option(self::OPTION_NAME, []);
         return wp_parse_args($opts, $defaults);
@@ -163,6 +318,12 @@ class BenzinaOggiPlugin {
     public function field_api_secret() {
         $opts = $this->get_options();
         echo '<input type="text" name="'.self::OPTION_NAME.'[api_secret]" value="'.esc_attr($opts['api_secret']).'" class="regular-text" placeholder="Bearer per API Vercel" />';
+    }
+
+    public function field_gemini_api_key() {
+        $opts = $this->get_options();
+        echo '<input type="password" name="'.self::OPTION_NAME.'[gemini_api_key]" value="'.esc_attr($opts['gemini_api_key']).'" class="regular-text" placeholder="AIza..." />';
+        echo '<p class="description">Chiave API di Google Gemini usata per generare descrizioni SEO.</p>';
     }
 
     public function field_logo_url() {
@@ -267,6 +428,7 @@ class BenzinaOggiPlugin {
                 <a href="?page=benzinaoggi&tab=import" class="nav-tab <?php echo $active_tab == 'import' ? 'nav-tab-active' : ''; ?>">Importa Dati</a>
                 <a href="?page=benzinaoggi&tab=notifications" class="nav-tab <?php echo $active_tab == 'notifications' ? 'nav-tab-active' : ''; ?>">Notifiche</a>
                 <a href="?page=benzinaoggi&tab=pages" class="nav-tab <?php echo $active_tab == 'pages' ? 'nav-tab-active' : ''; ?>">Pagine Template</a>
+                <a href="?page=benzinaoggi&tab=seo" class="nav-tab <?php echo $active_tab == 'seo' ? 'nav-tab-active' : ''; ?>">SEO</a>
             </nav>
             
             <?php
@@ -291,6 +453,15 @@ class BenzinaOggiPlugin {
                     do_settings_sections('benzinaoggi');
                     submit_button();
                     ?>
+                </form>
+            <?php elseif ($active_tab == 'seo'): ?>
+                <h2>Generazione SEO (Gemini)</h2>
+                <p>Genera la descrizione SEO per tutte le pagine pubblicate. Usa il titolo come prompt.</p>
+                <?php $action = admin_url('admin-post.php'); ?>
+                <form method="post" action="<?php echo esc_url($action); ?>" onsubmit="return confirm('Generare la descrizione per tutte le pagine?');">
+                    <input type="hidden" name="action" value="benzinaoggi_generate_seo_all" />
+                    <?php wp_nonce_field('bo_generate_seo_all'); ?>
+                    <button type="submit" class="button button-primary">Genera per tutte le pagine</button>
                 </form>
                 <h2>Shortcode</h2>
                 <code>[carburanti_map]</code>
@@ -629,6 +800,236 @@ class BenzinaOggiPlugin {
         return $template;
     }
 
+    /**
+     * Aggiunge azione riga "Genera descrizione SEO" nella lista Pagine
+     */
+    public function add_generate_seo_row_action($actions, $post) {
+        if ($post->post_type !== 'page' || !current_user_can('edit_post', $post->ID)) return $actions;
+        $url = wp_nonce_url(admin_url('admin-post.php?action=benzinaoggi_generate_seo&post_id=' . intval($post->ID)), 'bo_generate_seo_' . $post->ID);
+        $icon = '<span class="dashicons dashicons-edit-page" style="vertical-align: text-bottom;"></span>';
+        $actions['bo_generate_seo'] = '<a href="' . esc_url($url) . '" title="Genera descrizione SEO">' . $icon . ' Genera descrizione</a>';
+        return $actions;
+    }
+
+    /**
+     * Handler: genera descrizione SEO con Gemini e la aggiunge al contenuto della pagina
+     */
+    public function handle_generate_seo_description() {
+        if (!current_user_can('edit_pages')) wp_die('Not allowed');
+        $post_id = isset($_GET['post_id']) ? intval($_GET['post_id']) : 0;
+        if (!$post_id) wp_die('Post non valido');
+        check_admin_referer('bo_generate_seo_' . $post_id);
+
+        $opts = $this->get_options();
+        $api_key = trim($opts['gemini_api_key'] ?? '');
+        if (!$api_key) {
+            wp_die('Configura prima la Google Gemini API Key nelle impostazioni BenzinaOggi.');
+        }
+
+        $post = get_post($post_id);
+        if (!$post || $post->post_type !== 'page') wp_die('Pagina non trovata');
+
+        $site_name = get_bloginfo('name');
+        $title = get_the_title($post_id);
+        $permalink = get_permalink($post_id);
+
+        $prompt = sprintf(
+            "Agisci come copywriter SEO. In italiano, genera SOLO un JSON con due campi: \n".
+            "- meta: UNA sola frase completa (<=156 caratteri), naturale e chiara, che termina con un punto. Evita keyword stuffing, non citare il brand o il sito, non promettere 'tempo reale'. Inserisci il nome città se presente nel titolo.\n".
+            "- html: un blocco HTML BREVE e UNICO che non usi <h1> (usa al massimo <h2>/<h3>), includa 1-2 paragrafi + un elenco puntato conciso (3 voci), con 2-3 emoji pertinenti. Niente ripetizioni ovvie del titolo e nessun brand.\n".
+            "Vincoli: usa solo informazioni deducibili dal titolo. Non inventare dati specifici. Non ripetere testualmente il campo 'meta'.\n".
+            "Contesto: Titolo pagina: '%s' — URL: %s. \n".
+            "Rispondi SOLO con JSON: {\"meta\":\"...\",\"html\":\"...\"} senza testo extra.",
+            $title,
+            $permalink
+        );
+
+        // 1) Scopri dinamicamente un modello disponibile (prefer "flash" gratuito)
+        $chosen_model = get_transient('bo_gemini_model');
+        if (!$chosen_model) {
+            $models_url = add_query_arg('key', rawurlencode($api_key), 'https://generativelanguage.googleapis.com/v1/models');
+            $list = wp_remote_get($models_url, [ 'timeout' => 20 ]);
+            if (!is_wp_error($list) && wp_remote_retrieve_response_code($list) === 200) {
+                $j = json_decode(wp_remote_retrieve_body($list), true);
+                $models = isset($j['models']) && is_array($j['models']) ? $j['models'] : [];
+                // Filtra modelli che supportano generateContent
+                $eligible = array_filter($models, function($m){
+                    if (empty($m['name'])) return false;
+                    $methods = isset($m['supportedGenerationMethods']) ? $m['supportedGenerationMethods'] : [];
+                    return is_array($methods) && in_array('generateContent', $methods, true);
+                });
+                // Preferisci quelli con "flash" nel nome
+                usort($eligible, function($a, $b){
+                    $an = strtolower($a['name']); $bn = strtolower($b['name']);
+                    $aFlash = strpos($an, 'flash') !== false ? 1 : 0;
+                    $bFlash = strpos($bn, 'flash') !== false ? 1 : 0;
+                    if ($aFlash !== $bFlash) return $bFlash - $aFlash; // flash prima
+                    // poi per versione più alta
+                    return strcmp($bn, $an);
+                });
+                if (!empty($eligible)) {
+                    // I nomi arrivano come "models/gemini-1.5-flash" → prendi la parte dopo "models/"
+                    $full = $eligible[0]['name'];
+                    $parts = explode('/', $full);
+                    $chosen_model = end($parts);
+                }
+            }
+            if (!$chosen_model) {
+                // Fallback statico a un modello comunemente disponibile
+                $chosen_model = 'gemini-1.5-flash';
+            }
+            set_transient('bo_gemini_model', $chosen_model, HOUR_IN_SECONDS);
+        }
+        $endpoint_generate = add_query_arg('key', rawurlencode($api_key), 'https://generativelanguage.googleapis.com/v1/models/' . rawurlencode($chosen_model) . ':generateContent');
+        $body = array(
+            'contents' => array(
+                array(
+                    'role' => 'user',
+                    'parts' => array(
+                        array('text' => $prompt)
+                    )
+                )
+            )
+        );
+
+        $response = wp_remote_post($endpoint_generate, array(
+            'timeout' => 30,
+            'headers' => array('Content-Type' => 'application/json'),
+            'body' => wp_json_encode($body)
+        ));
+
+        if (is_wp_error($response)) {
+            wp_die('Errore chiamata Gemini: ' . esc_html($response->get_error_message()));
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $json = json_decode(wp_remote_retrieve_body($response), true);
+        if ($code < 200 || $code >= 300) {
+            $err = isset($json['error']['message']) ? $json['error']['message'] : 'Unknown error';
+            // se fallisce, invalida la cache modello e suggerisci di riprovare
+            delete_transient('bo_gemini_model');
+            wp_die('Gemini ha risposto con errore: ' . esc_html($err) . ' (modello: ' . esc_html($chosen_model) . '). Riprova.');
+        }
+
+        // Estrai meta/html dal testo del modello (atteso SOLO JSON). Evita qualunque leak di JSON/markup nel campo meta.
+        $modelText = !empty($json['candidates'][0]['content']['parts'][0]['text']) ? trim($json['candidates'][0]['content']['parts'][0]['text']) : '';
+        $genMeta = '';
+        $genHtml = '';
+        if ($modelText) {
+            // Prova parsing rigoroso: isola il primo blocco JSON se presenti testi extra
+            $start = strpos($modelText, '{');
+            $end = strrpos($modelText, '}');
+            $jsonSlice = ($start !== false && $end !== false && $end > $start) ? substr($modelText, $start, $end - $start + 1) : $modelText;
+            $try = json_decode($jsonSlice, true);
+            if (is_array($try)) {
+                $genMeta = isset($try['meta']) ? trim((string)$try['meta']) : '';
+                $genHtml = isset($try['html']) ? (string)$try['html'] : '';
+            }
+        }
+        // Fallback prudenti
+        if (!$genMeta && $genHtml) {
+            $genMeta = wp_strip_all_tags($genHtml);
+        }
+        if (!$genMeta && $modelText) {
+            // Estrai solo testo (senza braces/keys) come ultima risorsa
+            $tmp = preg_replace('/"?meta"?\s*:\s*|"?html"?\s*:\s*/i', '', $modelText);
+            $tmp = preg_replace('/[{}\[\]]/', ' ', $tmp);
+            $genMeta = trim(preg_replace('/\s+/', ' ', wp_strip_all_tags($tmp)));
+        }
+        // Assicurati che meta sia sempre plain text
+        $genMeta = trim(preg_replace('/\s+/', ' ', wp_strip_all_tags((string)$genMeta)));
+        // HTML: se vuoto, crea un paragrafo semplice
+        if (!$genHtml) {
+            $genHtml = '<p>' . esc_html($genMeta) . '</p>';
+        }
+        if (!$genMeta && !$genHtml) {
+            wp_die('Nessun contenuto generato da Gemini.');
+        }
+
+        // Non modificare il contenuto. Salva come excerpt e in meta dedicato.
+        // Prepara versione meta (max 156 caratteri, testo piano)
+        // Rifinitura meta: massimizza senso compiuto entro 156
+        $plain = trim(preg_replace('/\s+/', ' ', wp_strip_all_tags($genMeta)));
+        $metaDesc = $this->smart_trim_sentence($plain, 156);
+
+        $update = wp_update_post(array(
+            'ID' => $post_id,
+            'post_excerpt' => wp_slash($metaDesc)
+        ), true);
+        if (is_wp_error($update)) {
+            wp_die('Errore nell\'aggiornamento della pagina (excerpt): ' . esc_html($update->get_error_message()));
+        }
+        update_post_meta($post_id, 'bo_seo_description', wp_kses_post($genHtml));
+        // Aggiorna meta description per plugin SEO comuni (se presenti) con versione troncata
+        update_post_meta($post_id, '_yoast_wpseo_metadesc', $metaDesc);
+        update_post_meta($post_id, '_rank_math_description', $metaDesc);
+        update_post_meta($post_id, '_aioseo_description', $metaDesc);
+
+        // Aggiorna anche il contenuto della pagina:
+        // - Se trova il shortcode [carburante_distributor impianto_id=...] sostituisce tutto ciò che segue con il blocco SEO
+        // - Altrimenti aggiunge in coda
+        $content = (string) $post->post_content;
+        $uniqueMarker = '<!-- SEO: Generated by Gemini | post '.intval($post_id).' | '.esc_html(current_time('mysql')).' -->';
+        $new_block = $uniqueMarker . "\n" . (string) wp_kses_post($genHtml) . "\n";
+        $shortcode_pattern = '/(\[carburante_distributor\s+impianto_id="?\d+"?\])/i';
+        if (preg_match($shortcode_pattern, $content, $m, PREG_OFFSET_CAPTURE)) {
+            $pos = $m[0][1] + strlen($m[0][0]);
+            $head = substr($content, 0, $pos);
+            $content = rtrim($head) . "\n\n" . $new_block;
+        } else {
+            $content = rtrim($content) . "\n\n" . $new_block;
+        }
+        $update2 = wp_update_post(array(
+            'ID' => $post_id,
+            'post_content' => wp_slash($content)
+        ), true);
+        if (is_wp_error($update2)) {
+            wp_die('Errore nell\'aggiornamento del contenuto: ' . esc_html($update2->get_error_message()));
+        }
+
+        // Redirect back to edit page con messaggio
+        wp_redirect(add_query_arg(array('updated' => 'true', 'bo_seo' => 'saved'), get_edit_post_link($post_id, '')));
+        exit;
+    }
+
+    /**
+     * Meta box nel post edit per generare descrizione SEO
+     */
+    public function register_seo_metabox() {
+        add_meta_box(
+            'bo_seo_gemini_box',
+            'BenzinaOggi – Descrizione SEO (Gemini)',
+            [$this, 'render_seo_metabox'],
+            'page',
+            'side',
+            'high'
+        );
+    }
+
+    public function render_seo_metabox($post) {
+        if (!current_user_can('edit_post', $post->ID)) {
+            echo '<p>Permessi insufficienti.</p>';
+            return;
+        }
+        $opts = $this->get_options();
+        $has_key = !empty($opts['gemini_api_key']);
+        $desc = get_post_meta($post->ID, 'bo_seo_description', true);
+        $nonce = wp_create_nonce('bo_generate_seo_' . $post->ID);
+        $action_url = admin_url('admin-post.php?action=benzinaoggi_generate_seo&post_id=' . intval($post->ID) . '&_wpnonce=' . $nonce);
+        echo '<div class="bo-seo-box">';
+        if (!$has_key) {
+            echo '<p><strong>API Key mancante.</strong><br/>Imposta la <em>Google Gemini API Key</em> in Impostazioni → Benzina Oggi.</p>';
+        } else {
+            echo '<p>Genera automaticamente una descrizione SEO basata sul titolo della pagina.</p>';
+            echo '<p><a href="' . esc_url($action_url) . '" class="button button-primary" style="width:100%">Genera descrizione</a></p>';
+        }
+        if (!empty($desc)) {
+            echo '<p><em>Ultima descrizione:</em></p>';
+            echo '<div style="max-height:120px; overflow:auto; padding:8px; background:#f6f7f7; border:1px solid #dcdcde;">' . wp_kses_post($desc) . '</div>';
+        }
+        echo '</div>';
+    }
+
     public function cron_daily_price_update() {
         $this->log_progress('Avvio aggiornamento prezzi giornaliero con rilevamento variazioni...');
         
@@ -639,17 +1040,14 @@ class BenzinaOggiPlugin {
         }
         
         try {
-            // STEP 1: Aggiorna prezzi usando API MISE diretta (sempre)
-            $this->log_progress('STEP 1: Aggiornamento prezzi (sync-mise-prices)...');
-            // Esegui aggiornamento MISE per TUTTI i distributori usando il nuovo endpoint
-            $response = wp_remote_post($api_base . '/api/sync-mise-prices?all=true', [
+            // STEP 1: Aggiorna prezzi (ALL) usando endpoint cron che pagina tutti
+            $this->log_progress('STEP 1: Aggiornamento prezzi (update-prices-daily all=true)...');
+            $response = wp_remote_get($api_base . '/api/cron/update-prices-daily?all=true&force=true', [
                 'timeout' => 300, // 5 minuti timeout
                 'headers' => [
                     'Authorization' => 'Bearer ' . ($this->get_options()['api_secret'] ?? ''),
-                    'Content-Type' => 'application/json',
                     'User-Agent' => 'BenzinaOggi-WordPress/1.0'
-                ],
-                'body' => wp_json_encode([ 'force' => true ])
+                ]
             ]);
             
             if (is_wp_error($response)) {
@@ -665,7 +1063,7 @@ class BenzinaOggiPlugin {
                 $results = $data['results'] ?? [];
                 
                 $this->log_progress(sprintf(
-                    'Aggiornamento MISE completato: %d processati, %d aggiornati, %d creati',
+                    'Aggiornamento completato: %d processati, %d aggiornati, %d creati',
                     $summary['totalProcessed'] ?? 0,
                     $summary['totalUpdated'] ?? 0,
                     $summary['totalCreated'] ?? 0
