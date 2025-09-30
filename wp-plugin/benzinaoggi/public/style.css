@@ -115,6 +115,76 @@ nav[aria-label*="breadcrumb"] {
   display: none !important;
 }
 
+/* Global bo-header styles */
+.bo-header {
+  background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+  color: white;
+  padding: 16px 0;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.bo-header .bo-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bo-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bo-logo-img {
+  height: 40px;
+  width: auto;
+}
+
+.bo-logo-text {
+  font-size: 24px;
+  font-weight: 700;
+  color: white;
+}
+
+.bo-nav {
+  display: flex;
+  gap: 24px;
+}
+
+.bo-nav-link {
+  color: white;
+  text-decoration: none;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 6px;
+  transition: background-color 0.2s;
+}
+
+.bo-nav-link:hover,
+.bo-nav-link.active {
+  background-color: rgba(255,255,255,0.2);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .bo-header .bo-container {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .bo-nav {
+    gap: 16px;
+  }
+  
+  .bo-logo-text {
+    font-size: 20px;
+  }
+}
+
 /* Ensure spacing handled by theme; no custom bo-header spacing */
 
 /* Detail container (remove blue hero) */
