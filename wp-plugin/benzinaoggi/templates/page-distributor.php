@@ -37,15 +37,30 @@ $logo_url = $plugin->get_logo_url();
 get_header();
 ?>
 
-<div class="bo-container">
-    <a href="<?php echo esc_url( home_url('/benzinaoggi-risultati/') ); ?>" class="bo-back" onclick="if(document.referrer){event.preventDefault(); window.history.back();}" style="display:inline-flex;margin:8px 0 16px 0;">
-        <span>←</span>
-        <span style="margin-left:8px">Torna ai risultati</span>
-    </a>
-    
+<div class="benzinaoggi-home">
+    <!-- Hero Section -->
+    <section class="bo-hero">
+        <div class="bo-container">
+            <div class="bo-hero-content">
+                <h1 class="bo-hero-title">Dettagli Distributore</h1>
+                <p class="bo-hero-subtitle">Informazioni e prezzi aggiornati</p>
+                
+                <!-- Bottone torna ai risultati -->
+                <div class="bo-search-form">
+                    <a href="<?php echo esc_url( home_url('/benzinaoggi-risultati/') ); ?>" class="bo-back" onclick="if(document.referrer){event.preventDefault(); window.history.back();}">
+                        <span>←</span>
+                        <span>Torna ai risultati</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- Contenuto principale -->
-    <div id="bo-distributor-content" class="bo-loading">
-        <p>Caricamento informazioni distributore...</p>
+    <div class="bo-container">
+        <div id="bo-distributor-content" class="bo-loading">
+            <p>Caricamento informazioni distributore...</p>
+        </div>
     </div>
 </div>
 

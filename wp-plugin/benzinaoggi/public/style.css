@@ -169,6 +169,59 @@ nav[aria-label*="breadcrumb"] {
   background-color: rgba(255,255,255,0.2);
 }
 
+/* Hero section styles */
+.bo-hero {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  padding: 60px 0;
+  text-align: center;
+}
+
+.bo-hero-content {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.bo-hero-title {
+  font-size: 48px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 16px;
+  line-height: 1.2;
+}
+
+.bo-hero-subtitle {
+  font-size: 20px;
+  color: #64748b;
+  margin-bottom: 40px;
+}
+
+.bo-search-form {
+  background: white;
+  border-radius: 12px;
+  padding: 30px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.bo-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #3b82f6;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: background-color 0.2s;
+}
+
+.bo-back:hover {
+  background: #2563eb;
+  color: white;
+}
+
 /* Mobile responsive */
 @media (max-width: 768px) {
   .bo-header .bo-container {
@@ -183,12 +236,21 @@ nav[aria-label*="breadcrumb"] {
   .bo-logo-text {
     font-size: 20px;
   }
+  
+  .bo-hero-title {
+    font-size: 32px;
+  }
+  
+  .bo-hero-subtitle {
+    font-size: 18px;
+  }
+  
+  .bo-search-form {
+    padding: 20px;
+  }
 }
 
 /* Ensure spacing handled by theme; no custom bo-header spacing */
-
-/* Detail container (remove blue hero) */
-.bo-hero{ background: transparent; color: inherit; padding: 0; }
 .bo-hero .bo-subtitle{ color:#444; }
 .bo-container{ max-width:1200px; margin:0 auto; padding:0 16px; }
 .bo-section-title{ margin:0 0 8px 0; font-size:20px; color:#2c5aa0; }
