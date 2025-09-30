@@ -164,7 +164,7 @@
   function handleSearch() {
     const location = elements.locationInput?.value.trim() || '';
     const fuel = elements.fuelSelect?.value || '';
-    const radius = parseInt(elements.radiusSelect?.value) || 10;
+    const radius = parseInt(elements.radiusSelect?.value) || 100;
 
     state.currentFilters = { location, fuel, radius };
     state.pagination.currentPage = 1; // Reset alla prima pagina

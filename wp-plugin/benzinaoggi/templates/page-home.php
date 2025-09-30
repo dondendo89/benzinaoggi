@@ -6,25 +6,6 @@ Template Name: BenzinaOggi Home
 get_header(); ?>
 
 <div class="benzinaoggi-home">
-    <!-- Header con logo e navigazione -->
-    <header class="bo-header">
-        <div class="bo-container">
-            <div class="bo-logo">
-                <?php 
-                $plugin = new BenzinaOggiPlugin();
-                $logo_url = $plugin->get_logo_url();
-                ?>
-                <img src="<?php echo esc_url($logo_url); ?>" alt="BenzinaOggi" class="bo-logo-img">
-                <span class="bo-logo-text">BenzinaOggi.it</span>
-            </div>
-            <nav class="bo-nav">
-                <a href="#cerca" class="bo-nav-link active">Cerca</a>
-                <a href="#prezzi" class="bo-nav-link">Prezzi</a>
-                <a href="#notizie" class="bo-nav-link">Notizie</a>
-            </nav>
-        </div>
-    </header>
-
     <!-- Hero Section -->
     <section class="bo-hero">
         <div class="bo-container">
