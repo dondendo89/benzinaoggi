@@ -168,7 +168,7 @@ class BenzinaOggiPlugin {
     }
 
     /**
-     * Refactor: logica di generazione riusabile programmaticamente
+     * Refactor: logica di generazione riusabile programmaticamente con retry e caching migliorato
      */
     private function generate_seo_for_post($post_id) {
         $post_id = intval($post_id);
@@ -177,6 +177,13 @@ class BenzinaOggiPlugin {
         if (!$api_key) throw new Exception('Missing Gemini API Key');
         $post = get_post($post_id);
         if (!$post || $post->post_type !== 'page') throw new Exception('Invalid post');
+
+        // Controlla se la pagina ha già una descrizione SEO recente (meno di 7 giorni)
+        $last_seo_update = get_post_meta($post_id, 'bo_seo_last_update', true);
+        if ($last_seo_update && (time() - strtotime($last_seo_update)) < (7 * DAY_IN_SECONDS)) {
+            // Skip se aggiornata di recente
+            return;
+        }
 
         $site_name = get_bloginfo('name');
         $title = get_the_title($post_id);
@@ -188,7 +195,7 @@ class BenzinaOggiPlugin {
             $permalink
         );
 
-        // Model discovery (riusa la stessa logica dell'handler)
+        // Model discovery con cache più lungo
         $chosen_model = get_transient('bo_gemini_model');
         if (!$chosen_model) {
             $models_url = add_query_arg('key', rawurlencode($api_key), 'https://generativelanguage.googleapis.com/v1/models');
@@ -213,16 +220,71 @@ class BenzinaOggiPlugin {
                 }
             }
             if (!$chosen_model) $chosen_model = 'gemini-1.5-flash';
-            set_transient('bo_gemini_model', $chosen_model, HOUR_IN_SECONDS);
+            set_transient('bo_gemini_model', $chosen_model, 6 * HOUR_IN_SECONDS); // Cache più lungo
         }
-        $endpoint = add_query_arg('key', rawurlencode($api_key), 'https://generativelanguage.googleapis.com/v1/models/' . rawurlencode($chosen_model) . ':generateContent');
-        $body = array('contents' => array(array('role' => 'user','parts' => array(array('text' => $prompt)))));
-        $resp = wp_remote_post($endpoint, array('timeout' => 30,'headers' => array('Content-Type' => 'application/json'),'body' => wp_json_encode($body)));
-        if (is_wp_error($resp)) throw new Exception('Gemini error');
-        if (wp_remote_retrieve_response_code($resp) < 200 || wp_remote_retrieve_response_code($resp) >= 300) throw new Exception('Gemini HTTP error');
-        $json = json_decode(wp_remote_retrieve_body($resp), true);
-        $generated = !empty($json['candidates'][0]['content']['parts'][0]['text']) ? trim($json['candidates'][0]['content']['parts'][0]['text']) : '';
-        if (!$generated) throw new Exception('No text');
+        
+        // Retry logic per chiamate API
+        $max_retries = 3;
+        $generated = '';
+        
+        for ($retry = 0; $retry < $max_retries; $retry++) {
+            try {
+                $endpoint = add_query_arg('key', rawurlencode($api_key), 'https://generativelanguage.googleapis.com/v1/models/' . rawurlencode($chosen_model) . ':generateContent');
+                $body = array('contents' => array(array('role' => 'user','parts' => array(array('text' => $prompt)))));
+                
+                $resp = wp_remote_post($endpoint, array(
+                    'timeout' => 45, // Timeout più lungo
+                    'headers' => array('Content-Type' => 'application/json'),
+                    'body' => wp_json_encode($body)
+                ));
+                
+                if (is_wp_error($resp)) {
+                    $error_msg = $resp->get_error_message();
+                    if ($retry < $max_retries - 1) {
+                        sleep(pow(2, $retry)); // Exponential backoff
+                        continue;
+                    }
+                    throw new Exception('Gemini error after retries: ' . $error_msg);
+                }
+                
+                $response_code = wp_remote_retrieve_response_code($resp);
+                if ($response_code === 429) { // Rate limit
+                    if ($retry < $max_retries - 1) {
+                        sleep(5 + ($retry * 2)); // Pausa più lunga per rate limit
+                        continue;
+                    }
+                    throw new Exception('Rate limit exceeded after retries');
+                }
+                
+                if ($response_code < 200 || $response_code >= 300) {
+                    if ($retry < $max_retries - 1) {
+                        sleep(pow(2, $retry));
+                        continue;
+                    }
+                    throw new Exception('Gemini HTTP error: ' . $response_code);
+                }
+                
+                $json = json_decode(wp_remote_retrieve_body($resp), true);
+                $generated = !empty($json['candidates'][0]['content']['parts'][0]['text']) ? trim($json['candidates'][0]['content']['parts'][0]['text']) : '';
+                
+                if (!$generated) {
+                    if ($retry < $max_retries - 1) {
+                        sleep(1);
+                        continue;
+                    }
+                    throw new Exception('No text generated after retries');
+                }
+                
+                // Successo, esci dal loop
+                break;
+                
+            } catch (Exception $e) {
+                if ($retry === $max_retries - 1) {
+                    throw $e; // Re-throw l'ultima eccezione
+                }
+                sleep(pow(2, $retry));
+            }
+        }
 
         $plain = trim(preg_replace('/\s+/', ' ', wp_strip_all_tags($generated)));
         $limit = 100;
@@ -248,6 +310,9 @@ class BenzinaOggiPlugin {
             $content = rtrim($content) . "\n\n" . $new_block;
         }
         wp_update_post(array('ID' => $post_id,'post_content' => wp_slash($content)));
+        
+        // Update timestamp to track when SEO was last generated
+        update_post_meta($post_id, 'bo_seo_last_updated', current_time('timestamp'));
     }
 
     private function log_progress($message) {
@@ -258,6 +323,30 @@ class BenzinaOggiPlugin {
             $log = array_slice($log, -500);
         }
         update_option('benzinaoggi_sync_log', $log, false);
+    }
+    
+    /**
+     * Converte il limite di memoria PHP in bytes
+     */
+    public function get_memory_limit_bytes() {
+        $memory_limit = ini_get('memory_limit');
+        if ($memory_limit == -1) {
+            return PHP_INT_MAX; // Memoria illimitata
+        }
+        
+        $unit = strtolower(substr($memory_limit, -1));
+        $value = (int) $memory_limit;
+        
+        switch ($unit) {
+            case 'g':
+                return $value * 1024 * 1024 * 1024;
+            case 'm':
+                return $value * 1024 * 1024;
+            case 'k':
+                return $value * 1024;
+            default:
+                return $value;
+        }
     }
 
     public function add_admin_menu() {
@@ -1286,43 +1375,139 @@ class BenzinaOggiPlugin {
         }
         
         @ignore_user_abort(true);
-        @set_time_limit(1800); // 30 minuti timeout
-        @ini_set('memory_limit', '512M');
+        @set_time_limit(300); // 5 minuti timeout per batch
+        @ini_set('memory_limit', '256M');
         
-        // Ottieni tutte le pagine pubblicate
-        $pages = get_posts([
-            'post_type' => 'page',
-            'post_status' => 'publish',
-            'numberposts' => -1,
-            'fields' => 'ids'
-        ]);
+        // Controlla se c'è un batch in corso
+        $batch_state = get_option('benzinaoggi_seo_batch_state', []);
         
-        $total = count($pages);
-        $processed = 0;
-        $errors = 0;
+        if (empty($batch_state)) {
+            // Inizia nuovo batch - ottieni tutte le pagine
+            $pages = get_posts([
+                'post_type' => 'page',
+                'post_status' => 'publish',
+                'numberposts' => -1,
+                'fields' => 'ids'
+            ]);
+            
+            $batch_state = [
+                'pages' => $pages,
+                'total' => count($pages),
+                'processed' => 0,
+                'errors' => 0,
+                'current_batch' => 0,
+                'started_at' => current_time('mysql')
+            ];
+            
+            update_option('benzinaoggi_seo_batch_state', $batch_state, false);
+            $this->log_progress("Iniziato nuovo batch SEO. Trovate {$batch_state['total']} pagine da processare");
+        }
         
-        $this->log_progress("Trovate {$total} pagine da processare");
+        // Configurazione batch dinamica basata su memoria e numero di pagine
+        $memory_limit = $this->get_memory_limit_bytes();
+        $available_memory = $memory_limit - memory_get_usage(true);
+        $total_pages = $batch_state['total'];
         
-        foreach ($pages as $page_id) {
+        // Adatta batch size in base alla memoria disponibile e numero totale di pagine
+        if ($available_memory < (50 * 1024 * 1024)) { // Meno di 50MB
+            $batch_size = 5;
+            $max_execution_time = 180; // 3 minuti
+        } elseif ($total_pages > 1000) { // Molte pagine
+            $batch_size = 8;
+            $max_execution_time = 200; // 3.3 minuti
+        } else {
+            $batch_size = 10; // Default
+            $max_execution_time = 240; // 4 minuti
+        }
+        
+        $start_time = time();
+        $this->log_progress("Memoria disponibile: " . round($available_memory / 1024 / 1024, 2) . "MB, Batch size: {$batch_size}");
+        
+        $pages = $batch_state['pages'];
+        $total = $batch_state['total'];
+        $processed = $batch_state['processed'];
+        $errors = $batch_state['errors'];
+        $current_batch = $batch_state['current_batch'];
+        
+        $batch_start_index = $current_batch * $batch_size;
+        $batch_end_index = min($batch_start_index + $batch_size, $total);
+        
+        $this->log_progress("Processando batch " . ($current_batch + 1) . " - pagine " . ($batch_start_index + 1) . "-{$batch_end_index} di {$total}");
+        
+        // Processa il batch corrente
+        for ($i = $batch_start_index; $i < $batch_end_index; $i++) {
+            // Controlla timeout
+            if ((time() - $start_time) > $max_execution_time) {
+                $this->log_progress("Timeout raggiunto, interrompo batch corrente");
+                break;
+            }
+            
+            // Controlla memoria disponibile
+            $current_memory = memory_get_usage(true);
+            $memory_usage_percent = ($current_memory / $memory_limit) * 100;
+            
+            if ($memory_usage_percent > 85) { // Se uso più dell'85% della memoria
+                $this->log_progress("Memoria quasi esaurita (" . round($memory_usage_percent, 1) . "%), interrompo batch corrente");
+                break;
+            }
+            
+            $page_id = $pages[$i];
+            
             try {
                 $this->generate_seo_for_post($page_id);
                 $processed++;
                 
-                // Log progresso ogni 10 pagine
-                if ($processed % 10 === 0) {
-                    $this->log_progress("Processate {$processed}/{$total} pagine...");
-                }
-                
-                // Piccola pausa per evitare rate limiting
-                usleep(100000); // 0.1 secondi
+                // Pausa più lunga per evitare rate limiting
+                usleep(500000); // 0.5 secondi tra le chiamate
                 
             } catch (Exception $e) {
                 $errors++;
                 $this->log_progress("ERRORE pagina ID {$page_id}: " . $e->getMessage());
+                
+                // Pausa più lunga in caso di errore
+                sleep(2);
+            }
+            
+            // Aggiorna stato ogni 5 pagine
+            if (($processed % 5) === 0) {
+                $batch_state['processed'] = $processed;
+                $batch_state['errors'] = $errors;
+                update_option('benzinaoggi_seo_batch_state', $batch_state, false);
             }
         }
         
-        $this->log_progress("Generazione SEO settimanale completata. Processate: {$processed}, Errori: {$errors}");
+        // Aggiorna stato finale del batch
+        $batch_state['processed'] = $processed;
+        $batch_state['errors'] = $errors;
+        $batch_state['current_batch'] = $current_batch + 1;
+        
+        // Controlla se abbiamo finito
+        if ($processed >= $total) {
+            // Batch completato
+            delete_option('benzinaoggi_seo_batch_state');
+            $this->log_progress("Generazione SEO settimanale COMPLETATA. Processate: {$processed}/{$total}, Errori: {$errors}");
+            
+            // Salva statistiche finali
+            update_option('benzinaoggi_last_seo_generation', [
+                'completed_at' => current_time('mysql'),
+                'total_pages' => $total,
+                'processed' => $processed,
+                'errors' => $errors,
+                'duration' => time() - strtotime($batch_state['started_at'])
+            ], false);
+            
+        } else {
+            // Programma il prossimo batch
+            update_option('benzinaoggi_seo_batch_state', $batch_state, false);
+            
+            // Schedula il prossimo batch tra 2 minuti
+            if (!wp_next_scheduled('benzinaoggi_weekly_seo_generation')) {
+                wp_schedule_single_event(time() + 120, 'benzinaoggi_weekly_seo_generation');
+            }
+            
+            $remaining = $total - $processed;
+            $this->log_progress("Batch completato. Processate: {$processed}/{$total}, Rimanenti: {$remaining}. Prossimo batch in 2 minuti.");
+        }
     }
 
     private function next_run_5am() {
