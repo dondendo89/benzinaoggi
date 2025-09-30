@@ -100,16 +100,18 @@ footer .powered-by{
 /* Distributor pages: hide duplicate theme texts above our bo-header */
 /* Removed hiding of theme branding/titles to ensure only theme header shows */
 
-/* Global: hide default page titles/breadcrumbs above our blue header */
-.entry-header,
-.entry-title,
-.wp-block-post-title,
+/* Hide breadcrumbs but keep page titles for theme consistency */
 .breadcrumbs,
 .rank-math-breadcrumb,
 .yoast-breadcrumb,
-nav[aria-label*="breadcrumb"],
-.site-content > .page-header,
-.page .page-header {
+nav[aria-label*="breadcrumb"] {
+  display: none !important;
+}
+
+/* Hide page title only on distributor pages to avoid duplication */
+.page-template-page-distributor-php .entry-header,
+.page-template-page-distributor-php .entry-title,
+.page-template-page-distributor-php .wp-block-post-title {
   display: none !important;
 }
 
