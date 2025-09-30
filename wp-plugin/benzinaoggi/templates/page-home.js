@@ -59,7 +59,8 @@
 
   // Inizializzazione
   function init() {
-    if (!elements.map) {
+    // Inizializza la mappa solo se l'elemento esiste
+    if (!elements.map && document.getElementById('bo_map')) {
       initMap();
     }
     bindEvents();
@@ -68,8 +69,15 @@
 
   // Inizializza mappa
   function initMap() {
+    // Verifica se l'elemento mappa esiste
+    const mapElement = document.getElementById('bo_map');
+    if (!mapElement) {
+      console.log('Elemento mappa non trovato, skip inizializzazione');
+      return;
+    }
+    
     // Controlla se la mappa è già stata inizializzata
-    if (elements.map || document.getElementById('bo_map')._leaflet_id) {
+    if (elements.map || mapElement._leaflet_id) {
       console.log('Mappa già inizializzata, skip');
       return;
     }

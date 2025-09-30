@@ -93,14 +93,35 @@
   function readUrlParams() {
     const urlParams = new URLSearchParams(window.location.search);
     
+    // Gestisci parametri di posizione
     if (urlParams.get('lat') && urlParams.get('lon')) {
+      // Coordinate utente dirette
       state.userLocation = {
         lat: parseFloat(urlParams.get('lat')),
         lng: parseFloat(urlParams.get('lon'))
       };
       state.currentFilters.location = `${state.userLocation.lat},${state.userLocation.lng}`;
       elements.locationInput.value = 'La mia posizione';
+    } else if (urlParams.get('cityLat') && urlParams.get('cityLng')) {
+      // Coordinate città dalla homepage
+      state.userLocation = {
+        lat: parseFloat(urlParams.get('cityLat')),
+        lng: parseFloat(urlParams.get('cityLng'))
+      };
+      state.currentFilters.location = `${state.userLocation.lat},${state.userLocation.lng}`;
+      
+      // Se c'è anche il parametro location, usalo per il display
+      if (urlParams.get('location')) {
+        elements.locationInput.value = urlParams.get('location');
+      } else {
+        elements.locationInput.value = 'Posizione selezionata';
+      }
+    } else if (urlParams.get('location')) {
+      // Solo nome città/località
+      state.currentFilters.location = urlParams.get('location');
+      elements.locationInput.value = urlParams.get('location');
     } else if (urlParams.get('city')) {
+      // Parametro legacy
       state.currentFilters.location = urlParams.get('city');
       elements.locationInput.value = urlParams.get('city');
     }
