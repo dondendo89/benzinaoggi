@@ -6,7 +6,7 @@
     apiBase: window.BenzinaOggi?.apiBase || '',
     mapCenter: [41.8719, 12.5674],
     defaultZoom: 6,
-    pageSize: 10
+    pageSize: 20
   };
 
   // Elementi DOM
@@ -33,7 +33,8 @@
     },
     page: 1,
     total: 0,
-    pageSize: config.pageSize
+    pageSize: config.pageSize,
+    allResults: [] // Tutti i risultati dall'API
   };
 
   // Inizializza applicazione
@@ -190,10 +191,8 @@
     try {
       showLoading(true);
       
-      const params = new URLSearchParams({
-        limit: String(state.pageSize),
-        page: String(state.page)
-      });
+      const params = new URLSearchParams();
+      // Non inviamo limit per ottenere tutti i risultati
 
       // Priorità: se l'utente ha inserito un nome di città, usa la ricerca per città
       if (state.currentFilters.location && !state.userLocation) {
@@ -220,10 +219,9 @@
       console.log('Risposta API:', data);
 
       if (data.ok) {
-        state.searchResults = Array.isArray(data.distributors) ? data.distributors : [];
-        state.total = Number(data.total || state.searchResults.length || 0);
-        state.page = Number(data.page || state.page);
-        state.pageSize = Number(data.pageSize || state.pageSize);
+        state.allResults = Array.isArray(data.distributors) ? data.distributors : [];
+        state.total = state.allResults.length;
+        state.page = 1; // Reset alla prima pagina
         updateResults();
         updateMap();
       } else {
@@ -241,13 +239,21 @@
   function updateResults() {
     if (!elements.resultsList) return;
     
-    const count = state.searchResults.length;
+    const totalResults = state.allResults.length;
+    const totalPages = Math.max(1, Math.ceil(totalResults / state.pageSize));
+    
+    // Calcola i risultati per la pagina corrente
+    const startIndex = (state.page - 1) * state.pageSize;
+    const endIndex = startIndex + state.pageSize;
+    state.searchResults = state.allResults.slice(startIndex, endIndex);
+    
+    const currentPageCount = state.searchResults.length;
+    
     if (elements.resultsCount) {
-      const totalPages = Math.max(1, Math.ceil((state.total || count) / state.pageSize));
-      elements.resultsCount.textContent = `${count} risultati (pagina ${state.page}/${totalPages})`;
+      elements.resultsCount.textContent = `${totalResults} risultati totali (pagina ${state.page}/${totalPages} - ${currentPageCount} mostrati)`;
     }
     
-    if (count === 0) {
+    if (totalResults === 0) {
       elements.resultsList.innerHTML = `
         <div class="bo-no-results">
           <h3>Nessun distributore trovato</h3>
@@ -281,15 +287,14 @@
     }).join('');
 
     // Pagination controls
-    const totalPages = Math.max(1, Math.ceil((state.total || count) / state.pageSize));
     const canPrev = state.page > 1;
     const canNext = state.page < totalPages;
-    const pagerHtml = `
+    const pagerHtml = totalResults > state.pageSize ? `
       <div class="bo-pager" style="display:flex;gap:8px;align-items:center;justify-content:center;margin:16px 0;">
         <button id="bo-prev" ${canPrev ? '' : 'disabled'} style="padding:6px 10px;">← Precedente</button>
         <span style="font-size:12px;opacity:.8">Pagina ${state.page} di ${totalPages}</span>
         <button id="bo-next" ${canNext ? '' : 'disabled'} style="padding:6px 10px;">Successiva →</button>
-      </div>`;
+      </div>` : '';
 
     elements.resultsList.innerHTML = itemsHtml + pagerHtml;
 
@@ -314,8 +319,20 @@
 
     const prevBtn = document.getElementById('bo-prev');
     const nextBtn = document.getElementById('bo-next');
-    if (prevBtn) prevBtn.addEventListener('click', function(){ if (state.page > 1) { state.page -= 1; searchDistributors(); } });
-    if (nextBtn) nextBtn.addEventListener('click', function(){ const tp = Math.max(1, Math.ceil((state.total || state.searchResults.length)/state.pageSize)); if (state.page < tp) { state.page += 1; searchDistributors(); } });
+    if (prevBtn) prevBtn.addEventListener('click', function(){ 
+      if (state.page > 1) { 
+        state.page -= 1; 
+        updateResults(); // Solo aggiorna i risultati, non richiama l'API
+        updateMap();
+      } 
+    });
+    if (nextBtn) nextBtn.addEventListener('click', function(){ 
+      if (state.page < totalPages) { 
+        state.page += 1; 
+        updateResults(); // Solo aggiorna i risultati, non richiama l'API
+        updateMap();
+      } 
+    });
   }
 
   // Aggiorna mappa
@@ -326,12 +343,12 @@
     elements.markers.forEach(marker => elements.map.removeLayer(marker));
     elements.markers = [];
     
-    if (state.searchResults.length === 0) return;
+    if (state.allResults.length === 0) return;
     
-    // Aggiungi marker per ogni distributore
+    // Aggiungi marker per tutti i distributori (non solo quelli della pagina corrente)
     const bounds = L.latLngBounds();
     
-    state.searchResults.forEach(distributor => {
+    state.allResults.forEach(distributor => {
       if (distributor.latitudine && distributor.longitudine) {
         const marker = L.marker([distributor.latitudine, distributor.longitudine])
           .bindPopup(`
