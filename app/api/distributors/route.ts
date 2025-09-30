@@ -14,8 +14,9 @@ export async function GET(req: NextRequest) {
     const userLon = lonParam ? parseFloat(lonParam) : undefined;
     const radiusKmParam = searchParams.get("radiusKm");
     const radiusKm = radiusKmParam ? parseFloat(radiusKmParam) : undefined;
-    const limitParam = parseInt(searchParams.get("limit") || "50", 10);
-    const limit = Math.min(Math.max(limitParam, 1), 200);
+    // Paginazione: per comune senza tagli arbitrarî; default 100, max elevato
+    const limitParam = parseInt(searchParams.get("limit") || "100", 10);
+    const limit = Math.max(limitParam, 1); // nessun cap artificiale; il DB gestisce
     const page = Math.max(parseInt(searchParams.get("page") || "1", 10), 1);
     const skip = (page - 1) * limit;
 
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
     
     // Only add city filter if city is specified
     if (city) {
-      whereClause.comune = { contains: city, mode: 'insensitive' };
+      whereClause.comune = { equals: city, mode: 'insensitive' };
     }
     
     // Only add brand filter if brand is specified  
@@ -90,7 +91,9 @@ export async function GET(req: NextRequest) {
     }
 
     // Optional server-side radius filter if user lat/lon and radius provided
-    const radiusFiltered = (userLat != null && userLon != null && radiusKm != null)
+    // Se viene specificato il comune, la ricerca è per comune (non per via):
+    // ignora eventuale filtro raggio per rispettare il requisito
+    const radiusFiltered = (city ? false : (userLat != null && userLon != null && radiusKm != null))
       ? filtered.filter(d => {
           const dist = haversine(d.latitudine, d.longitudine, userLat, userLon);
           return dist != null && dist <= radiusKm;
@@ -105,11 +108,12 @@ export async function GET(req: NextRequest) {
 
     let result = enriched;
     const sort = (sortParam === 'nearest') ? 'distance' : sortParam; // accept nearest alias
-    if (sort === 'distance' && userLat != null && userLon != null) {
+    if (!city && sort === 'distance' && userLat != null && userLon != null) {
       result = [...enriched].sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
     }
 
-    return NextResponse.json({ ok: true, day, count: result.length, total, page, pageSize: limit, distributors: result });
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    return NextResponse.json({ ok: true, day, count: result.length, total, page, pageSize: limit, totalPages, distributors: result });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
   }
