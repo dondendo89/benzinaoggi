@@ -68,6 +68,8 @@ class BenzinaOggiPlugin {
         add_action('admin_post_benzinaoggi_run_variations', [$this, 'handle_run_variations']);
         // Admin post action to run daily price update manually
         add_action('admin_post_benzinaoggi_run_daily_update', [$this, 'handle_run_daily_update']);
+        // Admin post action to run weekly SEO generation manually
+        add_action('admin_post_benzinaoggi_run_weekly_seo', [$this, 'handle_run_weekly_seo']);
         // Bulk generate SEO for all pages
         add_action('admin_post_benzinaoggi_generate_seo_all', [$this, 'handle_generate_seo_all']);
         // Single-run cron to sync pages
@@ -86,6 +88,15 @@ class BenzinaOggiPlugin {
             if (!wp_next_scheduled('benzinaoggi_daily_price_update')) {
                 $next = $this->next_run_6am();
                 wp_schedule_event($next, 'daily', 'benzinaoggi_daily_price_update');
+            }
+        });
+        
+        // Weekly SEO generation job at 02:00
+        add_action('benzinaoggi_weekly_seo_generation', [$this, 'cron_weekly_seo_generation']);
+        add_action('init', function(){
+            if (!wp_next_scheduled('benzinaoggi_weekly_seo_generation')) {
+                $next = $this->next_run_2am();
+                wp_schedule_event($next, 'weekly', 'benzinaoggi_weekly_seo_generation');
             }
         });
         
@@ -463,6 +474,25 @@ class BenzinaOggiPlugin {
                     <?php wp_nonce_field('bo_generate_seo_all'); ?>
                     <button type="submit" class="button button-primary">Genera per tutte le pagine</button>
                 </form>
+                
+                <h3>Cron Job Settimanale</h3>
+                <p>Il job settimanale viene eseguito automaticamente ogni domenica alle 2:00 del mattino per aggiornare tutte le descrizioni SEO.</p>
+                <form method="post" action="<?php echo esc_url($action); ?>" onsubmit="return confirm('Eseguire la generazione SEO settimanale adesso?');">
+                    <input type="hidden" name="action" value="benzinaoggi_run_weekly_seo" />
+                    <?php wp_nonce_field('bo_run_weekly_seo'); ?>
+                    <button type="submit" class="button button-secondary">Esegui generazione SEO settimanale</button>
+                </form>
+                
+                <?php
+                // Mostra info sul prossimo cron
+                $next_run = wp_next_scheduled('benzinaoggi_weekly_seo_generation');
+                if ($next_run) {
+                    echo '<p><strong>Prossima esecuzione automatica:</strong> ' . date_i18n('d/m/Y H:i', $next_run) . '</p>';
+                } else {
+                    echo '<p><em>Cron job settimanale non programmato</em></p>';
+                }
+                ?>
+                
                 <h2>Shortcode</h2>
                 <code>[carburanti_map]</code>
                 
@@ -612,6 +642,18 @@ class BenzinaOggiPlugin {
         $this->cron_daily_price_update();
         
         set_transient('benzinaoggi_notice', 'Aggiornamento prezzi giornaliero eseguito. Controlla i log per i dettagli.', 30);
+        wp_redirect(admin_url('options-general.php?page=benzinaoggi'));
+        exit;
+    }
+
+    public function handle_run_weekly_seo() {
+        if (!current_user_can('manage_options')) wp_die('Not allowed');
+        check_admin_referer('bo_run_weekly_seo');
+        
+        // Esegui immediatamente la generazione SEO
+        $this->cron_weekly_seo_generation();
+        
+        set_transient('benzinaoggi_notice', 'Generazione SEO settimanale eseguita. Controlla i log per i dettagli.', 30);
         wp_redirect(admin_url('options-general.php?page=benzinaoggi'));
         exit;
     }
@@ -1233,6 +1275,55 @@ class BenzinaOggiPlugin {
         $this->log_progress('Sync completato. Create: '.$accCreated.' — skipped: '.$accSkipped.' — errors: '.$accErrors.' — total: '.$total);
     }
 
+    public function cron_weekly_seo_generation() {
+        $this->log_progress('Avvio generazione SEO settimanale per tutte le pagine...');
+        
+        $opts = $this->get_options();
+        if (empty($opts['gemini_api_key'])) {
+            $this->log_progress('ERRORE: Google Gemini API Key non configurata');
+            return;
+        }
+        
+        @ignore_user_abort(true);
+        @set_time_limit(1800); // 30 minuti timeout
+        @ini_set('memory_limit', '512M');
+        
+        // Ottieni tutte le pagine pubblicate
+        $pages = get_posts([
+            'post_type' => 'page',
+            'post_status' => 'publish',
+            'numberposts' => -1,
+            'fields' => 'ids'
+        ]);
+        
+        $total = count($pages);
+        $processed = 0;
+        $errors = 0;
+        
+        $this->log_progress("Trovate {$total} pagine da processare");
+        
+        foreach ($pages as $page_id) {
+            try {
+                $this->generate_seo_for_post($page_id);
+                $processed++;
+                
+                // Log progresso ogni 10 pagine
+                if ($processed % 10 === 0) {
+                    $this->log_progress("Processate {$processed}/{$total} pagine...");
+                }
+                
+                // Piccola pausa per evitare rate limiting
+                usleep(100000); // 0.1 secondi
+                
+            } catch (Exception $e) {
+                $errors++;
+                $this->log_progress("ERRORE pagina ID {$page_id}: " . $e->getMessage());
+            }
+        }
+        
+        $this->log_progress("Generazione SEO settimanale completata. Processate: {$processed}, Errori: {$errors}");
+    }
+
     private function next_run_5am() {
         // Compute next 5:00 AM based on WP timezone
         $now = current_time('timestamp');
@@ -1253,6 +1344,17 @@ class BenzinaOggiPlugin {
             $six = strtotime('+1 day', $six);
         }
         return $six;
+    }
+    
+    private function next_run_2am() {
+        // Compute next 2:00 AM based on WP timezone
+        $now = current_time('timestamp');
+        $date = date_i18n('Y-m-d', $now, true);
+        $two = strtotime($date.' 02:00:00');
+        if ($two <= $now) {
+            $two = strtotime('+1 day', $two);
+        }
+        return $two;
     }
     
     private function next_run_10am() {

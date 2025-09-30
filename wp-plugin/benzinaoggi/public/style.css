@@ -98,13 +98,7 @@ footer .powered-by{
 }
 
 /* Distributor pages: hide duplicate theme texts above our bo-header */
-.page-template-page-distributor-php .site-branding .site-title,
-.page-template-page-distributor-php .site-branding .site-title a,
-.page-template-page-distributor-php .site-branding .site-description,
-.page-template-page-distributor-php .entry-header,
-.page-template-page-distributor-php .entry-title{
-  display: none !important;
-}
+/* Removed hiding of theme branding/titles to ensure only theme header shows */
 
 /* Global: hide default page titles/breadcrumbs above our blue header */
 .entry-header,
@@ -119,10 +113,7 @@ nav[aria-label*="breadcrumb"],
   display: none !important;
 }
 
-/* Ensure spacing between global header and content */
-body .bo-header + * {
-  margin-top: 12px;
-}
+/* Ensure spacing handled by theme; no custom bo-header spacing */
 
 /* Detail container (remove blue hero) */
 .bo-hero{ background: transparent; color: inherit; padding: 0; }
