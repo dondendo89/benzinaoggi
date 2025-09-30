@@ -93,10 +93,12 @@ export async function GET(req: NextRequest) {
     // Optional server-side radius filter if user lat/lon and radius provided
     // Se viene specificato il comune, la ricerca è per comune (non per via):
     // ignora eventuale filtro raggio per rispettare il requisito
-    const radiusFiltered = (city ? false : (userLat != null && userLon != null && radiusKm != null))
+    const hasRadius = !city && userLat != null && userLon != null && radiusKm != null;
+    const radiusFiltered = hasRadius
       ? filtered.filter(d => {
           const dist = haversine(d.latitudine, d.longitudine, userLat, userLon);
-          return dist != null && dist <= radiusKm;
+          const rKm = radiusKm as number;
+          return dist != null && dist <= rKm;
         })
       : filtered;
 
