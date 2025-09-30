@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/src/lib/db";
-import { getMiseServiceArea, normalizeFuelName } from "@/src/lib/mise";
+import { getMiseServiceArea, normalizeFuelName } from "@/src/services/mise-api";
 
 export async function GET(req: NextRequest, { params }: { params: { impiantoId: string } }) {
   try {
