@@ -33,12 +33,49 @@ export async function GET(req: NextRequest) {
       whereClause.bandiera = { contains: brand, mode: 'insensitive' };
     }
 
-    const total = await prisma.distributor.count({ where: whereClause });
-    const distributors = await prisma.distributor.findMany({
-      where: whereClause,
-      take: limit,
-      skip,
-    });
+    // If radius filtering is needed, we need to fetch all distributors first, then filter
+    const hasRadius = !city && userLat != null && userLon != null && radiusKm != null;
+    
+    let distributors;
+    let total;
+    
+    if (hasRadius) {
+      // For radius filtering, get all distributors first, then filter and paginate
+      const allDistributors = await prisma.distributor.findMany({
+        where: whereClause,
+      });
+      
+      // Apply radius filter first
+      function haversine(lat1?: number | null, lon1?: number | null, lat2?: number, lon2?: number) {
+        if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return undefined;
+        const toRad = (v: number) => (v * Math.PI) / 180;
+        const R = 6371; // km
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+      }
+      
+      const radiusFiltered = allDistributors.filter(d => {
+        const dist = haversine(d.latitudine, d.longitudine, userLat, userLon);
+        const rKm = radiusKm as number;
+        return dist != null && dist <= rKm;
+      });
+      
+      total = radiusFiltered.length;
+      distributors = radiusFiltered.slice(skip, skip + limit);
+    } else {
+      // Normal pagination for city/brand searches
+      total = await prisma.distributor.count({ where: whereClause });
+      distributors = await prisma.distributor.findMany({
+        where: whereClause,
+        take: limit,
+        skip,
+      });
+    }
 
     // Fetch latest two distinct days to allow fallback when some distributors have no price today
     const lastTwoDays = await prisma.price.findMany({ select: { day: true }, orderBy: { day: "desc" }, distinct: ["day"], take: 2 });
@@ -77,6 +114,7 @@ export async function GET(req: NextRequest) {
     // If a specific fuel is requested, keep only distributors that have at least one price after fallback
     const filtered = fuel ? distributors.filter(d => (byDistributor.get(d.id) || []).some(pp => (pp.fuelType || '').toLowerCase() === fuel.toLowerCase())) : distributors;
 
+    // Haversine function for distance calculation (moved up for reuse)
     function haversine(lat1?: number | null, lon1?: number | null, lat2?: number, lon2?: number) {
       if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return undefined;
       const toRad = (v: number) => (v * Math.PI) / 180;
@@ -90,19 +128,7 @@ export async function GET(req: NextRequest) {
       return R * c;
     }
 
-    // Optional server-side radius filter if user lat/lon and radius provided
-    // Se viene specificato il comune, la ricerca è per comune (non per via):
-    // ignora eventuale filtro raggio per rispettare il requisito
-    const hasRadius = !city && userLat != null && userLon != null && radiusKm != null;
-    const radiusFiltered = hasRadius
-      ? filtered.filter(d => {
-          const dist = haversine(d.latitudine, d.longitudine, userLat, userLon);
-          const rKm = radiusKm as number;
-          return dist != null && dist <= rKm;
-        })
-      : filtered;
-
-    const enriched = radiusFiltered.map(d => {
+    const enriched = filtered.map(d => {
       const dPrices = byDistributor.get(d.id) || [];
       const distance = (userLat != null && userLon != null) ? haversine(d.latitudine, d.longitudine, userLat, userLon) : undefined;
       return { ...d, prices: dPrices, distance };
@@ -114,8 +140,10 @@ export async function GET(req: NextRequest) {
       result = [...enriched].sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
     }
 
-    const totalPages = Math.max(1, Math.ceil(total / limit));
-    return NextResponse.json({ ok: true, day, count: result.length, total, page, pageSize: limit, totalPages, distributors: result });
+    // Update total count for radius filtering (after fuel filtering)
+    const finalTotal = hasRadius ? filtered.length : total;
+    const totalPages = Math.max(1, Math.ceil(finalTotal / limit));
+    return NextResponse.json({ ok: true, day, count: result.length, total: finalTotal, page, pageSize: limit, totalPages, distributors: result });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
   }
