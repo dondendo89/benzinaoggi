@@ -17,95 +17,28 @@ function groupBy<T, K extends string | number>(items: T[], keyFn: (t: T) => K): 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    // onlyDown=true per default per evitare spam
-    const onlyDown = (searchParams.get('onlyDown') || 'true').toLowerCase() === 'true';
-    const dayParam = searchParams.get('day'); // YYYY-MM-DD opzionale
-    const latest = (searchParams.get('latest') || 'false').toLowerCase() === 'true';
-
-    // Determina il giorno target:
-    // - se passato via query, usa quello
-    // - se latest=true, usa il giorno più recente con variazioni in PriceVariation (se disponibile)
-    // - altrimenti l'ultimo presente in Price
-    let targetDay: Date | null = null;
-    if (dayParam) {
-      targetDay = new Date(`${dayParam}T00:00:00.000Z`);
-    } else {
-      if (latest) {
-        try {
-          const whereDir = onlyDown ? `WHERE "direction"='down'` : '';
-          const rows = await prisma.$queryRawUnsafe<any[]>(
-            `SELECT MAX("day") AS day FROM "PriceVariation" ${whereDir}`
-          );
-          const maxDay = rows && rows[0] && rows[0].day ? new Date(rows[0].day as string) : null;
-          if (maxDay) {
-            targetDay = new Date(`${maxDay.toISOString().slice(0,10)}T00:00:00.000Z`);
-          }
-        } catch (_) {
-          // ignore and fallback below
-        }
-      }
-      // Se non troviamo da PriceVariation, non usare più Price
-      // targetDay resterà null se non ci sono variazioni registrate
-      // e torneremo "No target day found"
-      // (l'update oggi scrive sempre PriceVariation quando varia)
-    }
-    if (!targetDay) {
-      return NextResponse.json({ ok: true, sent: 0, note: 'No target day found' });
-    }
+    // Invia SOLO ribassi creati oggi (UTC). Permetti override del giorno via createdDay=YYYY-MM-DD
+    const createdDayParam = searchParams.get('createdDay');
+    const todayIso = (createdDayParam || new Date().toISOString().slice(0,10));
+    const startOfDay = new Date(`${todayIso}T00:00:00.000Z`);
+    const endOfDay = new Date(`${todayIso}T23:59:59.999Z`);
 
     let variations: any[] = [];
     try {
-      // Prova a leggere da PriceVariation
+      // Leggi SOLO ribassi creati oggi (UTC) da PriceVariation
       variations = await prisma.$queryRawUnsafe<any[]>(
         `SELECT "distributorId","fuelType","isSelfService","oldPrice","newPrice","direction","delta","percentage","day"
          FROM "PriceVariation"
-         WHERE "day" = $1 ${onlyDown ? `AND "direction"='down'` : ''}`,
-        targetDay
+         WHERE "direction"='down' AND "createdAt" >= $1 AND "createdAt" < $2`,
+        startOfDay,
+        endOfDay
       );
     } catch (_) {
-      // Fallback: calcola variazioni on-the-fly da Price (ultimo giorno vs precedente)
-      const today = targetDay;
-      const prevRow = await prisma.price.findFirst({
-        where: { day: { lt: today! } },
-        select: { day: true },
-        orderBy: { day: 'desc' }
-      });
-      const yesterday = prevRow?.day;
-      if (!yesterday) {
-        return NextResponse.json({ ok: true, sent: 0, day: (today as Date).toISOString().slice(0,10), note: 'No previous day to compare' });
-      }
-      const [todayPrices, yesterdayPrices] = await Promise.all([
-        prisma.price.findMany({ where: { day: today! } }),
-        prisma.price.findMany({ where: { day: yesterday } })
-      ]);
-      const key = (p: any) => `${p.distributorId}|${p.fuelType}|${p.isSelfService ? 1 : 0}`;
-      const mapYesterday = new Map<string, any>();
-      for (const p of yesterdayPrices) mapYesterday.set(key(p), p);
-      const tmp: any[] = [];
-      for (const p of todayPrices) {
-        const y = mapYesterday.get(key(p));
-        if (!y) continue;
-        if (p.price !== y.price) {
-          const delta = p.price - y.price;
-          const direction = delta > 0 ? 'up' : 'down';
-          if (onlyDown && direction !== 'down') continue;
-          tmp.push({
-            distributorId: p.distributorId,
-            fuelType: p.fuelType,
-            isSelfService: p.isSelfService,
-            oldPrice: y.price,
-            newPrice: p.price,
-            direction,
-            delta,
-            percentage: y.price !== 0 ? (delta / y.price) * 100 : 0,
-            day: today
-          });
-        }
-      }
-      variations = tmp;
+      // Nessun fallback su Price: se PriceVariation non è disponibile, non inviare
+      variations = [];
     }
     if (variations.length === 0) {
-      return NextResponse.json({ ok: true, sent: 0, day: targetDay.toISOString().slice(0,10), note: 'No variations for target day' });
+      return NextResponse.json({ ok: true, sent: 0, createdDay: todayIso, note: 'No down variations created today' });
     }
 
     // Mappa distributorId -> impiantoId e nome/descrizione
@@ -178,7 +111,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true, day: targetDay.toISOString().slice(0,10), groups: Object.keys(grouped).length, sent, failures });
+    return NextResponse.json({ ok: true, createdDay: todayIso, groups: Object.keys(grouped).length, sent, failures });
 
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
