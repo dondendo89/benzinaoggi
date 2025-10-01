@@ -321,7 +321,7 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
     }
     const sql = `INSERT INTO "Price" ("distributorId","fuelType","day","isSelfService","price","communicatedAt")
 VALUES ${valuesSqlParts.join(',')}
-ON CONFLICT ON CONSTRAINT "Price_unique_day"
+ON CONFLICT ("distributorId","fuelType","day","isSelfService")
 DO UPDATE SET "price"=EXCLUDED."price", "communicatedAt"=EXCLUDED."communicatedAt"`;
     // Use $executeRawUnsafe with parameter binding array length variable
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
