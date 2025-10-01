@@ -25,6 +25,8 @@ export async function POST(req: NextRequest) {
       });
     }
     
+    // Tentiamo sempre CSV per primo; MISE verrà usato solo in fallback se CSV è vuoto
+
     // Leggi CSV MIMIT e filtra per impiantoId
     const PREZZI_URL = "https://www.mimit.gov.it/images/exportCSV/prezzo_alle_8.csv";
     const raw = await fetchCsvText(PREZZI_URL);
@@ -87,7 +89,7 @@ export async function POST(req: NextRequest) {
 
       const miseFuels = await getMisePrices(impiantoId);
       if (!miseFuels || miseFuels.length === 0) {
-        return NextResponse.json({ ok: false, error: `Nessuna riga nel CSV per impiantoId ${impiantoId}` }, { status: 404 });
+        return NextResponse.json({ ok: false, error: `Nessuna riga nel CSV per impiantoId ${impiantoId} e MISE non ha restituito prezzi`, source: 'fallback_mise_empty' }, { status: 502 });
       }
 
       let updatedCountFb = 0;
