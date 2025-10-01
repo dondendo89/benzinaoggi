@@ -136,7 +136,8 @@ export async function GET(req: NextRequest) {
               },
               body: JSON.stringify({
                 app_id: appId,
-                include_external_user_ids: chunk,
+                include_aliases: { external_id: chunk },
+                channel_for_external_user_ids: 'push',
                 headings: { it: title, en: title },
                 contents: { it: body, en: body },
                 data: {
@@ -149,7 +150,11 @@ export async function GET(req: NextRequest) {
                 },
               })
             });
-            if (!r.ok) failures.push({ key, error: `OneSignal HTTP ${r.status}` });
+            if (!r.ok) {
+              let msg = `OneSignal HTTP ${r.status}`;
+              try { const j = await r.json(); msg += ` ${JSON.stringify(j)}`; } catch {}
+              failures.push({ key, error: msg });
+            }
             else sent += chunk.length;
           } catch (e: any) {
             failures.push({ key, error: e?.message || 'OneSignal error' });
