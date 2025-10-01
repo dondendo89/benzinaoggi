@@ -10,17 +10,18 @@ datasource db {
 }
 
 model Distributor {
-  id                 Int       @id @default(autoincrement())
-  impiantoId         Int       @unique
-  gestore            String?
-  bandiera           String?
-  comune             String?
-  provincia          String?
-  indirizzo          String?
-  latitudine         Float?
-  longitudine        Float?
+  id          Int     @id @default(autoincrement())
+  impiantoId  Int     @unique
+  gestore     String?
+  bandiera    String?
+  comune      String?
+  provincia   String?
+  indirizzo   String?
+  latitudine  Float?
+  longitudine Float?
 
-  prices             Price[]
+  prices          Price[]
+  priceVariations PriceVariation[]
 
   @@index([comune])
   @@index([provincia])
@@ -28,51 +29,48 @@ model Distributor {
 }
 
 model Price {
-  id             Int        @id @default(autoincrement())
+  id             Int      @id @default(autoincrement())
   distributorId  Int
   fuelType       String
   price          Float
-  isSelfService  Boolean    @default(false)
+  isSelfService  Boolean  @default(false)
   communicatedAt DateTime
   day            DateTime
 
-  distributor    Distributor @relation(fields: [distributorId], references: [id])
+  distributor Distributor @relation(fields: [distributorId], references: [id])
 
-  @@index([day])
-  @@index([fuelType, day])
   // Ensure only one row per distributor/fuel/day/self-service
   @@unique([distributorId, fuelType, day, isSelfService], name: "Price_unique_day")
+  @@index([day])
+  @@index([fuelType, day])
 }
 
 model PriceVariation {
-  id             Int         @id @default(autoincrement())
-  distributorId  Int
-  fuelType       String
-  isSelfService  Boolean     @default(false)
-  oldPrice       Float
-  newPrice       Float
-  direction      String      // 'up' | 'down'
-  delta          Float       // new - old
-  percentage     Float       // (delta / old) * 100
-  day            DateTime
-  createdAt      DateTime    @default(now())
+  id            Int      @id @default(autoincrement())
+  distributorId Int
+  fuelType      String
+  isSelfService Boolean  @default(false)
+  oldPrice      Float
+  newPrice      Float
+  direction     String // 'up' | 'down'
+  delta         Float // new - old
+  percentage    Float // (delta / old) * 100
+  day           DateTime
+  createdAt     DateTime @default(now())
 
-  distributor    Distributor @relation(fields: [distributorId], references: [id])
+  distributor Distributor @relation(fields: [distributorId], references: [id])
 
   @@index([day])
   @@index([distributorId, fuelType, day])
 }
 
 model Subscription {
-  id          Int      @id @default(autoincrement())
-  externalId  String
-  impiantoId  Int
-  fuelType    String
-  createdAt   DateTime @default(now())
+  id         Int      @id @default(autoincrement())
+  externalId String
+  impiantoId Int
+  fuelType   String
+  createdAt  DateTime @default(now())
 
   @@unique([externalId, impiantoId, fuelType], name: "Subscription_unique")
   @@index([impiantoId, fuelType])
 }
-
-
-
