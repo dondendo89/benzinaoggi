@@ -187,13 +187,8 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
   const today = rows[0] && (rows[0] as any).dtComu ? getDay((rows[0] as any).dtComu as string) : new Date().toISOString().slice(0, 10);
   const dayDate = new Date(`${today}T00:00:00.000Z`);
 
-  // Trova il giorno precedente disponibile in DB per confronto variazioni
-  const prevDayRow = await prisma.price.findFirst({
-    where: { day: { lt: dayDate } },
-    select: { day: true },
-    orderBy: { day: 'desc' }
-  });
-  const prevDay = prevDayRow?.day || null;
+  // Non usiamo più Price per il confronto giorno-1; ci basiamo su CurrentPrice e PriceVariation
+  const prevDay: Date | null = null;
 
   const get = (obj: Record<string, any>, keys: string[]): string | undefined => {
     for (const k of keys) {
@@ -208,18 +203,13 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
   const distributorIdByImpianto = new Map<number, number>();
   for (const d of allDistributors) distributorIdByImpianto.set(d.impiantoId, d.id);
 
-  // Preload existing prices for the target day to compare and avoid unnecessary updates
-  const existing = await prisma.price.findMany({ where: { day: dayDate } });
+  // Key helper
   const key = (p: { distributorId: number; fuelType: string; isSelfService: boolean }) => `${p.distributorId}|${p.fuelType}|${p.isSelfService ? 1 : 0}`;
+  // Non esiste più un set "existing for day" in Price
   const existingByKey = new Map<string, { id: number; price: number }>();
-  for (const p of existing) existingByKey.set(key(p), { id: p.id, price: p.price });
 
-  // Preload previous day prices for variation detection
+  // Non calcoliamo più da Price; useremo CurrentPrice per confronto
   const prevByKey = new Map<string, { price: number }>();
-  if (prevDay) {
-    const prevPrices = await prisma.price.findMany({ where: { day: prevDay } });
-    for (const p of prevPrices) prevByKey.set(key(p), { price: p.price });
-  }
 
   // Preload current prices (single-row per key) to detect variations regardless of day
   const currentByKey = new Map<string, { price: number }>();
@@ -297,68 +287,26 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
     items.push({ distributorId, fuelType, isSelf, price, communicatedAt });
 
     // Variation detection: prefer previous day; else fallback to CurrentPrice
-    const prevDayEntry = prevByKey.get(k);
-    if (prevDayEntry && prevDayEntry.price !== price) {
-      const delta = price - prevDayEntry.price;
+    const cp = currentByKey.get(k);
+    if (cp && cp.price !== price) {
+      const delta = price - cp.price;
       const direction = delta > 0 ? 'up' : 'down';
-      const percentage = prevDayEntry.price !== 0 ? (delta / prevDayEntry.price) * 100 : 0;
+      const percentage = cp.price !== 0 ? (delta / cp.price) * 100 : 0;
       variations.push({
         distributorId,
         fuelType,
         isSelfService: isSelf,
-        oldPrice: prevDayEntry.price,
+        oldPrice: cp.price,
         newPrice: price,
-        direction, 
+        direction,
         delta,
         percentage,
         day: dayDate
       });
-    } else {
-      const cp = currentByKey.get(k);
-      if (cp && cp.price !== price) {
-        const delta = price - cp.price;
-        const direction = delta > 0 ? 'up' : 'down';
-        const percentage = cp.price !== 0 ? (delta / cp.price) * 100 : 0;
-        variations.push({
-          distributorId,
-          fuelType,
-          isSelfService: isSelf,
-          oldPrice: cp.price,
-          newPrice: price,
-          direction,
-          delta,
-          percentage,
-          day: dayDate
-        });
-      }
     }
   }
 
-  // Bulk UPSERT using raw SQL in chunks to avoid per-row queries
-  const chunkSize = 500;
-  for (let i = 0; i < items.length; i += chunkSize) {
-    const chunk = items.slice(i, i + chunkSize);
-    if (chunk.length === 0) continue;
-    const valuesSqlParts: string[] = [];
-    const params: any[] = [];
-    let p = 1;
-    for (const it of chunk) {
-      valuesSqlParts.push(`($${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++})`);
-      params.push(it.distributorId);
-      params.push(it.fuelType);
-      params.push(dayDate);
-      params.push(it.isSelf);
-      params.push(it.price);
-      params.push(it.communicatedAt);
-    }
-    const sql = `INSERT INTO "Price" ("distributorId","fuelType","day","isSelfService","price","communicatedAt")
-VALUES ${valuesSqlParts.join(',')}
-ON CONFLICT ("distributorId","fuelType","day","isSelfService")
-DO UPDATE SET "price"=EXCLUDED."price", "communicatedAt"=EXCLUDED."communicatedAt"`;
-    // Use $executeRawUnsafe with parameter binding array length variable
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-    await (prisma as any).$executeRawUnsafe(sql, ...params);
-  }
+  // Non scriviamo più nella tabella Price
 
   const total = rows.length;
   const sampleRow = debug ? rows[0] : undefined;

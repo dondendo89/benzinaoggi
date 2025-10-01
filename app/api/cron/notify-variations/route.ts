@@ -44,13 +44,10 @@ export async function GET(req: NextRequest) {
           // ignore and fallback below
         }
       }
-      if (!targetDay) {
-        const lastDay = await prisma.price.findFirst({
-          select: { day: true },
-          orderBy: { day: 'desc' }
-        });
-        targetDay = lastDay?.day ?? null;
-      }
+      // Se non troviamo da PriceVariation, non usare più Price
+      // targetDay resterà null se non ci sono variazioni registrate
+      // e torneremo "No target day found"
+      // (l'update oggi scrive sempre PriceVariation quando varia)
     }
     if (!targetDay) {
       return NextResponse.json({ ok: true, sent: 0, note: 'No target day found' });

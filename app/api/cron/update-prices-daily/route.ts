@@ -17,13 +17,8 @@ export async function GET(req: NextRequest) {
     const res = await updatePrezzi(!!debug);
     const endTime = new Date().toISOString();
 
-    // Calcola lastUpdatedAt come il massimo communicatedAt dell'ultimo giorno aggiornato
-    const lastUpdatedRow = await prisma.price.findFirst({
-      where: { day: new Date(`${res.day}T00:00:00.000Z`) },
-      orderBy: { communicatedAt: 'desc' },
-      select: { communicatedAt: true }
-    });
-    const lastUpdatedAt = lastUpdatedRow?.communicatedAt?.toISOString() || endTime;
+    // Calcola lastUpdatedAt senza tabella Price: usa la fine job come timestamp affidabile
+    const lastUpdatedAt = endTime;
 
     console.log(`[CRON] CSV update completed: inserted=${res.inserted}, updated=${res.updated}, day=${res.day}`);
 
