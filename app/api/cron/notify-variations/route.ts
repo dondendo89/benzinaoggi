@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Carica variazioni del giorno target
-    const variations = await prisma.priceVariation.findMany({
+    const variations = await (prisma as any).priceVariation.findMany({
       where: {
         day: targetDay,
         ...(onlyDown ? { direction: 'down' } as any : {})
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Mappa distributorId -> impiantoId e nome/descrizione
-    const distributorIds = Array.from(new Set(variations.map(v => v.distributorId)));
+    const distributorIds = Array.from(new Set((variations as any[]).map((v: any) => v.distributorId)));
     const distributors = await prisma.distributor.findMany({
       where: { id: { in: distributorIds } },
       select: { id: true, impiantoId: true, gestore: true, bandiera: true, comune: true }
@@ -57,19 +57,19 @@ export async function GET(req: NextRequest) {
 
     // Raggruppa variazioni per (impiantoId, fuelType)
     type Key = string;
-    const keyed = variations.map(v => {
-      const d = byDistributorId.get(v.distributorId);
-      const impiantoId = d?.impiantoId;
+    const keyed = (variations as any[]).map((v: any) => {
+      const d = byDistributorId.get(v.distributorId as number);
+      const impiantoId = d?.impiantoId as number | undefined;
       return {
-        key: `${impiantoId}|${v.fuelType}` as Key,
+        key: `${impiantoId}|${String(v.fuelType)}` as Key,
         impiantoId,
-        distributorId: v.distributorId,
+        distributorId: v.distributorId as number,
         distributor: d,
-        fuelType: v.fuelType,
-        oldPrice: v.oldPrice,
-        newPrice: v.newPrice,
-      };
-    }).filter(x => x.impiantoId != null);
+        fuelType: String(v.fuelType),
+        oldPrice: Number(v.oldPrice),
+        newPrice: Number(v.newPrice),
+      } as const;
+    }).filter((x: any) => x.impiantoId != null);
 
     const grouped = groupBy(keyed, x => x.key);
 
@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
         const da = Math.abs((a.oldPrice ?? 0) - (a.newPrice ?? 0));
         const db = Math.abs((b.oldPrice ?? 0) - (b.newPrice ?? 0));
         return db > da ? b : a;
-      });
+      }, items[0]!);
 
       // Chiama l'endpoint interno di invio notifica (targeting per externalIds)
       try {
