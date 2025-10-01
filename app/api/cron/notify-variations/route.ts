@@ -20,17 +20,37 @@ export async function GET(req: NextRequest) {
     // onlyDown=true per default per evitare spam
     const onlyDown = (searchParams.get('onlyDown') || 'true').toLowerCase() === 'true';
     const dayParam = searchParams.get('day'); // YYYY-MM-DD opzionale
+    const latest = (searchParams.get('latest') || 'false').toLowerCase() === 'true';
 
-    // Determina il giorno target: se passato via query, usa quello; altrimenti l'ultimo presente in Price
+    // Determina il giorno target:
+    // - se passato via query, usa quello
+    // - se latest=true, usa il giorno più recente con variazioni in PriceVariation (se disponibile)
+    // - altrimenti l'ultimo presente in Price
     let targetDay: Date | null = null;
     if (dayParam) {
       targetDay = new Date(`${dayParam}T00:00:00.000Z`);
     } else {
-      const lastDay = await prisma.price.findFirst({
-        select: { day: true },
-        orderBy: { day: 'desc' }
-      });
-      targetDay = lastDay?.day ?? null;
+      if (latest) {
+        try {
+          const whereDir = onlyDown ? `WHERE "direction"='down'` : '';
+          const rows = await prisma.$queryRawUnsafe<any[]>(
+            `SELECT MAX("day") AS day FROM "PriceVariation" ${whereDir}`
+          );
+          const maxDay = rows && rows[0] && rows[0].day ? new Date(rows[0].day as string) : null;
+          if (maxDay) {
+            targetDay = new Date(`${maxDay.toISOString().slice(0,10)}T00:00:00.000Z`);
+          }
+        } catch (_) {
+          // ignore and fallback below
+        }
+      }
+      if (!targetDay) {
+        const lastDay = await prisma.price.findFirst({
+          select: { day: true },
+          orderBy: { day: 'desc' }
+        });
+        targetDay = lastDay?.day ?? null;
+      }
     }
     if (!targetDay) {
       return NextResponse.json({ ok: true, sent: 0, note: 'No target day found' });

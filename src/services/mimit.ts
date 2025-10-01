@@ -345,6 +345,84 @@ DO UPDATE SET "price"=EXCLUDED."price", "communicatedAt"=EXCLUDED."communicatedA
         day: v.day,
       }))
     });
+
+    // INVIO IMMEDIATO NOTIFICHE: notifica qualsiasi variazione (su/giù) appena rilevata
+    try {
+      const appId = process.env.ONESIGNAL_APP_ID;
+      const apiKey = process.env.ONESIGNAL_API_KEY;
+      if (appId && apiKey) {
+        // Raggruppa per (distributorId, fuelType)
+        const byKey = new Map<string, VariationItem[]>();
+        const keyOf = (v: VariationItem) => `${v.distributorId}|${v.fuelType}`;
+        for (const v of variations) {
+          const k = keyOf(v);
+          if (!byKey.has(k)) byKey.set(k, []);
+          byKey.get(k)!.push(v);
+        }
+
+        // Precarica mapping distributorId -> impiantoId e dati descrittivi
+        const distributorIds = Array.from(new Set(variations.map(v => v.distributorId)));
+        const distributors = await prisma.distributor.findMany({
+          where: { id: { in: distributorIds } },
+          select: { id: true, impiantoId: true, gestore: true, bandiera: true, comune: true }
+        });
+        const byDistributorId = new Map(distributors.map(d => [d.id, d] as const));
+
+        for (const [k, items] of byKey.entries()) {
+          const sample = items[0]!;
+          const d = byDistributorId.get(sample.distributorId);
+          if (!d) continue;
+          const impiantoId = d.impiantoId;
+
+          // Recupera iscritti per impiantoId e fuelType
+          const subs = await prisma.subscription.findMany({
+            where: { impiantoId, fuelType: sample.fuelType },
+            select: { externalId: true }
+          });
+          const externalIds = subs.map(s => s.externalId).filter(Boolean);
+          if (externalIds.length === 0) continue;
+
+          // Scegli variazione con delta massimo assoluto per il messaggio
+          const best = items.reduce((a, b) => {
+            const da = Math.abs(a.newPrice - a.oldPrice);
+            const db = Math.abs(b.newPrice - b.oldPrice);
+            return db > da ? b : a;
+          });
+
+          const directionSymbol = best.direction === 'down' ? '⬇️' : '⬆️';
+          const title = `Prezzo ${best.fuelType} ${directionSymbol}`;
+          const name = d.gestore || d.bandiera || d.comune || `Impianto ${impiantoId}`;
+          const deltaAbs = Math.abs(best.newPrice - best.oldPrice).toFixed(3);
+          const body = `${name}: ${best.oldPrice.toFixed(3)} → ${best.newPrice.toFixed(3)} (Δ ${deltaAbs})`;
+
+          // OneSignal API
+          await fetch('https://onesignal.com/api/v1/notifications', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json; charset=utf-8',
+              'Authorization': `Basic ${apiKey}`,
+            },
+            body: JSON.stringify({
+              app_id: appId,
+              include_external_user_ids: externalIds,
+              headings: { it: title, en: title },
+              contents: { it: body, en: body },
+              data: {
+                impiantoId,
+                distributorId: sample.distributorId,
+                fuelType: sample.fuelType,
+                oldPrice: best.oldPrice,
+                newPrice: best.newPrice,
+                direction: best.direction,
+                day: today,
+              },
+            })
+          });
+        }
+      }
+    } catch (_) {
+      // Evita di interrompere il job in caso di errore notifica
+    }
   }
 
   return { inserted, updated, day: today, total, skippedUnknownDistributor, skippedNoPrice, skippedBadDate, sampleRow };
