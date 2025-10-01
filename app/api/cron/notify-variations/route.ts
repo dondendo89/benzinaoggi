@@ -90,24 +90,51 @@ export async function GET(req: NextRequest) {
         return db > da ? b : a;
       }, items[0]!);
 
-      // Chiama l'endpoint interno di invio notifica (targeting per externalIds)
+      // Invio diretto a OneSignal in batch per evitare timeout
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/send-notification`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fuelType,
-            distributorId: impiantoId,
-            distributorName: sample!.distributor?.gestore || sample!.distributor?.bandiera || sample!.distributor?.comune || undefined,
-            oldPrice: best.oldPrice,
-            newPrice: best.newPrice,
-            externalIds,
-          })
-        });
-        if (res.ok) sent += externalIds.length;
-        else failures.push({ key, error: `HTTP ${res.status}` });
+        const appId = process.env.ONESIGNAL_APP_ID;
+        const apiKey = process.env.ONESIGNAL_API_KEY;
+        if (!appId || !apiKey) {
+          failures.push({ key, error: 'ONESIGNAL_APP_ID or ONESIGNAL_API_KEY missing' });
+          continue;
+        }
+        const chunkSize = 200;
+        for (let i = 0; i < externalIds.length; i += chunkSize) {
+          const chunk = externalIds.slice(i, i + chunkSize);
+          try {
+            const title = `Prezzo ${fuelType} ⬇️`;
+            const name = sample!.distributor?.gestore || sample!.distributor?.bandiera || sample!.distributor?.comune || `Impianto ${impiantoId}`;
+            const deltaAbs = Math.abs((best.newPrice ?? 0) - (best.oldPrice ?? 0)).toFixed(3);
+            const body = `${name}: ${Number(best.oldPrice).toFixed(3)} → ${Number(best.newPrice).toFixed(3)} (Δ ${deltaAbs})`;
+            const r = await fetch('https://onesignal.com/api/v1/notifications', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Authorization': `Basic ${apiKey}`,
+              },
+              body: JSON.stringify({
+                app_id: appId,
+                include_external_user_ids: chunk,
+                headings: { it: title, en: title },
+                contents: { it: body, en: body },
+                data: {
+                  impiantoId,
+                  distributorId: impiantoId,
+                  fuelType,
+                  oldPrice: best.oldPrice,
+                  newPrice: best.newPrice,
+                  createdDay: new Date().toISOString().slice(0,10),
+                },
+              })
+            });
+            if (!r.ok) failures.push({ key, error: `OneSignal HTTP ${r.status}` });
+            else sent += chunk.length;
+          } catch (e: any) {
+            failures.push({ key, error: e?.message || 'OneSignal error' });
+          }
+        }
       } catch (e: any) {
-        failures.push({ key, error: e?.message || 'fetch error' });
+        failures.push({ key, error: e?.message || 'send error' });
       }
     }
 

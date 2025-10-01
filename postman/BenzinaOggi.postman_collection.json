@@ -74,38 +74,33 @@
       "description": "Aggiorna un singolo impianto. Usa CSV come fonte primaria; MISE solo se il CSV non ha righe."
     },
     {
-      "name": "Notify variations (latest)",
+      "name": "Notify variations (today, downs created today)",
       "request": {
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/api/cron/notify-variations?onlyDown=true&latest=true",
+          "raw": "{{baseUrl}}/api/cron/notify-variations",
           "host": ["{{baseUrl}}"],
-          "path": ["api","cron","notify-variations"],
-          "query": [
-            { "key": "onlyDown", "value": "true" },
-            { "key": "latest", "value": "true" }
-          ]
+          "path": ["api","cron","notify-variations"]
         }
       },
-      "description": "Invia subito notifiche per le variazioni più recenti disponibili."
+      "description": "Invia notifiche per tutti i ribassi con PriceVariation.createdAt di oggi (UTC)."
     },
     {
-      "name": "Notify variations (by day)",
+      "name": "Notify variations (by createdDay, downs)",
       "request": {
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/api/cron/notify-variations?onlyDown=true&day=YYYY-MM-DD",
+          "raw": "{{baseUrl}}/api/cron/notify-variations?createdDay=YYYY-MM-DD",
           "host": ["{{baseUrl}}"],
           "path": ["api","cron","notify-variations"],
           "query": [
-            { "key": "onlyDown", "value": "true" },
-            { "key": "day", "value": "YYYY-MM-DD" }
+            { "key": "createdDay", "value": "YYYY-MM-DD" }
           ]
         }
       },
-      "description": "Invia notifiche per un giorno specifico."
+      "description": "Invia notifiche solo per i ribassi creati nel giorno indicato (UTC)."
     },
     {
       "name": "Subscriptions: create/update",
