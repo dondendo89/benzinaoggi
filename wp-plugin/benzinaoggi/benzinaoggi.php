@@ -73,6 +73,10 @@ class BenzinaOggiPlugin {
         add_action('admin_post_benzinaoggi_run_weekly_seo', [$this, 'handle_run_weekly_seo']);
         // Bulk generate SEO for all pages
         add_action('admin_post_benzinaoggi_generate_seo_all', [$this, 'handle_generate_seo_all']);
+        // Admin post action to generate city posts (Gemini)
+        add_action('admin_post_benzinaoggi_generate_city_posts', [$this, 'handle_generate_city_posts']);
+        // Cron job hook to process city posts generation in background
+        add_action('benzinaoggi_generate_city_posts', [$this, 'cron_generate_city_posts']);
         // Single-run cron to sync pages
         add_action('benzinaoggi_sync_pages', [$this, 'cron_sync_pages']);
         // Ensure daily sync at 05:00 local time
@@ -107,6 +111,22 @@ class BenzinaOggiPlugin {
         add_action('init', [$this, 'register_sw_rewrites']);
         register_activation_hook(__FILE__, [$this, 'activate_flush_rewrites']);
         register_deactivation_hook(__FILE__, [$this, 'deactivate_flush_rewrites']);
+    }
+
+    private function get_italian_capitals() {
+        // Elenco capoluoghi di regione e provincia principali
+        return [
+            'Agrigento','Alessandria','Ancona','Aosta','Arezzo','Ascoli Piceno','Asti','Avellino',
+            'Bari','Barletta','Belluno','Benevento','Bergamo','Biella','Bologna','Bolzano','Brescia','Brindisi',
+            'Cagliari','Caltanissetta','Campobasso','Caserta','Catania','Catanzaro','Chieti','Como','Cosenza','Cremona','Crotone',
+            'Cuneo','Enna','Fermo','Ferrara','Firenze','Foggia','Forlì','Frosinone','Genova','Gorizia','Grosseto',
+            'Imperia','Isernia','La Spezia','L Aquila','Latina','Lecce','Lecco','Livorno','Lodi','Lucca',
+            'Macerata','Mantova','Massa','Matera','Messina','Milano','Modena','Monza','Napoli','Novara',
+            'Nuoro','Oristano','Padova','Palermo','Parma','Pavia','Perugia','Pesaro','Pescara','Piacenza','Pisa','Pistoia','Pordenone',
+            'Potenza','Prato','Ragusa','Ravenna','Reggio Calabria','Reggio Emilia','Rieti','Rimini','Roma','Rovigo',
+            'Salerno','Sassari','Savona','Siena','Siracusa','Sondrio','Taranto','Teramo','Terni','Torino','Trapani','Trento','Treviso','Trieste',
+            'Udine','Varese','Venezia','Vercelli','Verona','Vibo Valentia','Vicenza','Viterbo'
+        ];
     }
 
     /**
@@ -375,6 +395,7 @@ class BenzinaOggiPlugin {
         add_settings_field('webhook_secret', 'Webhook Secret', [$this, 'field_webhook_secret'], 'benzinaoggi', 'benzinaoggi_section');
         add_settings_field('api_secret', 'API Bearer Secret', [$this, 'field_api_secret'], 'benzinaoggi', 'benzinaoggi_section');
         add_settings_field('gemini_api_key', 'Google Gemini API Key', [$this, 'field_gemini_api_key'], 'benzinaoggi', 'benzinaoggi_section');
+        add_settings_field('city_posts_targets', __('Città per articoli (uno per riga)', 'benzinaoggi'), [$this, 'field_city_posts_targets'], 'benzinaoggi', 'benzinaoggi_section');
 
         // Sezione per il logo
         add_settings_section('benzinaoggi_logo_section', __('Logo e Branding', 'benzinaoggi'), function() {
@@ -394,7 +415,8 @@ class BenzinaOggiPlugin {
             'webhook_secret' => '',
             'api_secret' => '',
             'logo_url' => '',
-            'gemini_api_key' => ''
+            'gemini_api_key' => '',
+            'city_posts_targets' => "Milano\nRoma\nNapoli\nTorino\nBologna\nFirenze\nVenezia\nGenova\nBari\nCatania\nPalermo\nCagliari\nTrieste\nPerugia\nAncona\nL'Aquila\nCampobasso\nPotenza\nCatanzaro\nTrento"
         ];
         $opts = get_option(self::OPTION_NAME, []);
         return wp_parse_args($opts, $defaults);
@@ -425,6 +447,13 @@ class BenzinaOggiPlugin {
         $opts = $this->get_options();
         echo '<input type="password" name="'.self::OPTION_NAME.'[gemini_api_key]" value="'.esc_attr($opts['gemini_api_key']).'" class="regular-text" placeholder="AIza..." />';
         echo '<p class="description">Chiave API di Google Gemini usata per generare descrizioni SEO.</p>';
+    }
+
+    public function field_city_posts_targets() {
+        $opts = $this->get_options();
+        $val = (string)($opts['city_posts_targets'] ?? '');
+        echo '<textarea name="'.self::OPTION_NAME.'[city_posts_targets]" rows="6" class="large-text" placeholder="Milano\nRoma\n…">'.esc_textarea($val).'</textarea>';
+        echo '<p class="description">Elenco di capoluoghi o città per cui generare articoli. Uno per riga.</p>';
     }
 
     public function field_logo_url() {
@@ -572,6 +601,36 @@ class BenzinaOggiPlugin {
                     <?php wp_nonce_field('bo_run_weekly_seo'); ?>
                     <button type="submit" class="button button-secondary">Esegui generazione SEO settimanale</button>
                 </form>
+
+                <hr/>
+                <h2>Articoli per capoluoghi: "prezzo-benzina-{città}"</h2>
+                <p>Genera articoli (post) in background per i capoluoghi italiani. Puoi scegliere tra:</p>
+                <ul style="list-style: disc; margin-left: 18px;">
+                    <li>tutti i capoluoghi;</li>
+                    <li>una selezione specifica dalla lista;</li>
+                    <li>le città impostate nel campo “Città per articoli”.</li>
+                </ul>
+                <?php $action = admin_url('admin-post.php'); ?>
+                <div style="display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap;">
+                    <form method="post" action="<?php echo esc_url($action); ?>" onsubmit="return confirm('Avviare la generazione per i capoluoghi selezionati?');" style="min-width:320px;">
+                        <input type="hidden" name="action" value="benzinaoggi_generate_city_posts" />
+                        <?php wp_nonce_field('bo_generate_city_posts'); ?>
+                        <label for="bo_capitals_select"><strong>Seleziona capoluoghi</strong></label>
+                        <select id="bo_capitals_select" name="cities[]" multiple size="12" class="large-text" style="height:auto;">
+                            <?php foreach ($this->get_italian_capitals() as $cap): ?>
+                                <option value="<?php echo esc_attr($cap); ?>"><?php echo esc_html($cap); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <p><button type="submit" class="button button-secondary">Genera selezionati (background)</button></p>
+                    </form>
+                    <form method="post" action="<?php echo esc_url($action); ?>" onsubmit="return confirm('Generare articoli per TUTTI i capoluoghi?');">
+                        <input type="hidden" name="action" value="benzinaoggi_generate_city_posts" />
+                        <input type="hidden" name="mode" value="all" />
+                        <?php wp_nonce_field('bo_generate_city_posts'); ?>
+                        <p><strong>Oppure:</strong></p>
+                        <p><button type="submit" class="button button-primary">Genera tutti i capoluoghi (background)</button></p>
+                    </form>
+                </div>
                 
                 <?php
                 // Mostra info sul prossimo cron
@@ -700,6 +759,149 @@ class BenzinaOggiPlugin {
             <?php endif; ?>
         </div>
         <?php
+    }
+
+    /**
+     * Trigger manuale: genera articoli per citt e0 in background (WP-Cron)
+     */
+    public function handle_generate_city_posts() {
+        if (!current_user_can('manage_options')) wp_die('Not allowed');
+        check_admin_referer('bo_generate_city_posts');
+        // Determina elenco città da generare
+        $mode = isset($_POST['mode']) ? sanitize_text_field($_POST['mode']) : '';
+        $cities = [];
+        if ($mode === 'all') {
+            $cities = $this->get_italian_capitals();
+        } elseif (!empty($_POST['cities']) && is_array($_POST['cities'])) {
+            $cities = array_values(array_filter(array_map('sanitize_text_field', $_POST['cities'])));
+        } else {
+            // fallback: usa le città impostate nelle opzioni
+            $opts = $this->get_options();
+            $raw = (string)($opts['city_posts_targets'] ?? '');
+            $cities = array_values(array_filter(array_map('trim', preg_split('/\r?\n/', $raw))));
+        }
+        if (empty($cities)) { set_transient('benzinaoggi_notice', 'Nessuna città valida selezionata.', 30); wp_redirect(admin_url('options-general.php?page=benzinaoggi&tab=seo')); exit; }
+
+        // Metti in coda in opzione per il job
+        update_option('benzinaoggi_city_posts_queue', $cities, false);
+        // schedule immediate single event
+        wp_schedule_single_event(time() + 5, 'benzinaoggi_generate_city_posts');
+        if (function_exists('spawn_cron')) { @spawn_cron(time() + 1); }
+        set_transient('benzinaoggi_notice', 'Generazione articoli citt e0 avviata in background.', 30);
+        wp_redirect(admin_url('options-general.php?page=benzinaoggi&tab=seo'));
+        exit;
+    }
+
+    /**
+     * Job: genera o aggiorna articoli per l'elenco di citt e0 configurate
+     */
+    public function cron_generate_city_posts() {
+        $opts = $this->get_options();
+        $api_key = trim($opts['gemini_api_key'] ?? '');
+        if (!$api_key) { $this->log_progress('City posts: Gemini API Key mancante'); return; }
+        // Prendi coda da opzione; se vuota, fallback a impostazioni
+        $queue = get_option('benzinaoggi_city_posts_queue', []);
+        if (!is_array($queue) || empty($queue)) {
+            $raw = (string)($opts['city_posts_targets'] ?? '');
+            $queue = array_values(array_filter(array_map('trim', preg_split('/\r?\n/', $raw))));
+        }
+        $cities = $queue;
+        if (empty($cities)) { $this->log_progress('City posts: nessuna citt e0 configurata'); return; }
+
+        @ignore_user_abort(true);
+        @set_time_limit(300);
+
+        $generated = 0; $updated = 0; $errors = 0;
+        $remaining = [];
+        foreach ($cities as $idx => $city) {
+            try {
+                $res = $this->generate_city_post($city, $api_key);
+                if ($res['created']) $generated++; else $updated++;
+                // pausa breve per rate limit
+                usleep(300000);
+            } catch (Exception $e) {
+                $errors++;
+                $this->log_progress('City posts ERROR ['.$city.']: '.$e->getMessage());
+                usleep(300000);
+                // Riprovare più tardi: rimettere in coda
+                $remaining[] = $city;
+            }
+        }
+        // Aggiorna coda (vuota se completato)
+        update_option('benzinaoggi_city_posts_queue', $remaining, false);
+        $this->log_progress("City posts completati: creati=$generated aggiornati=$updated errori=$errors");
+    }
+
+    /**
+     * Genera/aggiorna un post per una citt e0 con slug prezzo-benzina-{citta}
+     */
+    private function generate_city_post($city, $api_key) {
+        $slug = sanitize_title('prezzo-benzina-' . $city);
+        $existing = get_page_by_path($slug, OBJECT, 'post');
+        $title = 'Prezzo benzina a ' . $city;
+
+        // Prompt Gemini: meta 100 char, contenuto 600-1500 parole
+        $prompt = "In italiano, scrivi due sezioni per un articolo su prezzi dei carburanti in una citt\u00e0.\n".
+                  "1) UNA meta description (<=100 caratteri), frase completa con punto finale, senza brand.\n".
+                  "2) Un contenuto HTML unico e informativo tra 600 e 1500 parole, con sottotitoli (<h2>/<h3>), paragrafi, elenco puntato, 2-3 emoji pertinenti.\n".
+                  "Contesto: citt\u00e0: '" . $city . "'. Evita numeri inventati o dati non verificabili. Non ripetere la meta. Rispondi SOLO JSON: {\"meta\":\"...\",\"html\":\"...\"}.";
+
+        // Model discovery (riusa cache modello se presente)
+        $chosen_model = get_transient('bo_gemini_model');
+        if (!$chosen_model) { $chosen_model = 'gemini-1.5-flash'; }
+        $endpoint = add_query_arg('key', rawurlencode($api_key), 'https://generativelanguage.googleapis.com/v1/models/' . rawurlencode($chosen_model) . ':generateContent');
+        $body = array('contents' => array(array('role' => 'user','parts' => array(array('text' => $prompt)))));
+        $resp = wp_remote_post($endpoint, array('timeout' => 45,'headers' => array('Content-Type' => 'application/json'),'body' => wp_json_encode($body)));
+        if (is_wp_error($resp)) throw new Exception($resp->get_error_message());
+        $code = wp_remote_retrieve_response_code($resp);
+        $json = json_decode(wp_remote_retrieve_body($resp), true);
+        if ($code < 200 || $code >= 300) {
+            delete_transient('bo_gemini_model');
+            $err = isset($json['error']['message']) ? $json['error']['message'] : 'Gemini HTTP error';
+            throw new Exception($err);
+        }
+        $modelText = !empty($json['candidates'][0]['content']['parts'][0]['text']) ? trim($json['candidates'][0]['content']['parts'][0]['text']) : '';
+        $genMeta = '';
+        $genHtml = '';
+        if ($modelText) {
+            $start = strpos($modelText, '{');
+            $end = strrpos($modelText, '}');
+            $slice = ($start !== false && $end !== false && $end > $start) ? substr($modelText, $start, $end - $start + 1) : $modelText;
+            $obj = json_decode($slice, true);
+            if (is_array($obj)) {
+                $genMeta = isset($obj['meta']) ? trim((string)$obj['meta']) : '';
+                $genHtml = isset($obj['html']) ? (string)$obj['html'] : '';
+            }
+        }
+        if (!$genMeta && $genHtml) $genMeta = wp_strip_all_tags($genHtml);
+        $genMeta = trim(preg_replace('/\s+/', ' ', wp_strip_all_tags((string)$genMeta)));
+        // Meta 100 caratteri max (frase completa)
+        $metaDesc = $this->smart_trim_sentence($genMeta, 100);
+        if (!$genHtml) $genHtml = '<p>'.esc_html($metaDesc).'</p>';
+
+        // Crea/aggiorna post
+        if ($existing) {
+            $post_id = $existing->ID;
+            wp_update_post(array('ID' => $post_id,'post_title' => $title,'post_excerpt' => wp_slash($metaDesc),'post_content' => wp_slash($genHtml)));
+            update_post_meta($post_id, '_yoast_wpseo_metadesc', $metaDesc);
+            update_post_meta($post_id, '_rank_math_description', $metaDesc);
+            update_post_meta($post_id, '_aioseo_description', $metaDesc);
+            return ['created' => false, 'post_id' => $post_id];
+        } else {
+            $post_id = wp_insert_post(array(
+                'post_title' => $title,
+                'post_name'  => $slug,
+                'post_type'  => 'post',
+                'post_status'=> 'publish',
+                'post_excerpt' => wp_slash($metaDesc),
+                'post_content' => wp_slash($genHtml)
+            ), true);
+            if (is_wp_error($post_id)) throw new Exception($post_id->get_error_message());
+            update_post_meta($post_id, '_yoast_wpseo_metadesc', $metaDesc);
+            update_post_meta($post_id, '_rank_math_description', $metaDesc);
+            update_post_meta($post_id, '_aioseo_description', $metaDesc);
+            return ['created' => true, 'post_id' => $post_id];
+        }
     }
 
     public function handle_run_variations() {

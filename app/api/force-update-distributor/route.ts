@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/src/lib/db";
 import { fetchCsvText, parseCsv } from "@/src/services/csv";
+import { getMisePrices, normalizeFuelName } from "@/src/services/mise-api";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -81,7 +82,61 @@ export async function POST(req: NextRequest) {
     }
 
     if (filtered.length === 0) {
-      return NextResponse.json({ ok: false, error: `Nessuna riga nel CSV per impiantoId ${impiantoId}` }, { status: 404 });
+      // Fallback: usa API MISE se il CSV non contiene righe per questo impianto
+      if (debug) console.log(`[FORCE-UPDATE-DISTRIBUTOR][FALLBACK] No CSV rows for ${impiantoId}, trying MISE API...`);
+
+      const miseFuels = await getMisePrices(impiantoId);
+      if (!miseFuels || miseFuels.length === 0) {
+        return NextResponse.json({ ok: false, error: `Nessuna riga nel CSV per impiantoId ${impiantoId}` }, { status: 404 });
+      }
+
+      let updatedCountFb = 0;
+      let createdCountFb = 0;
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const dayFb = new Date(`${todayStr}T00:00:00.000Z`);
+
+      for (const fuel of miseFuels) {
+        const fuelType = normalizeFuelName(String(fuel.name || '').trim());
+        const isSelf = !!fuel.isSelf;
+        const prezzo = Number(fuel.price);
+        if (!Number.isFinite(prezzo)) continue;
+        const communicatedAt = fuel.validityDate ? new Date(fuel.validityDate) : (fuel.insertDate ? new Date(fuel.insertDate) : new Date());
+
+        const existingLatest = await prisma.price.findFirst({
+          where: { distributorId: distributor.id, fuelType, isSelfService: isSelf },
+          orderBy: { day: 'desc' }
+        });
+        const hasChanged = !existingLatest || Math.abs(existingLatest.price - prezzo) > 0.001;
+        if (!hasChanged && !force) continue;
+
+        await prisma.price.upsert({
+          where: {
+            Price_unique_day: {
+              distributorId: distributor.id,
+              fuelType,
+              day: dayFb,
+              isSelfService: isSelf
+            }
+          },
+          update: { price: prezzo, communicatedAt },
+          create: { distributorId: distributor.id, fuelType, price: prezzo, day: dayFb, isSelfService: isSelf, communicatedAt }
+        });
+
+        if (existingLatest) {
+          if (Math.abs(existingLatest.price - prezzo) > 0.001) updatedCountFb++;
+        } else {
+          createdCountFb++;
+        }
+      }
+
+      const lastUpdatedRowFb = await prisma.price.findFirst({
+        where: { distributorId: distributor.id, day: dayFb },
+        orderBy: { communicatedAt: 'desc' },
+        select: { communicatedAt: true }
+      });
+      const lastUpdatedAtFb = lastUpdatedRowFb?.communicatedAt?.toISOString() || new Date().toISOString();
+
+      return NextResponse.json({ ok: true, source: 'mise', updated: updatedCountFb, created: createdCountFb, day: todayStr, lastUpdatedAt: lastUpdatedAtFb });
     }
 
     // Determina il "day" dalla prima riga valida

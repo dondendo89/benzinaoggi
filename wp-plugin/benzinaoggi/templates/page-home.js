@@ -6,7 +6,7 @@
     apiBase: window.BenzinaOggi?.apiBase || '',
     mapCenter: [41.8719, 12.5674],
     defaultZoom: 6,
-    pageSize: 20  // Risultati per pagina
+    pageSize: 5  // Risultati per pagina
   };
 
   // Elementi DOM
