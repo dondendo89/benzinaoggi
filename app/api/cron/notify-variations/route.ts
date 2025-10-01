@@ -36,13 +36,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: true, sent: 0, note: 'No target day found' });
     }
 
-    // Carica variazioni del giorno target
-    const variations = await (prisma as any).priceVariation.findMany({
-      where: {
-        day: targetDay,
-        ...(onlyDown ? { direction: 'down' } as any : {})
-      }
-    });
+    // Carica variazioni del giorno target via raw SQL per compatibilità anche se il client non ha l'accessor del modello
+    const variations = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "distributorId","fuelType","isSelfService","oldPrice","newPrice","direction","delta","percentage","day"
+       FROM "PriceVariation"
+       WHERE "day" = $1 ${onlyDown ? `AND "direction"='down'` : ''}`,
+      targetDay
+    );
     if (variations.length === 0) {
       return NextResponse.json({ ok: true, sent: 0, day: targetDay.toISOString().slice(0,10), note: 'No variations for target day' });
     }
