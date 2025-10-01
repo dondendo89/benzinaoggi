@@ -36,13 +36,57 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: true, sent: 0, note: 'No target day found' });
     }
 
-    // Carica variazioni del giorno target via raw SQL per compatibilità anche se il client non ha l'accessor del modello
-    const variations = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT "distributorId","fuelType","isSelfService","oldPrice","newPrice","direction","delta","percentage","day"
-       FROM "PriceVariation"
-       WHERE "day" = $1 ${onlyDown ? `AND "direction"='down'` : ''}`,
-      targetDay
-    );
+    let variations: any[] = [];
+    try {
+      // Prova a leggere da PriceVariation
+      variations = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT "distributorId","fuelType","isSelfService","oldPrice","newPrice","direction","delta","percentage","day"
+         FROM "PriceVariation"
+         WHERE "day" = $1 ${onlyDown ? `AND "direction"='down'` : ''}`,
+        targetDay
+      );
+    } catch (_) {
+      // Fallback: calcola variazioni on-the-fly da Price (ultimo giorno vs precedente)
+      const today = targetDay;
+      const prevRow = await prisma.price.findFirst({
+        where: { day: { lt: today! } },
+        select: { day: true },
+        orderBy: { day: 'desc' }
+      });
+      const yesterday = prevRow?.day;
+      if (!yesterday) {
+        return NextResponse.json({ ok: true, sent: 0, day: (today as Date).toISOString().slice(0,10), note: 'No previous day to compare' });
+      }
+      const [todayPrices, yesterdayPrices] = await Promise.all([
+        prisma.price.findMany({ where: { day: today! } }),
+        prisma.price.findMany({ where: { day: yesterday } })
+      ]);
+      const key = (p: any) => `${p.distributorId}|${p.fuelType}|${p.isSelfService ? 1 : 0}`;
+      const mapYesterday = new Map<string, any>();
+      for (const p of yesterdayPrices) mapYesterday.set(key(p), p);
+      const tmp: any[] = [];
+      for (const p of todayPrices) {
+        const y = mapYesterday.get(key(p));
+        if (!y) continue;
+        if (p.price !== y.price) {
+          const delta = p.price - y.price;
+          const direction = delta > 0 ? 'up' : 'down';
+          if (onlyDown && direction !== 'down') continue;
+          tmp.push({
+            distributorId: p.distributorId,
+            fuelType: p.fuelType,
+            isSelfService: p.isSelfService,
+            oldPrice: y.price,
+            newPrice: p.price,
+            direction,
+            delta,
+            percentage: y.price !== 0 ? (delta / y.price) * 100 : 0,
+            day: today
+          });
+        }
+      }
+      variations = tmp;
+    }
     if (variations.length === 0) {
       return NextResponse.json({ ok: true, sent: 0, day: targetDay.toISOString().slice(0,10), note: 'No variations for target day' });
     }
