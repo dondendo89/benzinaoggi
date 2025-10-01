@@ -111,6 +111,9 @@ class BenzinaOggiPlugin {
         add_action('init', [$this, 'register_sw_rewrites']);
         register_activation_hook(__FILE__, [$this, 'activate_flush_rewrites']);
         register_deactivation_hook(__FILE__, [$this, 'deactivate_flush_rewrites']);
+
+        // Admin post action to trigger notifications for today's variations
+        add_action('admin_post_benzinaoggi_notify_variations', [$this, 'handle_notify_variations']);
     }
 
     private function get_italian_capitals() {
@@ -608,7 +611,7 @@ class BenzinaOggiPlugin {
                 <ul style="list-style: disc; margin-left: 18px;">
                     <li>tutti i capoluoghi;</li>
                     <li>una selezione specifica dalla lista;</li>
-                    <li>le città impostate nel campo “Città per articoli”.</li>
+                    <li>le città impostate nel campo "Città per articoli".</li>
                 </ul>
                 <?php $action = admin_url('admin-post.php'); ?>
                 <div style="display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap;">
@@ -689,10 +692,16 @@ class BenzinaOggiPlugin {
                 ?>
                 
             <?php elseif ($active_tab == 'notifications'): ?>
-                <h2>Gestione Notifiche</h2>
-                <p>Le notifiche vengono inviate automaticamente quando i prezzi scendono per i distributori a cui gli utenti sono iscritti.</p>
-                <p><strong>Configurazione OneSignal:</strong> Assicurati di aver configurato correttamente App ID e API Key nelle impostazioni.</p>
-                
+                <h2>Notifiche variazioni prezzo</h2>
+                <p>Invia notifiche push agli iscritti per le variazioni di prezzo rilevate oggi. Richiede OneSignal configurato e subscriptions presenti.</p>
+                <?php $action = admin_url('admin-post.php'); ?>
+                <form method="post" action="<?php echo esc_url($action); ?>" onsubmit="return confirm('Inviare le notifiche per le variazioni di oggi?');">
+                    <?php wp_nonce_field('bo_notify_variations'); ?>
+                    <input type="hidden" name="action" value="benzinaoggi_notify_variations" />
+                    <p>
+                        <button type="submit" class="button button-primary">Invia notifiche (oggi)</button>
+                    </p>
+                </form>
             <?php elseif ($active_tab == 'pages'): ?>
                 <h2>Pagine Template</h2>
                 <p>Crea le pagine necessarie per il funzionamento del plugin con i template personalizzati.</p>
@@ -2148,6 +2157,39 @@ class BenzinaOggiPlugin {
                 $this->log_progress('Notification sent for ' . $fuelType . ' at ' . $distributorName);
             }
         }
+    }
+
+    public function handle_notify_variations() {
+        if (!current_user_can('manage_options')) wp_die('Not allowed');
+        check_admin_referer('bo_notify_variations');
+        $opts = $this->get_options();
+        $api_base = rtrim((string)($opts['api_base'] ?? ''), '/');
+        if (!$api_base) {
+            set_transient('benzinaoggi_notice', 'Configura prima API Base URL nelle impostazioni.', 30);
+            wp_redirect(admin_url('admin.php?page=benzinaoggi&tab=notifications'));
+            exit;
+        }
+        $url = $api_base . '/api/cron/notify-variations?onlyDown=true';
+        // Optional: If API Bearer Secret is set, include it
+        $args = [ 'timeout' => 30 ];
+        $api_secret = trim((string)($opts['api_secret'] ?? ''));
+        if ($api_secret !== '') {
+            $args['headers'] = [ 'Authorization' => 'Bearer ' . $api_secret ];
+        }
+        $resp = wp_remote_get($url, $args);
+        if (is_wp_error($resp)) {
+            set_transient('benzinaoggi_notice', 'Errore invio notifiche: ' . $resp->get_error_message(), 30);
+        } else {
+            $code = wp_remote_retrieve_response_code($resp);
+            $body = wp_remote_retrieve_body($resp);
+            if ($code >= 200 && $code < 300) {
+                set_transient('benzinaoggi_notice', 'Notifiche inviate. Risposta: ' . esc_html($body), 30);
+            } else {
+                set_transient('benzinaoggi_notice', 'Errore invio notifiche. HTTP ' . intval($code) . ' — ' . esc_html($body), 30);
+            }
+        }
+        wp_redirect(admin_url('admin.php?page=benzinaoggi&tab=notifications'));
+        exit;
     }
 }
 
