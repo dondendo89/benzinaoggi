@@ -138,6 +138,7 @@ export async function GET(req: NextRequest) {
                 app_id: appId,
                 include_aliases: { external_id: chunk },
                 channel_for_external_user_ids: 'push',
+                target_channel: 'push',
                 headings: { it: title, en: title },
                 contents: { it: body, en: body },
                 data: {
