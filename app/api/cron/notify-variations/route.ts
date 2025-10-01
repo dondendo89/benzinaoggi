@@ -67,6 +67,27 @@ export async function GET(req: NextRequest) {
 
     const grouped = groupBy(keyed, x => x.key);
 
+    // Precarica subscriptions SOLO per le coppie (impiantoId,fuelType) presenti oggi nelle variazioni
+    const uniquePairs = Array.from(new Set(Object.values(grouped).map(items => `${items[0]!.impiantoId}|${items[0]!.fuelType}`)));
+    type Pair = { impiantoId: number; fuelType: string };
+    const pairs: Pair[] = uniquePairs.map(k => ({ impiantoId: Number(k.split('|')[0]), fuelType: k.split('|')[1]! }));
+
+    let subsAll: { externalId: string; impiantoId: number; fuelType: string }[] = [];
+    if (pairs.length > 0) {
+      // Costruisci OR dinamico per coppie specifiche
+      const or = pairs.map(p => ({ impiantoId: p.impiantoId, fuelType: p.fuelType }));
+      subsAll = await prisma.subscription.findMany({
+        where: { OR: or },
+        select: { externalId: true, impiantoId: true, fuelType: true },
+      });
+    }
+    const subsByKey = new Map<string, string[]>();
+    for (const s of subsAll) {
+      const k = `${s.impiantoId}|${s.fuelType}`;
+      if (!subsByKey.has(k)) subsByKey.set(k, []);
+      if (s.externalId) subsByKey.get(k)!.push(s.externalId);
+    }
+
     // Per ogni gruppo, recupera gli externalId iscritti e invia notifica in batch
     let sent = 0;
     const failures: Array<{ key: string; error: string }> = [];
@@ -76,11 +97,7 @@ export async function GET(req: NextRequest) {
       const impiantoId = sample!.impiantoId as number;
       const fuelType = sample!.fuelType;
 
-      const subs = await prisma.subscription.findMany({
-        where: { impiantoId, fuelType },
-        select: { externalId: true }
-      });
-      const externalIds = subs.map(s => s.externalId).filter(Boolean);
+      const externalIds = subsByKey.get(`${impiantoId}|${fuelType}`) || [];
       if (externalIds.length === 0) continue;
 
       // Scegli prezzi old/new dall'item con delta maggiore assoluto
