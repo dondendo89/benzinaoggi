@@ -221,6 +221,20 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
     for (const p of prevPrices) prevByKey.set(key(p), { price: p.price });
   }
 
+  // Preload current prices (single-row per key) to detect variations regardless of day
+  const currentByKey = new Map<string, { price: number }>();
+  try {
+    const cps = await (prisma as any).currentPrice.findMany?.();
+    if (Array.isArray(cps)) {
+      for (const cp of cps) {
+        const k = key({ distributorId: cp.distributorId, fuelType: cp.fuelType, isSelfService: cp.isSelfService });
+        currentByKey.set(k, { price: cp.price });
+      }
+    }
+  } catch (_) {
+    // table might not exist yet during first deploy
+  }
+
   type UpsertItem = {
     distributorId: number;
     fuelType: string;
@@ -282,7 +296,7 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
     }
     items.push({ distributorId, fuelType, isSelf, price, communicatedAt });
 
-    // Variation detection vs previous day (not vs existingToday)
+    // Variation detection: prefer previous day; else fallback to CurrentPrice
     const prevDayEntry = prevByKey.get(k);
     if (prevDayEntry && prevDayEntry.price !== price) {
       const delta = price - prevDayEntry.price;
@@ -299,6 +313,24 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
         percentage,
         day: dayDate
       });
+    } else {
+      const cp = currentByKey.get(k);
+      if (cp && cp.price !== price) {
+        const delta = price - cp.price;
+        const direction = delta > 0 ? 'up' : 'down';
+        const percentage = cp.price !== 0 ? (delta / cp.price) * 100 : 0;
+        variations.push({
+          distributorId,
+          fuelType,
+          isSelfService: isSelf,
+          oldPrice: cp.price,
+          newPrice: price,
+          direction,
+          delta,
+          percentage,
+          day: dayDate
+        });
+      }
     }
   }
 
@@ -422,6 +454,21 @@ DO UPDATE SET "price"=EXCLUDED."price", "communicatedAt"=EXCLUDED."communicatedA
       }
     } catch (_) {
       // Evita di interrompere il job in caso di errore notifica
+    }
+  }
+
+  // Upsert CurrentPrice for all processed items
+  if (items.length > 0) {
+    for (const it of items) {
+      try {
+        await (prisma as any).currentPrice.upsert({
+          where: { distributorId_fuelType_isSelfService: { distributorId: it.distributorId, fuelType: it.fuelType, isSelfService: it.isSelf } },
+          update: { price: it.price, communicatedAt: it.communicatedAt },
+          create: { distributorId: it.distributorId, fuelType: it.fuelType, isSelfService: it.isSelf, price: it.price, communicatedAt: it.communicatedAt },
+        });
+      } catch (_) {
+        // ignore if table missing
+      }
     }
   }
 

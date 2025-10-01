@@ -22,6 +22,7 @@ model Distributor {
 
   prices          Price[]
   priceVariations PriceVariation[]
+  currentPrices   CurrentPrice[]
 
   @@index([comune])
   @@index([provincia])
@@ -62,6 +63,20 @@ model PriceVariation {
 
   @@index([day])
   @@index([distributorId, fuelType, day])
+}
+
+model CurrentPrice {
+  distributorId  Int
+  fuelType       String
+  isSelfService  Boolean  @default(false)
+  price          Float
+  communicatedAt DateTime
+  updatedAt      DateTime @updatedAt
+
+  distributor Distributor @relation(fields: [distributorId], references: [id])
+
+  @@id([distributorId, fuelType, isSelfService])
+  @@index([fuelType])
 }
 
 model Subscription {
