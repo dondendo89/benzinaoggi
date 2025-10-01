@@ -378,22 +378,29 @@ DO UPDATE SET "price"=EXCLUDED."price", "communicatedAt"=EXCLUDED."communicatedA
       }))
     });
 
-    // INVIO IMMEDIATO NOTIFICHE: notifica qualsiasi variazione (su/giù) appena rilevata
+    // INVIO IMMEDIATO NOTIFICHE: notifica SOLO i ribassi (down) appena rilevati
     try {
       const appId = process.env.ONESIGNAL_APP_ID;
       const apiKey = process.env.ONESIGNAL_API_KEY;
       if (appId && apiKey) {
+        // Filtra solo le variazioni al ribasso
+        const downs = variations.filter(v => v.direction === 'down');
+        if (downs.length === 0) {
+          // niente ribassi: non inviare nulla
+          return { inserted, updated, day: today, total, skippedUnknownDistributor, skippedNoPrice, skippedBadDate, sampleRow };
+        }
+
         // Raggruppa per (distributorId, fuelType)
         const byKey = new Map<string, VariationItem[]>();
         const keyOf = (v: VariationItem) => `${v.distributorId}|${v.fuelType}`;
-        for (const v of variations) {
+        for (const v of downs) {
           const k = keyOf(v);
           if (!byKey.has(k)) byKey.set(k, []);
           byKey.get(k)!.push(v);
         }
 
         // Precarica mapping distributorId -> impiantoId e dati descrittivi
-        const distributorIds = Array.from(new Set(variations.map(v => v.distributorId)));
+        const distributorIds = Array.from(new Set(downs.map(v => v.distributorId)));
         const distributors = await prisma.distributor.findMany({
           where: { id: { in: distributorIds } },
           select: { id: true, impiantoId: true, gestore: true, bandiera: true, comune: true }

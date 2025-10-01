@@ -1,672 +1,138 @@
 {
   "info": {
     "_postman_id": "3a2d3f2e-9b5a-4f3a-9f2a-3f9a2b5c7d8e",
-    "name": "BenzinaOggi API",
+    "name": "BenzinaOggi API (Core Plugin)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection completa per BenzinaOggi API: import anagrafica, prezzi, variazioni, distributori, dettagli e notifiche OneSignal. Include autenticazione Bearer token per endpoint protetti."
+    "description": "Solo le API usate dal plugin WordPress: lista/ dettaglio distributori, aggiornamenti prezzi (CSV), forzatura singolo impianto, notifiche variazioni, subscriptions."
   },
   "item": [
     {
-      "name": "Update Anagrafica",
-      "request": {
-        "method": "GET",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/update-anagrafica",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "update-anagrafica"
-          ]
-        }
-      },
-      "description": "Importa tutti i distributori dal CSV MISE. Aggiorna il database con anagrafica completa."
-    },
-    {
-      "name": "List All Distributors",
-      "request": {
-        "method": "GET",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/distributors-all",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "distributors-all"
-          ]
-        }
-      },
-      "description": "Lista tutti i distributori (id, bandiera, comune) per creazione pagine WordPress."
-    },
-    {
-      "name": "Update Prezzi (upsert)",
-      "request": {
-        "method": "GET",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/update-prezzi",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "update-prezzi"
-          ]
-        }
-      },
-      "description": "Importa prezzi carburanti dal CSV MISE. Inserisce i prezzi mancanti e aggiorna solo quando cambiano (upsert). Se l'impianto non esiste viene creato un Distributor placeholder."
-    },
-    {
-      "name": "Check Variation",
-      "request": {
-        "method": "GET",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/check-variation",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "check-variation"
-          ]
-        }
-      },
-      "description": "Controlla variazioni prezzi tra oggi e ieri. Restituisce distributori con cali/aumenti prezzi."
-    },
-    {
-      "name": "Check Variation (filtered)",
-      "request": {
-        "method": "GET",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/check-variation?impiantoId={{impiantoId}}&fuelType={{fuelType}}&onlyDown=true&verbose=true",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "check-variation"
-          ],
-          "query": [
-            { "key": "impiantoId", "value": "{{impiantoId}}" },
-            { "key": "fuelType", "value": "{{fuelType}}" },
-            { "key": "onlyDown", "value": "true" },
-            { "key": "verbose", "value": "true" }
-          ]
-        }
-      },
-      "description": "Variazioni filtrate per impianto/carb, solo cali, con output verboso (conteggi/giorni)."
-    },
-    {
-      "name": "Debug Variations",
-      "request": {
-        "method": "GET",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/debug-variations?verbose=true",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "debug-variations"
-          ],
-          "query": [
-            {
-              "key": "verbose",
-              "value": "true",
-              "description": "Output debug completo"
-            }
-          ]
-        }
-      },
-      "description": "Debug completo per analizzare il rilevamento variazioni: statistiche database, giorni disponibili, conteggi prezzi."
-    },
-    {
-      "name": "Smart Variations Check",
-      "request": {
-        "method": "GET",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/check-variations-smart?onlyDown=true&verbose=true&limit=100",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "check-variations-smart"
-          ],
-          "query": [
-            { "key": "onlyDown", "value": "true" },
-            { "key": "verbose", "value": "true" },
-            { "key": "limit", "value": "100" }
-          ]
-        }
-      },
-      "description": "Controllo intelligente delle variazioni: usa confronto standard, se pochi risultati prova API MISE, combina e rimuove duplicati."
-    },
-    {
-      "name": "Force Update All Prices",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" },
-          { "key": "Content-Type", "value": "application/json" }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/force-update-all-prices?limit=1000&force=true&debug=true",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "force-update-all-prices"
-          ],
-          "query": [
-            { "key": "limit", "value": "1000" },
-            { "key": "force", "value": "true" },
-            { "key": "debug", "value": "true" }
-          ]
-        }
-      },
-      "description": "Forza aggiornamento prezzi per TUTTI i distributori usando API MISE. Aggiorna prezzi obsoleti nel database."
-    },
-    {
-      "name": "Test MISE Comparison",
-      "request": {
-        "method": "GET",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/test-mise-comparison?impiantoId=58674",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "test-mise-comparison"
-          ],
-          "query": [
-            {
-              "key": "impiantoId",
-              "value": "58674",
-              "description": "ID impianto da confrontare (default: 58674)"
-            }
-          ]
-        }
-      },
-      "description": "Confronta prezzi locali vs API MISE per un distributore specifico. Mostra differenze dettagliate."
-    },
-    {
-      "name": "Force Update Distributor",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/force-update-distributor?impiantoId=58674&force=true",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "force-update-distributor"
-          ],
-          "query": [
-            {
-              "key": "impiantoId",
-              "value": "58674",
-              "description": "ID impianto da aggiornare"
-            },
-            {
-              "key": "force",
-              "value": "true",
-              "description": "Forza aggiornamento anche senza differenze"
-            }
-          ]
-        }
-      },
-      "description": "Forza l'aggiornamento di un distributore specifico con dati MISE. Aggiorna tutti i prezzi anche se non ci sono differenze."
-    },
-    {
-      "name": "Sync MISE Prices",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/sync-mise-prices?limit=10&force=false",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "sync-mise-prices"
-          ],
-          "query": [
-            {
-              "key": "limit",
-              "value": "10",
-              "description": "Numero distributori da controllare"
-            },
-            {
-              "key": "force",
-              "value": "false",
-              "description": "Forza aggiornamento anche senza variazioni"
-            },
-            {
-              "key": "impiantoId",
-              "value": "{{impiantoId}}",
-              "description": "ID impianto specifico (opzionale)"
-            }
-          ]
-        }
-      },
-      "description": "Sincronizza prezzi con API MISE diretta. Confronta prezzi locali con dati MISE in tempo reale."
-    },
-    {
-      "name": "Sync MISE Prices (ALL + force body)",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" },
-          { "key": "Content-Type", "value": "application/json" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"force\": true\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/sync-mise-prices?all=true",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "sync-mise-prices"
-          ],
-          "query": [
-            { "key": "all", "value": "true" }
-          ]
-        }
-      },
-      "description": "Esegue la sincronizzazione prezzi per TUTTI i distributori (batch). Usa confronto MISE vs ultimo prezzo DB; inserisce/aggiorna il prezzo di oggi se cambiato. Forza update via JSON body {force:true}."
-    },
-    {
-      "name": "Check MISE Variations",
-      "request": {
-        "method": "GET",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/check-mise-variations?limit=50&onlyDown=true",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "check-mise-variations"
-          ],
-          "query": [
-            {
-              "key": "limit",
-              "value": "50",
-              "description": "Numero distributori da controllare"
-            },
-            {
-              "key": "onlyDown",
-              "value": "true",
-              "description": "Solo cali prezzo"
-            },
-            {
-              "key": "impiantoId",
-              "value": "{{impiantoId}}",
-              "description": "ID impianto specifico (opzionale)"
-            }
-          ]
-        }
-      },
-      "description": "Controlla variazioni confrontando prezzi locali con API MISE in tempo reale. Più accurato del check-variation standard."
-    },
-    {
-      "name": "Update and Check Variations (Complete)",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/update-and-check-variations?debug=true&useMiseApi=true&limit=50",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "update-and-check-variations"
-          ],
-          "query": [
-            {
-              "key": "debug",
-              "value": "true",
-              "description": "Output debug dettagliato"
-            },
-            {
-              "key": "useMiseApi",
-              "value": "true",
-              "description": "Usa anche API MISE per controllo"
-            },
-            {
-              "key": "limit",
-              "value": "50",
-              "description": "Limite distributori per MISE API"
-            }
-          ]
-        }
-      },
-      "description": "Operazione completa: aggiorna prezzi dal CSV + controlla variazioni standard + controlla con API MISE. Combina tutti i risultati."
-    },
-    {
-      "name": "Daily Price Update (Cron Job)",
-      "request": {
-        "method": "GET",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/cron/update-prices-daily?limit=100&dryRun=false&force=false",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "cron",
-            "update-prices-daily"
-          ],
-          "query": [
-            {
-              "key": "limit",
-              "value": "100",
-              "description": "Numero distributori da processare"
-            },
-            {
-              "key": "dryRun",
-              "value": "false",
-              "description": "Simula senza aggiornare (true/false)"
-            },
-            {
-              "key": "force",
-              "value": "false",
-              "description": "Forza aggiornamento anche senza differenze"
-            }
-          ]
-        }
-      },
-      "description": "Job automatico per aggiornare prezzi giornalmente alle 6:00. Usa API MISE per dati real-time. Processa distributori in batch."
-    },
-    {
-      "name": "Daily Price Update (All distributors)",
-      "request": {
-        "method": "GET",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/cron/update-prices-daily?all=true&force=true",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "cron",
-            "update-prices-daily"
-          ],
-          "query": [
-            { "key": "all", "value": "true", "description": "Processa tutti i distributori con paginazione" },
-            { "key": "force", "value": "true", "description": "Forza aggiornamento anche senza differenze" }
-          ]
-        }
-      },
-      "description": "Esegue il cron giornaliero per TUTTI i distributori (modalità all=true). Forza update per scrivere i prezzi odierni."
-    },
-    {
-      "name": "Cron Job Setup",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/cron/setup?action=setup",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "cron",
-            "setup"
-          ],
-          "query": [
-            {
-              "key": "action",
-              "value": "setup",
-              "description": "setup, test, o status"
-            }
-          ]
-        }
-      },
-      "description": "Configura e testa il cron job per aggiornamento prezzi giornaliero. Fornisce istruzioni per Vercel."
-    },
-    {
-      "name": "List Distributors",
+      "name": "Distributors (list)",
       "request": {
         "method": "GET",
         "header": [],
         "url": {
           "raw": "{{baseUrl}}/api/distributors?city={{city}}&fuel={{fuel}}&brand={{brand}}&sort={{sort}}&lat={{lat}}&lon={{lon}}&limit={{limit}}",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "distributors"
-          ],
+          "host": ["{{baseUrl}}"],
+          "path": ["api","distributors"],
           "query": [
-            { "key": "city", "value": "{{city}}", "description": "Filtro per città (opzionale, case-insensitive)" },
-            { "key": "fuel", "value": "{{fuel}}", "description": "Filtro per carburante (opzionale)" },
-            { "key": "brand", "value": "{{brand}}", "description": "Filtro per bandiera (opzionale)" },
-            { "key": "sort", "value": "{{sort}}", "description": "Ordina: nearest (richiede lat/lon) o cheapest" },
-            { "key": "lat", "value": "{{lat}}", "description": "Latitudine utente per sort=nearest" },
-            { "key": "lon", "value": "{{lon}}", "description": "Longitudine utente per sort=nearest" },
-            { "key": "limit", "value": "{{limit}}", "description": "Numero massimo risultati (default 200)" }
+            { "key": "city", "value": "{{city}}" },
+            { "key": "fuel", "value": "{{fuel}}" },
+            { "key": "brand", "value": "{{brand}}" },
+            { "key": "sort", "value": "{{sort}}" },
+            { "key": "lat", "value": "{{lat}}" },
+            { "key": "lon", "value": "{{lon}}" },
+            { "key": "limit", "value": "{{limit}}" }
           ]
         }
       },
-      "description": "Lista distributori con filtri avanzati (città, carburante, bandiera) e ordinamento (più vicino, più economico)."
+      "description": "Endpoint principale usato dal plugin per la ricerca con filtri/paginazione."
     },
     {
-      "name": "Distributor Detail",
+      "name": "Distributor (detail)",
       "request": {
         "method": "GET",
         "header": [],
         "url": {
           "raw": "{{baseUrl}}/api/distributor/{{impiantoId}}",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "distributor",
-            "{{impiantoId}}"
-          ]
+          "host": ["{{baseUrl}}"],
+          "path": ["api","distributor","{{impiantoId}}"]
         }
       },
-      "description": "Dettagli completi di un distributore specifico con prezzi aggiornati. Usato per pagine WordPress."
+      "description": "Dettaglio distributore per pagina WordPress."
     },
     {
-      "name": "Send Notification",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" },
-          { "key": "Content-Type", "value": "application/json" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"fuelType\": \"{{fuelType}}\",\n  \"distributorId\": {{distributorId}},\n  \"oldPrice\": {{oldPrice}},\n  \"newPrice\": {{newPrice}},\n  \"distributorName\": \"{{distributorName}}\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/send-notification",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "send-notification"
-          ]
-        },
-        "description": "Invia notifica OneSignal per calo prezzo carburante. Richiede: fuelType, distributorId, oldPrice, newPrice, distributorName"
-      }
-    },
-    {
-      "name": "Send Notification (externalIds)",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" },
-          { "key": "Content-Type", "value": "application/json" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"fuelType\": \"{{fuelType}}\",\n  \"distributorId\": {{distributorId}},\n  \"oldPrice\": {{oldPrice}},\n  \"newPrice\": {{newPrice}},\n  \"distributorName\": \"{{distributorName}}\",\n  \"externalIds\": {{externalIds}}\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/send-notification",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "send-notification"
-          ]
-        },
-        "description": "Invia notifica targettizzando direttamente gli external_id (più affidabile dei tag). Imposta {{externalIds}} come array JSON, es. [\"abc\",\"def\"]."
-      }
-    },
-    {
-      "name": "Admin Purge Prices",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/admin/purge-prices?days={{purgeDays}}&hard={{purgeHard}}",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "admin",
-            "purge-prices"
-          ],
-          "query": [
-            { "key": "days", "value": "{{purgeDays}}" },
-            { "key": "hard", "value": "{{purgeHard}}" }
-          ]
-        }
-      },
-      "description": "Elimina prezzi più vecchi di N giorni, cancella distributori orfani e lancia VACUUM ANALYZE. Imposta hard=true per VACUUM FULL (bloccante)."
-    }
-    ,
-    {
-      "name": "Admin List Subscriptions",
+      "name": "Cron: Update prices (CSV)",
       "request": {
         "method": "GET",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{apiSecret}}" }
-        ],
+        "header": [],
         "url": {
-          "raw": "{{baseUrl}}/api/admin/subscriptions?impiantoId={{impiantoId}}&fuelType={{fuelType}}&take={{take}}",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "admin",
-            "subscriptions"
-          ],
+          "raw": "{{baseUrl}}/api/cron/update-prices-daily?debug=false",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","cron","update-prices-daily"],
+          "query": [ { "key": "debug", "value": "false" } ]
+        }
+      },
+      "description": "Cron giornaliero (Vercel) per aggiornare prezzi dal CSV MIMIT e inviare notifiche immediate."
+    },
+    {
+      "name": "Force update distributor (CSV→fallback MISE)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/force-update-distributor?impiantoId={{impiantoId}}&force=true&debug=true",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","force-update-distributor"],
           "query": [
-            { "key": "impiantoId", "value": "{{impiantoId}}", "description": "Filtra per impianto (opzionale)" },
-            { "key": "fuelType", "value": "{{fuelType}}", "description": "Filtra per carburante (opzionale)" },
-            { "key": "take", "value": "{{take}}", "description": "Max risultati (default 100, max 500)" }
+            { "key": "impiantoId", "value": "{{impiantoId}}" },
+            { "key": "force", "value": "true" },
+            { "key": "debug", "value": "true" }
           ]
         }
       },
-      "description": "Lista iscrizioni salvate (externalId, impiantoId, fuelType). Protetta da Bearer API_SECRET."
-    }
-    ,
+      "description": "Aggiorna un singolo impianto. Usa CSV come fonte primaria; MISE solo se il CSV non ha righe."
+    },
     {
-      "name": "User Subscribe (create/update)",
+      "name": "Notify variations (latest)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/cron/notify-variations?onlyDown=true&latest=true",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","cron","notify-variations"],
+          "query": [
+            { "key": "onlyDown", "value": "true" },
+            { "key": "latest", "value": "true" }
+          ]
+        }
+      },
+      "description": "Invia subito notifiche per le variazioni più recenti disponibili."
+    },
+    {
+      "name": "Notify variations (by day)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/cron/notify-variations?onlyDown=true&day=YYYY-MM-DD",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","cron","notify-variations"],
+          "query": [
+            { "key": "onlyDown", "value": "true" },
+            { "key": "day", "value": "YYYY-MM-DD" }
+          ]
+        }
+      },
+      "description": "Invia notifiche per un giorno specifico."
+    },
+    {
+      "name": "Subscriptions: create/update",
       "request": {
         "method": "POST",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" }
-        ],
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"externalId\": \"user-123\",\n  \"impiantoId\": {{impiantoId}},\n  \"fuelType\": \"{{fuelType}}\"\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/api/subscriptions",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "subscriptions"
-          ]
+          "host": ["{{baseUrl}}"],
+          "path": ["api","subscriptions"]
         }
       },
-      "description": "Crea o aggiorna una subscription per utente (externalId + impianto + fuel)."
-    }
-    ,
+      "description": "Crea/aggiorna una subscription (externalId + impianto + fuel)."
+    },
     {
-      "name": "List ExternalIds for impianto+fuel",
+      "name": "Subscriptions: list externalIds",
       "request": {
         "method": "GET",
         "header": [],
         "url": {
           "raw": "{{baseUrl}}/api/subscriptions?impiantoId={{impiantoId}}&fuelType={{fuelType}}",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "subscriptions"
-          ],
+          "host": ["{{baseUrl}}"],
+          "path": ["api","subscriptions"],
           "query": [
             { "key": "impiantoId", "value": "{{impiantoId}}" },
             { "key": "fuelType", "value": "{{fuelType}}" }
@@ -675,37 +141,10 @@
       },
       "description": "Ritorna gli externalId iscritti a (impiantoId, fuelType)."
     }
-    ,
-    {
-      "name": "User Unsubscribe (remove)",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"action\": \"remove\",\n  \"externalId\": \"user-123\",\n  \"impiantoId\": {{impiantoId}},\n  \"fuelType\": \"{{fuelType}}\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/subscriptions",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "subscriptions"
-          ]
-        }
-      },
-      "description": "Rimuove una subscription (externalId + impiantoId + fuelType)."
-    }
   ],
   "event": [],
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:3000" },
-    { "key": "apiSecret", "value": "" },
-    { "key": "scope", "value": "active" },
     { "key": "city", "value": "" },
     { "key": "fuel", "value": "" },
     { "key": "brand", "value": "" },
@@ -714,15 +153,7 @@
     { "key": "lon", "value": "" },
     { "key": "limit", "value": "200" },
     { "key": "impiantoId", "value": "59183" },
-    { "key": "fuelType", "value": "Benzina" },
-    { "key": "distributorId", "value": "59183" },
-    { "key": "oldPrice", "value": "1.899" },
-    { "key": "newPrice", "value": "1.789" },
-    { "key": "distributorName", "value": "AGIP ENI Agrigento" },
-    { "key": "externalIds", "value": "[]" },
-    { "key": "purgeDays", "value": "60" },
-    { "key": "purgeHard", "value": "false" },
-    { "key": "take", "value": "100" }
+    { "key": "fuelType", "value": "Benzina" }
   ]
 }
 
