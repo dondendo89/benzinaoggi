@@ -175,7 +175,7 @@ export async function POST(req: NextRequest) {
 
       // Scrivi variazioni, se presenti
       if (variations.length > 0) {
-        await prisma.priceVariation.createMany({ data: variations });
+        await (prisma as any).priceVariation.createMany({ data: variations });
       }
 
       return NextResponse.json({ ok: true, source: 'mise', updated: updatedCountFb, created: createdCountFb, day: todayStr, lastUpdatedAt: lastUpdatedAtFb });
