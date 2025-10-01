@@ -1,8 +1,6 @@
 {
   "crons": [
-    { "path": "/api/update-anagrafica", "schedule": "0 3 * * *" },
-    { "path": "/api/cron/update-prices-daily?debug=false", "schedule": "0 6 * * *" },
-    { "path": "/api/cron/notify-variations?onlyDown=true", "schedule": "10 6 * * *" }
+    { "path": "/api/cron/update-prices-daily?debug=false", "schedule": "0 6 * * *" }
   ]
 }
 

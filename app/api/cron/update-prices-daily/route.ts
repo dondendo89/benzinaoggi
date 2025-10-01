@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
     const lastUpdatedAt = lastUpdatedRow?.communicatedAt?.toISOString() || endTime;
 
     console.log(`[CRON] CSV update completed: inserted=${res.inserted}, updated=${res.updated}, day=${res.day}`);
+
     
     return NextResponse.json({
       ok: true,
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
         day: res.day,
         startTime,
         endTime,
-        lastUpdatedAt,
+        lastUpdatedAt
       }
     });
     

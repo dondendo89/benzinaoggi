@@ -105,6 +105,16 @@ class BenzinaOggiPlugin {
             }
         });
         
+        // Daily notifications for variations at 06:10 via WP-Cron
+        add_action('benzinaoggi_daily_notify_variations', [$this, 'cron_daily_notify_variations']);
+        add_action('init', function(){
+            if (!wp_next_scheduled('benzinaoggi_daily_notify_variations')) {
+                // Schedule roughly 10 minutes after price update
+                $next = $this->next_run_6am() + 10 * MINUTE_IN_SECONDS;
+                wp_schedule_event($next, 'daily', 'benzinaoggi_daily_notify_variations');
+            }
+        });
+
         // Handle OneSignal Service Worker (legacy query path kept for safety)
         add_action('init', [$this, 'handle_onesignal_worker']);
         // Add rewrites to expose SW at root (v16)
@@ -2190,6 +2200,22 @@ class BenzinaOggiPlugin {
         }
         wp_redirect(admin_url('admin.php?page=benzinaoggi&tab=notifications'));
         exit;
+    }
+
+    public function cron_daily_notify_variations() {
+        $opts = $this->get_options();
+        $api_base = rtrim((string)($opts['api_base'] ?? ''), '/');
+        if (!$api_base) return;
+        $url = $api_base . '/api/cron/notify-variations?onlyDown=true';
+        $args = [ 'timeout' => 45 ];
+        $api_secret = trim((string)($opts['api_secret'] ?? ''));
+        if ($api_secret !== '') {
+            $args['headers'] = [ 'Authorization' => 'Bearer ' . $api_secret ];
+        }
+        $resp = wp_remote_get($url, $args);
+        if (is_wp_error($resp)) {
+            error_log('[BenzinaOggi] notify cron error: '.$resp->get_error_message());
+        }
     }
 }
 
