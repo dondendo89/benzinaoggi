@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/src/lib/db";
 
+function normalizeFuelType(input: string): string {
+  return String(input || "").trim().replace(/\s+/g, " ");
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const impiantoId = Number(searchParams.get("impiantoId"));
-    const fuelType = searchParams.get("fuelType") || undefined;
+    const fuelTypeRaw = searchParams.get("fuelType") || undefined;
+    const fuelType = fuelTypeRaw ? normalizeFuelType(fuelTypeRaw) : undefined;
     const externalIdFilter = (searchParams.get("externalId") || '').trim();
     if (!impiantoId || !fuelType) {
       return NextResponse.json({ ok: false, error: "Missing impiantoId or fuelType" }, { status: 400 });
@@ -40,7 +45,7 @@ export async function POST(req: NextRequest) {
     const action = String(body?.action || "add"); // add | remove
     const externalId = String(body?.externalId || "").trim();
     const impiantoId = Number(body?.impiantoId);
-    const fuelType = String(body?.fuelType || "").trim();
+    const fuelType = normalizeFuelType(String(body?.fuelType || ""));
     const subscriptionId = (body?.subscriptionId ? String(body.subscriptionId).trim() : undefined);
     if (!externalId || !impiantoId || !fuelType) {
       return NextResponse.json({ ok: false, error: "Missing externalId|impiantoId|fuelType" }, { status: 400 });
