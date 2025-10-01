@@ -11,42 +11,30 @@ export async function GET(req: NextRequest, { params }: { params: { impiantoId: 
     const distributor = await prisma.distributor.findUnique({ where: { impiantoId } });
     if (!distributor) return NextResponse.json({ ok: false, error: 'Not found' }, { status: 404 });
 
-    // latest day globally
-    const lastDayRow = await prisma.price.findFirst({ select: { day: true }, orderBy: { day: 'desc' } });
-    let day = lastDayRow?.day || null;
-    let prices = day ? await prisma.price.findMany({ where: { distributorId: distributor.id, day } }) : [];
+    // Read current prices (single record per fuelType/isSelfService)
+    const currentPrices = await prisma.currentPrice.findMany({
+      where: { distributorId: distributor.id },
+    });
 
-    // Fallback: if no prices for this distributor on the global latest day,
-    // use the latest available day for this distributor specifically
-    if (!prices.length) {
-      const lastForDistributor = await prisma.price.findFirst({
-        where: { distributorId: distributor.id },
-        select: { day: true },
-        orderBy: { day: 'desc' }
-      });
-      if (lastForDistributor?.day) {
-        day = lastForDistributor.day;
-        prices = await prisma.price.findMany({ where: { distributorId: distributor.id, day } });
-      }
+    // Derive a pseudo-"day" as the max communicatedAt across current prices
+    let day: Date | null = null;
+    for (const p of currentPrices) {
+      if (!day || p.communicatedAt > day) day = p.communicatedAt;
     }
 
-    // Compute variation vs previous available day for the same distributor
+    // Compute previous price using latest PriceVariation per key
     let previousDay: Date | null = null;
-    if (day) {
-      const prevDayRow = await prisma.price.findFirst({
-        where: { distributorId: distributor.id, day: { lt: day } },
-        select: { day: true },
-        orderBy: { day: 'desc' },
-      });
-      previousDay = prevDayRow?.day ?? null;
-    }
-
-    let prevPricesByKey = new Map<string, { price: number }>();
-    if (previousDay) {
-      const prevPrices = await prisma.price.findMany({ where: { distributorId: distributor.id, day: previousDay } });
-      for (const p of prevPrices) {
-        const key = `${p.fuelType}|${p.isSelfService ? 1 : 0}`;
-        prevPricesByKey.set(key, { price: p.price });
+    const latestVariations = await prisma.priceVariation.findMany({
+      where: { distributorId: distributor.id },
+      orderBy: { day: 'desc' },
+      take: 200,
+    });
+    const prevByKey = new Map<string, { price: number; day: Date }>();
+    for (const v of latestVariations) {
+      const key = `${v.fuelType}|${v.isSelfService ? 1 : 0}`;
+      if (!prevByKey.has(key)) {
+        prevByKey.set(key, { price: v.oldPrice, day: v.day });
+        if (!previousDay || v.day > previousDay) previousDay = v.day;
       }
     }
 
@@ -63,9 +51,9 @@ export async function GET(req: NextRequest, { params }: { params: { impiantoId: 
       }
     } catch {}
 
-    const pricesWithVariation = prices.map(p => {
+    const pricesWithVariation = currentPrices.map(p => {
       const key = `${p.fuelType}|${p.isSelfService ? 1 : 0}`;
-      const prev = prevPricesByKey.get(key);
+      const prev = prevByKey.get(key);
       let direction: 'up' | 'down' | 'same' | null = null;
       let delta: number | null = null;
       if (prev) {
@@ -82,7 +70,13 @@ export async function GET(req: NextRequest, { params }: { params: { impiantoId: 
         }
       }
       return {
-        ...p,
+        id: undefined,
+        distributorId: p.distributorId,
+        fuelType: p.fuelType,
+        price: p.price,
+        isSelfService: p.isSelfService,
+        communicatedAt: p.communicatedAt,
+        day,
         previousPrice: prev?.price ?? null,
         variation: direction,
         delta,
