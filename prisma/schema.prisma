@@ -44,6 +44,25 @@ model Price {
   @@unique([distributorId, fuelType, day, isSelfService], name: "Price_unique_day")
 }
 
+model PriceVariation {
+  id             Int         @id @default(autoincrement())
+  distributorId  Int
+  fuelType       String
+  isSelfService  Boolean     @default(false)
+  oldPrice       Float
+  newPrice       Float
+  direction      String      // 'up' | 'down'
+  delta          Float       // new - old
+  percentage     Float       // (delta / old) * 100
+  day            DateTime
+  createdAt      DateTime    @default(now())
+
+  distributor    Distributor @relation(fields: [distributorId], references: [id])
+
+  @@index([day])
+  @@index([distributorId, fuelType, day])
+}
+
 model Subscription {
   id          Int      @id @default(autoincrement())
   externalId  String

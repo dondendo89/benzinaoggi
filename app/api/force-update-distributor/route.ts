@@ -97,6 +97,22 @@ export async function POST(req: NextRequest) {
       const todayStr = new Date().toISOString().slice(0, 10);
       const dayFb = new Date(`${todayStr}T00:00:00.000Z`);
 
+      // Precarica prezzi del giorno precedente per questo distributore per rilevare variazioni
+      const prevDayRow = await prisma.price.findFirst({
+        where: { distributorId: distributor.id, day: { lt: dayFb } },
+        select: { day: true },
+        orderBy: { day: 'desc' }
+      });
+      const prevDay = prevDayRow?.day || null;
+      const prevByKey = new Map<string, { price: number }>();
+      const key = (p: { fuelType: string; isSelfService: boolean }) => `${p.fuelType}|${p.isSelfService ? 1 : 0}`;
+      if (prevDay) {
+        const prevPrices = await prisma.price.findMany({ where: { distributorId: distributor.id, day: prevDay } });
+        for (const p of prevPrices) prevByKey.set(key(p), { price: p.price });
+      }
+
+      const variations: Array<{ distributorId: number; fuelType: string; isSelfService: boolean; oldPrice: number; newPrice: number; direction: 'up'|'down'; delta: number; percentage: number; day: Date }>=[];
+
       for (const fuel of miseFuels) {
         const fuelType = normalizeFuelName(String(fuel.name || '').trim());
         const isSelf = !!fuel.isSelf;
@@ -129,6 +145,25 @@ export async function POST(req: NextRequest) {
         } else {
           createdCountFb++;
         }
+
+        // Rileva variazione rispetto al giorno precedente
+        const prevEntry = prevByKey.get(key({ fuelType, isSelfService: isSelf } as any));
+        if (prevEntry && prevEntry.price !== prezzo) {
+          const delta = prezzo - prevEntry.price;
+          const direction = delta > 0 ? 'up' : 'down';
+          const percentage = prevEntry.price !== 0 ? (delta / prevEntry.price) * 100 : 0;
+          variations.push({
+            distributorId: distributor.id,
+            fuelType,
+            isSelfService: isSelf,
+            oldPrice: prevEntry.price,
+            newPrice: prezzo,
+            direction,
+            delta,
+            percentage,
+            day: dayFb
+          });
+        }
       }
 
       const lastUpdatedRowFb = await prisma.price.findFirst({
@@ -137,6 +172,11 @@ export async function POST(req: NextRequest) {
         select: { communicatedAt: true }
       });
       const lastUpdatedAtFb = lastUpdatedRowFb?.communicatedAt?.toISOString() || new Date().toISOString();
+
+      // Scrivi variazioni, se presenti
+      if (variations.length > 0) {
+        await prisma.priceVariation.createMany({ data: variations });
+      }
 
       return NextResponse.json({ ok: true, source: 'mise', updated: updatedCountFb, created: createdCountFb, day: todayStr, lastUpdatedAt: lastUpdatedAtFb });
     }

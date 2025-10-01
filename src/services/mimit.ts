@@ -187,6 +187,14 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
   const today = rows[0] && (rows[0] as any).dtComu ? getDay((rows[0] as any).dtComu as string) : new Date().toISOString().slice(0, 10);
   const dayDate = new Date(`${today}T00:00:00.000Z`);
 
+  // Trova il giorno precedente disponibile in DB per confronto variazioni
+  const prevDayRow = await prisma.price.findFirst({
+    where: { day: { lt: dayDate } },
+    select: { day: true },
+    orderBy: { day: 'desc' }
+  });
+  const prevDay = prevDayRow?.day || null;
+
   const get = (obj: Record<string, any>, keys: string[]): string | undefined => {
     for (const k of keys) {
       const hit = Object.keys(obj).find((kk) => kk.toLowerCase() === k.toLowerCase());
@@ -206,6 +214,13 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
   const existingByKey = new Map<string, { id: number; price: number }>();
   for (const p of existing) existingByKey.set(key(p), { id: p.id, price: p.price });
 
+  // Preload previous day prices for variation detection
+  const prevByKey = new Map<string, { price: number }>();
+  if (prevDay) {
+    const prevPrices = await prisma.price.findMany({ where: { day: prevDay } });
+    for (const p of prevPrices) prevByKey.set(key(p), { price: p.price });
+  }
+
   type UpsertItem = {
     distributorId: number;
     fuelType: string;
@@ -214,6 +229,18 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
     communicatedAt: Date;
   };
   const items: UpsertItem[] = [];
+  type VariationItem = {
+    distributorId: number;
+    fuelType: string;
+    isSelfService: boolean;
+    oldPrice: number;
+    newPrice: number;
+    direction: 'up' | 'down';
+    delta: number;
+    percentage: number;
+    day: Date;
+  };
+  const variations: VariationItem[] = [];
 
   for (const r of rows) {
     const idStr = get(r as any, ['idImpianto', 'idimpianto']);
@@ -241,19 +268,38 @@ export async function updatePrezzi(debug: boolean = false): Promise<{ inserted: 
     const fuelType = String(desc).trim();
 
     const k = key({ distributorId, fuelType, isSelfService: isSelf });
-    const prev = existingByKey.get(k);
-    const isInsert = !prev;
+    const prevToday = existingByKey.get(k);
+    const isInsert = !prevToday;
     if (isInsert) {
       inserted += 1;
       existingByKey.set(k, { id: 0, price });
-    } else if (prev && prev.price !== price) {
+    } else if (prevToday && prevToday.price !== price) {
       updated += 1;
-      existingByKey.set(k, { id: prev.id, price });
+      existingByKey.set(k, { id: prevToday.id, price });
     } else {
       // no change; skip from bulk write
       continue;
     }
     items.push({ distributorId, fuelType, isSelf, price, communicatedAt });
+
+    // Variation detection vs previous day (not vs existingToday)
+    const prevDayEntry = prevByKey.get(k);
+    if (prevDayEntry && prevDayEntry.price !== price) {
+      const delta = price - prevDayEntry.price;
+      const direction = delta > 0 ? 'up' : 'down';
+      const percentage = prevDayEntry.price !== 0 ? (delta / prevDayEntry.price) * 100 : 0;
+      variations.push({
+        distributorId,
+        fuelType,
+        isSelfService: isSelf,
+        oldPrice: prevDayEntry.price,
+        newPrice: price,
+        direction, 
+        delta,
+        percentage,
+        day: dayDate
+      });
+    }
   }
 
   // Bulk UPSERT using raw SQL in chunks to avoid per-row queries
@@ -284,6 +330,23 @@ DO UPDATE SET "price"=EXCLUDED."price", "communicatedAt"=EXCLUDED."communicatedA
 
   const total = rows.length;
   const sampleRow = debug ? rows[0] : undefined;
+  // Scrivi variazioni in bulk se presenti
+  if (variations.length > 0) {
+    await (prisma as any).priceVariation.createMany({
+      data: variations.map(v => ({
+        distributorId: v.distributorId,
+        fuelType: v.fuelType,
+        isSelfService: v.isSelfService,
+        oldPrice: v.oldPrice,
+        newPrice: v.newPrice,
+        direction: v.direction,
+        delta: v.delta,
+        percentage: v.percentage,
+        day: v.day,
+      }))
+    });
+  }
+
   return { inserted, updated, day: today, total, skippedUnknownDistributor, skippedNoPrice, skippedBadDate, sampleRow };
 }
 
