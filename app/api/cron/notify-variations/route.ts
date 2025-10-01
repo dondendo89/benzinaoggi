@@ -109,8 +109,13 @@ export async function GET(req: NextRequest) {
 
       // Invio diretto a OneSignal in batch per evitare timeout
       try {
-        const appId = process.env.ONESIGNAL_APP_ID;
-        const apiKey = process.env.ONESIGNAL_API_KEY;
+        const appId = process.env.ONESIGNAL_APP_ID 
+          || process.env.ONE_SIGNAL_APP_ID 
+          || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID;
+        const apiKey = process.env.ONESIGNAL_API_KEY 
+          || process.env.ONE_SIGNAL_REST_API_KEY 
+          || process.env.ONESIGNAL_REST_API_KEY 
+          || process.env.ONE_SIGNAL_API_KEY;
         if (!appId || !apiKey) {
           failures.push({ key, error: 'ONESIGNAL_APP_ID or ONESIGNAL_API_KEY missing' });
           continue;
