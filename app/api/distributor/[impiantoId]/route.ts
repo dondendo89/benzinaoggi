@@ -18,8 +18,10 @@ export async function GET(req: NextRequest, { params }: { params: { impiantoId: 
 
     // Derive a pseudo-"day" as the max communicatedAt across current prices
     let day: Date | null = null;
+    let lastUpdatedAt: Date | null = null;
     for (const p of currentPrices) {
       if (!day || p.communicatedAt > day) day = p.communicatedAt;
+      if (!lastUpdatedAt || p.updatedAt > lastUpdatedAt) lastUpdatedAt = p.updatedAt;
     }
 
     // Compute previous price using latest PriceVariation per key
@@ -83,7 +85,7 @@ export async function GET(req: NextRequest, { params }: { params: { impiantoId: 
       };
     });
 
-    return NextResponse.json({ ok: true, distributor, day, previousDay, prices: pricesWithVariation });
+    return NextResponse.json({ ok: true, distributor, day, previousDay, lastUpdatedAt, prices: pricesWithVariation });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
   }

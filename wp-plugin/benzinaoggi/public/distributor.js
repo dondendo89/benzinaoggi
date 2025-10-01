@@ -52,8 +52,9 @@
     // (removed per-distributor checkbox UI)
 
     var pricesCard = createEl('div','bo-card');
-    var dayTxt = data.day ? new Date(data.day).toLocaleDateString() : '';
-    var subtitle = dayTxt ? ('<div style="margin-top:-6px; color:#666; font-size:0.9em;">Aggiornato al ' + dayTxt + '</div>') : '';
+    var updatedTs = data.lastUpdatedAt || data.day || null;
+    var updatedTxt = updatedTs ? new Date(updatedTs).toLocaleString() : '';
+    var subtitle = updatedTxt ? ('<div style="margin-top:-6px; color:#666; font-size:0.9em;">Aggiornato al ' + updatedTxt + '</div>') : '';
     pricesCard.innerHTML = '<h3 class="bo-section-title">⛽ Prezzi Carburanti</h3>' + subtitle + '<p class="bo-hint">💡 <strong>Notifiche:</strong> Abilita le notifiche per ricevere avvisi quando i prezzi scendono. Clicca su "quando scende" per ogni carburante.</p>';
     var table = createEl('table','bo-table');
     table.innerHTML = '<thead><tr><th>Carburante</th><th>Prezzo</th><th>Servizio</th><th>Variazione</th><th>Notifica</th></tr></thead><tbody></tbody>';
