@@ -830,12 +830,16 @@ class BenzinaOggiPlugin {
         @ignore_user_abort(true);
         @set_time_limit(300);
 
-        $generated = 0; $updated = 0; $errors = 0;
+        $generated = 0; $skipped = 0; $errors = 0;
         $remaining = [];
         foreach ($cities as $idx => $city) {
             try {
                 $res = $this->generate_city_post($city, $api_key);
-                if ($res['created']) $generated++; else $updated++;
+                if ($res['created']) {
+                    $generated++;
+                } elseif (isset($res['skipped']) && $res['skipped']) {
+                    $skipped++;
+                } 
                 // pausa breve per rate limit
                 usleep(300000);
             } catch (Exception $e) {
@@ -848,7 +852,7 @@ class BenzinaOggiPlugin {
         }
         // Aggiorna coda (vuota se completato)
         update_option('benzinaoggi_city_posts_queue', $remaining, false);
-        $this->log_progress("City posts completati: creati=$generated aggiornati=$updated errori=$errors");
+        $this->log_progress("City posts completati: creati=$generated saltati=$skipped errori=$errors");
     }
 
     /**
@@ -898,14 +902,11 @@ class BenzinaOggiPlugin {
         $metaDesc = $this->smart_trim_sentence($genMeta, 100);
         if (!$genHtml) $genHtml = '<p>'.esc_html($metaDesc).'</p>';
 
-        // Crea/aggiorna post
+        // Controlla se esiste già - se sì, salta la generazione
         if ($existing) {
             $post_id = $existing->ID;
-            wp_update_post(array('ID' => $post_id,'post_title' => $title,'post_excerpt' => wp_slash($metaDesc),'post_content' => wp_slash($genHtml)));
-            update_post_meta($post_id, '_yoast_wpseo_metadesc', $metaDesc);
-            update_post_meta($post_id, '_rank_math_description', $metaDesc);
-            update_post_meta($post_id, '_aioseo_description', $metaDesc);
-            return ['created' => false, 'post_id' => $post_id];
+            $this->log_progress("City post già esistente, saltato: $title (ID: $post_id)");
+            return ['created' => false, 'post_id' => $post_id, 'skipped' => true];
         } else {
             $post_id = wp_insert_post(array(
                 'post_title' => $title,
