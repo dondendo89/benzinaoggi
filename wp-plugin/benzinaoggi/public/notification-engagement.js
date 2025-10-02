@@ -43,6 +43,15 @@
     }
   }
   
+  // Check if admin has disabled modal/float
+  function isModalDisabled() {
+    return window.BenzinaOggi && window.BenzinaOggi.disableNotificationModal === true;
+  }
+  
+  function isFloatDisabled() {
+    return window.BenzinaOggi && window.BenzinaOggi.disableNotificationFloat === true;
+  }
+  
   // Get external ID for subscriptions
   function getExternalId(){
     var gen = function(){ return 'bo_'+Math.random().toString(36).slice(2)+'_'+Date.now().toString(36); };
@@ -98,7 +107,7 @@
   
   // Create Welcome Modal
   function createWelcomeModal() {
-    if (hasBeenPrompted() || areNotificationsEnabled()) {
+    if (hasBeenPrompted() || areNotificationsEnabled() || isModalDisabled()) {
       return null;
     }
     
@@ -244,7 +253,7 @@
   
   // Create Floating Widget
   function createFloatingWidget() {
-    if (areNotificationsEnabled()) {
+    if (areNotificationsEnabled() || isFloatDisabled()) {
       return null;
     }
     
@@ -383,7 +392,7 @@
   
   // Show floating widget
   function showFloatingWidget() {
-    if (areNotificationsEnabled() || document.querySelector('.bo-floating-widget')) {
+    if (areNotificationsEnabled() || isFloatDisabled() || document.querySelector('.bo-floating-widget')) {
       return;
     }
     
@@ -398,8 +407,8 @@
     var distributorWrap = document.querySelector('#bo_distributor_detail');
     if (!distributorWrap) return;
     
-    // Add contextual banner if notifications not enabled
-    if (!areNotificationsEnabled()) {
+    // Add contextual banner if notifications not enabled and not disabled by admin
+    if (!areNotificationsEnabled() && !isFloatDisabled()) {
       var banner = createEl('div', 'bo-distributor-banner');
       banner.style.cssText = `
         background: linear-gradient(135deg, #e3f2fd, #bbdefb);
@@ -468,8 +477,8 @@
       var isDistributorPage = !!document.querySelector('#bo_distributor_detail');
       var isHomePage = !!document.querySelector('#bo_map');
       
-      // Show welcome modal on first visit (not on distributor pages)
-      if (!isDistributorPage && !hasBeenPrompted() && !areNotificationsEnabled()) {
+      // Show welcome modal on first visit (not on distributor pages) if not disabled
+      if (!isDistributorPage && !hasBeenPrompted() && !areNotificationsEnabled() && !isModalDisabled()) {
         setTimeout(function() {
           var modal = createWelcomeModal();
           if (modal) {
@@ -478,8 +487,8 @@
         }, 2000); // Show after 2 seconds
       }
       
-      // Show floating widget on subsequent visits or after modal dismissal
-      if (!areNotificationsEnabled()) {
+      // Show floating widget on subsequent visits or after modal dismissal if not disabled
+      if (!areNotificationsEnabled() && !isFloatDisabled()) {
         setTimeout(function() {
           if (!document.querySelector('.bo-welcome-modal')) {
             showFloatingWidget();

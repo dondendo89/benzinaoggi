@@ -413,6 +413,8 @@ class BenzinaOggiPlugin {
         add_settings_field('api_secret', 'API Bearer Secret', [$this, 'field_api_secret'], 'benzinaoggi', 'benzinaoggi_section');
         add_settings_field('gemini_api_key', 'Google Gemini API Key', [$this, 'field_gemini_api_key'], 'benzinaoggi', 'benzinaoggi_section');
         add_settings_field('city_posts_targets', __('Città per articoli (uno per riga)', 'benzinaoggi'), [$this, 'field_city_posts_targets'], 'benzinaoggi', 'benzinaoggi_section');
+        add_settings_field('disable_notification_modal', 'Disabilita modale notifiche', [$this, 'field_disable_notification_modal'], 'benzinaoggi', 'benzinaoggi_section');
+        add_settings_field('disable_notification_float', 'Disabilita widget flottante notifiche', [$this, 'field_disable_notification_float'], 'benzinaoggi', 'benzinaoggi_section');
 
         // Sezione per il logo
         add_settings_section('benzinaoggi_logo_section', __('Logo e Branding', 'benzinaoggi'), function() {
@@ -433,7 +435,9 @@ class BenzinaOggiPlugin {
             'api_secret' => '',
             'logo_url' => '',
             'gemini_api_key' => '',
-            'city_posts_targets' => "Milano\nRoma\nNapoli\nTorino\nBologna\nFirenze\nVenezia\nGenova\nBari\nCatania\nPalermo\nCagliari\nTrieste\nPerugia\nAncona\nL'Aquila\nCampobasso\nPotenza\nCatanzaro\nTrento"
+            'city_posts_targets' => "Milano\nRoma\nNapoli\nTorino\nBologna\nFirenze\nVenezia\nGenova\nBari\nCatania\nPalermo\nCagliari\nTrieste\nPerugia\nAncona\nL'Aquila\nCampobasso\nPotenza\nCatanzaro\nTrento",
+            'disable_notification_modal' => false,
+            'disable_notification_float' => false
         ];
         $opts = get_option(self::OPTION_NAME, []);
         return wp_parse_args($opts, $defaults);
@@ -471,6 +475,20 @@ class BenzinaOggiPlugin {
         $val = (string)($opts['city_posts_targets'] ?? '');
         echo '<textarea name="'.self::OPTION_NAME.'[city_posts_targets]" rows="6" class="large-text" placeholder="Milano\nRoma\n…">'.esc_textarea($val).'</textarea>';
         echo '<p class="description">Elenco di capoluoghi o città per cui generare articoli. Uno per riga.</p>';
+    }
+
+    public function field_disable_notification_modal() {
+        $opts = $this->get_options();
+        $checked = !empty($opts['disable_notification_modal']) ? 'checked' : '';
+        echo '<label><input type="checkbox" name="'.self::OPTION_NAME.'[disable_notification_modal]" value="1" '.$checked.' /> Disabilita la modale di benvenuto per le notifiche</label>';
+        echo '<p class="description">Se attivato, la modale di benvenuto per abilitare le notifiche non verrà mostrata agli utenti.</p>';
+    }
+
+    public function field_disable_notification_float() {
+        $opts = $this->get_options();
+        $checked = !empty($opts['disable_notification_float']) ? 'checked' : '';
+        echo '<label><input type="checkbox" name="'.self::OPTION_NAME.'[disable_notification_float]" value="1" '.$checked.' /> Disabilita il widget flottante per le notifiche</label>';
+        echo '<p class="description">Se attivato, il widget flottante per abilitare le notifiche non verrà mostrato agli utenti.</p>';
     }
 
     public function field_logo_url() {
@@ -1943,7 +1961,9 @@ class BenzinaOggiPlugin {
             'apiBase' => rtrim($opts['api_base'], '/'),
             'onesignalAppId' => $opts['onesignal_app_id'],
             'onesignalOfficial' => false,
-            'useOwnOneSignal' => true
+            'useOwnOneSignal' => true,
+            'disableNotificationModal' => !empty($opts['disable_notification_modal']),
+            'disableNotificationFloat' => !empty($opts['disable_notification_float'])
         ]);
         wp_enqueue_script('benzinaoggi-engagement');
         
@@ -1954,7 +1974,9 @@ class BenzinaOggiPlugin {
                 'apiBase' => rtrim($opts['api_base'], '/'),
                 'onesignalAppId' => $opts['onesignal_app_id'],
                 'onesignalOfficial' => false,
-                'useOwnOneSignal' => true
+                'useOwnOneSignal' => true,
+                'disableNotificationModal' => !empty($opts['disable_notification_modal']),
+                'disableNotificationFloat' => !empty($opts['disable_notification_float'])
             ]);
             wp_enqueue_script('benzinaoggi-distributor');
             return; // Non caricare app.js per evitare conflitti
@@ -1981,6 +2003,8 @@ class BenzinaOggiPlugin {
             'onesignalAppId' => $opts['onesignal_app_id'],
             'onesignalOfficial' => false,
             'useOwnOneSignal' => true,
+            'disableNotificationModal' => !empty($opts['disable_notification_modal']),
+            'disableNotificationFloat' => !empty($opts['disable_notification_float'])
         ]);
         wp_enqueue_script('benzinaoggi-app');
         // lo script distributor è caricato solo quando è presente lo shortcode
