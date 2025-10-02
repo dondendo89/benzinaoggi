@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
     // Per ogni gruppo, recupera gli externalId iscritti e invia notifica in batch
     let sent = 0;
     const failures: Array<{ key: string; error: string }> = [];
-    const messages: Array<{ key: string; title: string; body: string; externalIds: string[]; oneSignalResponse?: any }> = [];
+    const messages: Array<{ key: string; title: string; body: string; externalIds: string[]; url?: string; oneSignalResponse?: any }> = [];
 
     for (const [key, items] of Object.entries(grouped)) {
       const sample = items[0];
@@ -182,9 +182,15 @@ export async function GET(req: NextRequest) {
             const deltaAbs = Math.abs((best.newPrice ?? 0) - (best.oldPrice ?? 0)).toFixed(3);
             const body = `${name}: ${Number(best.oldPrice).toFixed(3)} → ${Number(best.newPrice).toFixed(3)} (Δ ${deltaAbs})`;
             
+            // Costruisci URL della pagina distributore: bandiera-comune-idImpianto
+            const bandiera = sample!.distributor?.bandiera || 'distributore';
+            const comune = sample!.distributor?.comune || 'italia';
+            const slug = `${bandiera.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${comune.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${impiantoId}`;
+            const distributorUrl = `${process.env.WORDPRESS_URL || 'https://benzinaoggi.it'}/distributore/${slug}`;
+            
             // Salva il messaggio per il debug
             if (i === 0) { // Solo per il primo chunk per evitare duplicati
-              messages.push({ key, title, body, externalIds: externalIds });
+              messages.push({ key, title, body, externalIds: externalIds, url: distributorUrl });
             }
             
             const r = await fetch('https://onesignal.com/api/v1/notifications', {
@@ -198,6 +204,7 @@ export async function GET(req: NextRequest) {
                 include_external_user_ids: chunk,
                 headings: { it: title, en: title },
                 contents: { it: body, en: body },
+                url: distributorUrl,
                 data: {
                   impiantoId,
                   distributorId: impiantoId,
@@ -205,6 +212,7 @@ export async function GET(req: NextRequest) {
                   oldPrice: best.oldPrice,
                   newPrice: best.newPrice,
                   createdDay: new Date().toISOString().slice(0,10),
+                  url: distributorUrl,
                 },
               })
             });
