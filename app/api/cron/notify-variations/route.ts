@@ -49,17 +49,25 @@ export async function GET(req: NextRequest) {
     });
     const byDistributorId = new Map(distributors.map(d => [d.id, d] as const));
 
-    // Raggruppa variazioni per (impiantoId, fuelType)
+    // Raggruppa variazioni per (impiantoId, fuelType) - costruendo il fuelType completo per matching con Subscription
     type Key = string;
     const keyed = (variations as any[]).map((v: any) => {
       const d = byDistributorId.get(v.distributorId as number);
       const impiantoId = d?.impiantoId as number | undefined;
+      
+      // Costruisci il fuelType completo come salvato in Subscription (es: "Benzina Self", "Gasolio Premium")
+      const baseFuelType = String(v.fuelType);
+      const isSelfService = Boolean(v.isSelfService);
+      const fullFuelType = isSelfService ? `${baseFuelType} Self` : baseFuelType;
+      
       return {
-        key: `${impiantoId}|${String(v.fuelType)}` as Key,
+        key: `${impiantoId}|${fullFuelType}` as Key,
         impiantoId,
         distributorId: v.distributorId as number,
         distributor: d,
-        fuelType: String(v.fuelType),
+        fuelType: fullFuelType, // Usa il fuelType completo per matching
+        baseFuelType: baseFuelType, // Mantieni anche quello base per display
+        isSelfService,
         oldPrice: Number(v.oldPrice),
         newPrice: Number(v.newPrice),
       } as const;
@@ -91,11 +99,13 @@ export async function GET(req: NextRequest) {
     // Per ogni gruppo, recupera gli externalId iscritti e invia notifica in batch
     let sent = 0;
     const failures: Array<{ key: string; error: string }> = [];
+    const messages: Array<{ key: string; title: string; body: string; externalIds: number }> = [];
 
     for (const [key, items] of Object.entries(grouped)) {
       const sample = items[0];
       const impiantoId = sample!.impiantoId as number;
-      const fuelType = sample!.fuelType;
+      const fuelType = sample!.fuelType; // fuelType completo per matching
+      const baseFuelType = sample!.baseFuelType; // fuelType base per display
 
       const externalIds = subsByKey.get(`${impiantoId}|${fuelType}`) || [];
       if (externalIds.length === 0) continue;
@@ -124,10 +134,16 @@ export async function GET(req: NextRequest) {
         for (let i = 0; i < externalIds.length; i += chunkSize) {
           const chunk = externalIds.slice(i, i + chunkSize);
           try {
-            const title = `Prezzo ${fuelType} ⬇️`;
+            const title = `Prezzo ${baseFuelType} ⬇️`; // Usa baseFuelType per display (senza "Self")
             const name = sample!.distributor?.gestore || sample!.distributor?.bandiera || sample!.distributor?.comune || `Impianto ${impiantoId}`;
             const deltaAbs = Math.abs((best.newPrice ?? 0) - (best.oldPrice ?? 0)).toFixed(3);
             const body = `${name}: ${Number(best.oldPrice).toFixed(3)} → ${Number(best.newPrice).toFixed(3)} (Δ ${deltaAbs})`;
+            
+            // Salva il messaggio per il debug
+            if (i === 0) { // Solo per il primo chunk per evitare duplicati
+              messages.push({ key, title, body, externalIds: externalIds.length });
+            }
+            
             const r = await fetch('https://onesignal.com/api/v1/notifications', {
               method: 'POST',
               headers: {
@@ -166,7 +182,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true, createdDay: todayIso, groups: Object.keys(grouped).length, sent, failures });
+    return NextResponse.json({ ok: true, createdDay: todayIso, groups: Object.keys(grouped).length, sent, failures, messages });
 
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
