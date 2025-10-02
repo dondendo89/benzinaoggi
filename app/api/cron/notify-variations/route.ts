@@ -155,7 +155,7 @@ export async function GET(req: NextRequest) {
     // Per ogni gruppo, recupera gli externalId iscritti e invia notifica in batch
     let sent = 0;
     const failures: Array<{ key: string; error: string }> = [];
-    const messages: Array<{ key: string; title: string; body: string; externalIds: string[]; url?: string; oneSignalResponse?: any }> = [];
+    const messages: Array<{ key: string; title: string; body: string; targetTag?: string; url?: string; oneSignalResponse?: any }> = [];
 
     let processedCount = 0;
     let skippedDueToTimeout = 0;
@@ -214,11 +214,23 @@ export async function GET(req: NextRequest) {
             const slug = `${bandiera.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${comune.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${impiantoId}`;
             const distributorUrl = `${process.env.WORDPRESS_URL || 'https://www.benzinaoggi.it'}/distributore/${slug}`;
             
+            // Prepara tag specifico per distributore e carburante
+            const fuelTypeNormalized = baseFuelType.toLowerCase().replace(/\s+/g, '_');
+            const distributorSpecificTag = `notify_${impiantoId}_${fuelTypeNormalized}`;
+            
             // Salva il messaggio per il debug
             if (i === 0) { // Solo per il primo chunk per evitare duplicati
-              messages.push({ key, title, body, externalIds: externalIds, url: distributorUrl });
+              messages.push({ 
+                key, 
+                title, 
+                body, 
+                targetTag: distributorSpecificTag,
+                url: distributorUrl 
+              });
             }
             
+            // Usa tag filtering per garantire che solo gli utenti che hanno abilitato 
+            // le notifiche per questo distributore specifico le ricevano
             const r = await fetch('https://onesignal.com/api/v1/notifications', {
               method: 'POST',
               headers: {
@@ -227,7 +239,11 @@ export async function GET(req: NextRequest) {
               },
               body: JSON.stringify({
                 app_id: appId,
-                include_external_user_ids: chunk,
+                included_segments: ["Subscribed Users"],
+                filters: [
+                  { field: "tag", key: "price_drop_notifications", relation: "=", value: "1" },
+                  { field: "tag", key: distributorSpecificTag, relation: "=", value: "1" }
+                ],
                 headings: { it: title, en: title },
                 contents: { it: body, en: body },
                 url: distributorUrl,

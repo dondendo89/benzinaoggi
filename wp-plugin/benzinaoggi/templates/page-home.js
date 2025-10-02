@@ -169,6 +169,12 @@
     state.currentFilters = { location, fuel, radius };
     state.pagination.currentPage = 1; // Reset alla prima pagina
 
+    // Se l'utente ha digitato qualcosa nel campo location, resetta la geolocalizzazione
+    if (location && location !== 'La mia posizione') {
+      console.log('User typed city name, clearing geolocation:', location);
+      state.userLocation = null;
+    }
+
     if (!location && !state.userLocation) {
       alert('Inserisci una località o usa "La mia posizione"');
       return;
@@ -187,12 +193,12 @@
         page: state.pagination.currentPage
       });
 
-      // Priorità: se l'utente ha inserito un nome di città, usa la ricerca per città
-      if (state.currentFilters.location && !state.userLocation) {
+      // Priorità: se l'utente ha inserito un nome di città diverso da "La mia posizione", usa la ricerca per città
+      if (state.currentFilters.location && state.currentFilters.location !== 'La mia posizione') {
         params.append('city', state.currentFilters.location);
         console.log('Ricerca per città:', state.currentFilters.location);
-      } else if (state.userLocation) {
-        // Solo se l'utente ha usato la geolocalizzazione, usa le coordinate
+      } else if (state.userLocation && (state.currentFilters.location === 'La mia posizione' || !state.currentFilters.location)) {
+        // Solo se l'utente ha usato la geolocalizzazione e non ha digitato una città specifica
         params.append('lat', state.userLocation.lat);
         params.append('lon', state.userLocation.lng);
         params.append('radiusKm', state.currentFilters.radius);
