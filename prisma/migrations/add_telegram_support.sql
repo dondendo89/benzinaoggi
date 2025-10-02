@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS "TelegramUser" (
     "id" SERIAL PRIMARY KEY,
     "telegramId" BIGINT NOT NULL UNIQUE,
-    "chatId" BIGINT NOT NULL,
+    "chatId" BIGINT NOT NULL UNIQUE,
     "firstName" TEXT NOT NULL,
     "lastName" TEXT,
     "username" TEXT,
@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS "TelegramMessage" (
 
 -- Indici per performance
 CREATE INDEX IF NOT EXISTS "TelegramUser_telegramId_idx" ON "TelegramUser"("telegramId");
+CREATE INDEX IF NOT EXISTS "TelegramUser_chatId_idx" ON "TelegramUser"("chatId");
 CREATE INDEX IF NOT EXISTS "TelegramUser_isActive_idx" ON "TelegramUser"("isActive");
 
 CREATE INDEX IF NOT EXISTS "TelegramSubscription_telegramId_idx" ON "TelegramSubscription"("telegramId");

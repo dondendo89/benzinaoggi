@@ -18,7 +18,7 @@ interface PriceNotification {
   percentage: number;
 }
 
-async function sendTelegramMessage(chatId: number, text: string, options: any = {}) {
+async function sendTelegramMessage(chatId: number | bigint, text: string, options: any = {}) {
   if (!TELEGRAM_BOT_TOKEN) {
     console.error('TELEGRAM_BOT_TOKEN not configured');
     return null;

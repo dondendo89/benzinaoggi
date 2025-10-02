@@ -52,7 +52,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 
 // Funzioni helper per API Telegram
-async function sendMessage(chatId: number, text: string, options: any = {}) {
+async function sendMessage(chatId: number | bigint, text: string, options: any = {}) {
   if (!TELEGRAM_BOT_TOKEN) {
     console.error('TELEGRAM_BOT_TOKEN not configured');
     return null;
@@ -78,7 +78,7 @@ async function sendMessage(chatId: number, text: string, options: any = {}) {
   }
 }
 
-async function sendLocation(chatId: number, lat: number, lon: number, title?: string) {
+async function sendLocation(chatId: number | bigint, lat: number, lon: number, title?: string) {
   if (!TELEGRAM_BOT_TOKEN) return null;
 
   try {
@@ -141,7 +141,7 @@ async function handleCommand(message: TelegramMessage) {
   }
 }
 
-async function saveUser(user: TelegramUser, chatId: number) {
+async function saveUser(user: TelegramUser, chatId: number | bigint) {
   try {
     await prisma.telegramUser.upsert({
       where: { telegramId: user.id },
@@ -170,7 +170,7 @@ async function saveUser(user: TelegramUser, chatId: number) {
   }
 }
 
-async function handleStartCommand(chatId: number, userId: number, user: TelegramUser) {
+async function handleStartCommand(chatId: number | bigint, userId: number, user: TelegramUser) {
   const welcomeText = `
 🚗 <b>Benvenuto in BenzinaOggi Bot!</b>
 
@@ -211,7 +211,7 @@ Visita anche il nostro sito: https://www.benzinaoggi.it
   });
 }
 
-async function handleSubscribeCommand(chatId: number, userId: number, text: string) {
+async function handleSubscribeCommand(chatId: number | bigint, userId: number, text: string) {
   // Estrai parametri dal comando: /subscribe [impianto_id] [carburante]
   const parts = text.split(' ');
   
@@ -249,20 +249,30 @@ Quale preferisci?
   if (parts[1] === 'all') {
     // Iscrizione a tutte le notifiche
     try {
-      await prisma.telegramSubscription.upsert({
+      // Cerca se esiste già una subscription di tipo ALL per questo utente
+      const existing = await prisma.telegramSubscription.findFirst({
         where: {
-          telegramId_type: {
-            telegramId: userId,
-            type: 'ALL'
-          }
-        },
-        update: { isActive: true },
-        create: {
           telegramId: userId,
-          type: 'ALL',
-          isActive: true
+          type: 'ALL'
         }
       });
+
+      if (existing) {
+        // Aggiorna quella esistente
+        await prisma.telegramSubscription.update({
+          where: { id: existing.id },
+          data: { isActive: true }
+        });
+      } else {
+        // Crea una nuova subscription
+        await prisma.telegramSubscription.create({
+          data: {
+            telegramId: userId,
+            type: 'ALL',
+            isActive: true
+          }
+        });
+      }
 
       return sendMessage(chatId, `
 ✅ <b>Iscrizione completata!</b>
@@ -280,7 +290,7 @@ Usa /status per vedere le tue iscrizioni attive.
   return sendMessage(chatId, 'Funzionalità in sviluppo. Usa <code>/subscribe all</code> per ora.');
 }
 
-async function handleUnsubscribeCommand(chatId: number, userId: number) {
+async function handleUnsubscribeCommand(chatId: number | bigint, userId: number) {
   try {
     const result = await prisma.telegramSubscription.updateMany({
       where: { telegramId: userId },
@@ -303,7 +313,7 @@ Puoi sempre riiscriverti con /subscribe
   }
 }
 
-async function handlePricesCommand(chatId: number, text: string) {
+async function handlePricesCommand(chatId: number | bigint, text: string) {
   const parts = text.split(' ');
   const city = parts.slice(1).join(' ') || 'Roma'; // Default Roma
 
@@ -344,7 +354,7 @@ async function handlePricesCommand(chatId: number, text: string) {
   }
 }
 
-async function handleSearchCommand(chatId: number, text: string) {
+async function handleSearchCommand(chatId: number | bigint, text: string) {
   const query = text.replace('/cerca', '').trim();
   
   if (!query) {
@@ -373,7 +383,7 @@ Oppure invia la tua posizione per cercare distributori vicini.
   return handlePricesCommand(chatId, `/prezzi ${query}`);
 }
 
-async function handleStatusCommand(chatId: number, userId: number) {
+async function handleStatusCommand(chatId: number | bigint, userId: number) {
   try {
     const subscriptions = await prisma.telegramSubscription.findMany({
       where: { 
@@ -420,7 +430,7 @@ Usa /subscribe per iscriverti alle notifiche sui prezzi.
   }
 }
 
-async function handleHelpCommand(chatId: number) {
+async function handleHelpCommand(chatId: number | bigint) {
   const helpText = `
 ❓ <b>Comandi disponibili</b>
 
@@ -449,7 +459,7 @@ async function handleHelpCommand(chatId: number) {
   return sendMessage(chatId, helpText);
 }
 
-async function handleUnknownCommand(chatId: number) {
+async function handleUnknownCommand(chatId: number | bigint) {
   return sendMessage(chatId, `
 ❓ Comando non riconosciuto.
 
