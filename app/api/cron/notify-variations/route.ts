@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/src/lib/db";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300; // Aumenta a 5 minuti
+
+// Timeout per evitare function timeout
+const FUNCTION_TIMEOUT = 270; // 4.5 minuti
+const startTime = Date.now();
 
 // Group an array of items by a key selector
 function groupBy<T, K extends string | number>(items: T[], keyFn: (t: T) => K): Record<K, T[]> {
@@ -15,6 +19,8 @@ function groupBy<T, K extends string | number>(items: T[], keyFn: (t: T) => K): 
 }
 
 export async function GET(req: NextRequest) {
+  const startTime = Date.now();
+  
   try {
     const { searchParams } = new URL(req.url);
     // Invia SOLO ribassi creati oggi (UTC). Permetti override del giorno via createdDay=YYYY-MM-DD
@@ -39,6 +45,13 @@ export async function GET(req: NextRequest) {
     }
     if (variations.length === 0) {
       return NextResponse.json({ ok: true, sent: 0, createdDay: todayIso, note: 'No down variations created today' });
+    }
+    
+    // Limite massimo per evitare timeout
+    const MAX_VARIATIONS = parseInt(searchParams.get('maxVariations') || '1000');
+    if (variations.length > MAX_VARIATIONS) {
+      console.log(`⚠️ Too many variations (${variations.length}), limiting to ${MAX_VARIATIONS}`);
+      variations = variations.slice(0, MAX_VARIATIONS);
     }
 
     // Mappa distributorId -> impiantoId e nome/descrizione
@@ -144,11 +157,24 @@ export async function GET(req: NextRequest) {
     const failures: Array<{ key: string; error: string }> = [];
     const messages: Array<{ key: string; title: string; body: string; externalIds: string[]; url?: string; oneSignalResponse?: any }> = [];
 
+    let processedCount = 0;
+    let skippedDueToTimeout = 0;
+    
     for (const [key, items] of Object.entries(grouped)) {
+      // Controllo timeout - se mancano meno di 30 secondi, fermati
+      const elapsed = Date.now() - startTime;
+      if (elapsed > FUNCTION_TIMEOUT * 1000) {
+        skippedDueToTimeout = Object.keys(grouped).length - processedCount;
+        console.log(`⏱️ Timeout approaching, skipping ${skippedDueToTimeout} remaining notifications`);
+        break;
+      }
+      
       const sample = items[0];
       const impiantoId = sample!.impiantoId as number;
       const fuelType = sample!.fuelType; // fuelType completo per matching
       const baseFuelType = sample!.baseFuelType; // fuelType base per display
+      
+      processedCount++;
 
       const externalIds = subsByKey.get(`${impiantoId}|${fuelType}`) || [];
       if (externalIds.length === 0) continue; // Salta se non ci sono subscription per questa variante
@@ -309,16 +335,26 @@ export async function GET(req: NextRequest) {
       telegramErrors = 1;
     }
 
+    const totalElapsed = Date.now() - startTime;
+    
     return NextResponse.json({ 
       ok: true, 
       createdDay: todayIso, 
-      groups: Object.keys(grouped).length, 
+      groups: Object.keys(grouped).length,
+      processed: processedCount,
+      skippedDueToTimeout: skippedDueToTimeout > 0 ? skippedDueToTimeout : undefined,
       sent, 
       failures, 
       messages,
       telegram: {
         sent: telegramSent,
         errors: telegramErrors
+      },
+      performance: {
+        executionTimeMs: totalElapsed,
+        executionTimeSeconds: Math.round(totalElapsed / 1000),
+        variationsProcessed: variations.length,
+        avgTimePerGroup: processedCount > 0 ? Math.round(totalElapsed / processedCount) : 0
       }
     });
 
