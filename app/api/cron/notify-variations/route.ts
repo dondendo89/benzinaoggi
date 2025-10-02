@@ -172,7 +172,19 @@ export async function GET(req: NextRequest) {
               try { const j = await r.json(); msg += ` ${JSON.stringify(j)}`; } catch {}
               failures.push({ key, error: msg });
             }
-            else sent += chunk.length;
+            else {
+              sent += chunk.length;
+              // Log della risposta OneSignal per debug
+              try {
+                const responseData = await r.json();
+                console.log(`OneSignal success for ${key}:`, JSON.stringify(responseData));
+                if (i === 0) { // Solo per il primo chunk
+                  messages[messages.length - 1].oneSignalResponse = responseData;
+                }
+              } catch (e) {
+                console.log(`OneSignal success for ${key} but couldn't parse response`);
+              }
+            }
           } catch (e: any) {
             failures.push({ key, error: e?.message || 'OneSignal error' });
           }
