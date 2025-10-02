@@ -111,6 +111,17 @@ async function handleCommand(message: TelegramMessage) {
   // Salva/aggiorna utente nel database
   await saveUser(message.from, chatId);
 
+  // Gestisci anche i testi dei bottoni della tastiera
+  if (text === '🔔 Iscriviti alle notifiche') {
+    return handleSubscribeCommand(chatId, userId, '/subscribe all');
+  }
+  if (text === '💰 Prezzi oggi') {
+    return handlePricesCommand(chatId, '/prezzi Roma');
+  }
+  if (text === '❓ Aiuto') {
+    return handleHelpCommand(chatId);
+  }
+
   switch (command) {
     case '/start':
       return handleStartCommand(chatId, userId, message.from);
@@ -183,16 +194,16 @@ Ciao ${user.first_name}! Sono il bot ufficiale di BenzinaOggi.it 🚗
 📊 Fornirti statistiche sui prezzi
 
 <b>Comandi disponibili:</b>
-/subscribe - Iscriviti alle notifiche prezzi
+/subscribe all - Iscriviti a tutte le notifiche ribassi
 /prezzi [città] - Mostra prezzi in una città
 /cerca [località] - Cerca distributori
 /status - Vedi le tue iscrizioni
 /help - Mostra tutti i comandi
 
-<b>Per iniziare:</b>
-1. Usa /subscribe per iscriverti alle notifiche
-2. Invia la tua posizione per trovare distributori vicini
-3. Usa /prezzi [città] per vedere i prezzi
+<b>Per iniziare subito:</b>
+1. Clicca "🔔 Iscriviti alle notifiche" qui sotto
+2. Oppure scrivi: <code>/subscribe all</code>
+3. Invia la tua posizione per trovare distributori vicini
 
 Visita anche il nostro sito: https://www.benzinaoggi.it
 `;
@@ -200,10 +211,10 @@ Visita anche il nostro sito: https://www.benzinaoggi.it
   return sendMessage(chatId, welcomeText, {
     reply_markup: {
       keyboard: [
-        [{ text: '🔔 Iscriviti alle notifiche', callback_data: 'subscribe' }],
+        [{ text: '🔔 Iscriviti alle notifiche' }],
         [{ text: '📍 Invia posizione', request_location: true }],
-        [{ text: '💰 Prezzi oggi', callback_data: 'prices_today' }],
-        [{ text: '❓ Aiuto', callback_data: 'help' }]
+        [{ text: '💰 Prezzi oggi' }],
+        [{ text: '❓ Aiuto' }]
       ],
       resize_keyboard: true,
       one_time_keyboard: false
@@ -340,6 +351,15 @@ async function handlePricesCommand(chatId: number | bigint, text: string) {
           const service = price.isSelfService ? ' (Self)' : '';
           pricesText += `⛽ ${price.fuelType}${service}: <b>€${price.price.toFixed(3)}</b>\n`;
         });
+      }
+      
+      // Aggiungi link alla pagina del distributore
+      if (dist.impiantoId) {
+        const bandiera = (dist.bandiera || 'distributore').toLowerCase().replace(/[^a-z0-9]/g, '-');
+        const comune = (dist.comune || '').toLowerCase().replace(/[^a-z0-9]/g, '-');
+        const slug = `${bandiera}-${comune}-${dist.impiantoId}`;
+        const pageUrl = `https://www.benzinaoggi.it/distributore/${slug}`;
+        pricesText += `🔗 <a href="${pageUrl}">Vedi dettagli</a>\n`;
       }
       
       pricesText += '\n';
@@ -496,6 +516,15 @@ async function handleLocation(message: TelegramMessage) {
           !min || price.price < min.price ? price : min
         );
         locationText += `⛽ Miglior prezzo: ${bestPrice.fuelType} €${bestPrice.price.toFixed(3)}\n`;
+      }
+      
+      // Aggiungi link alla pagina del distributore
+      if (dist.impiantoId) {
+        const bandiera = (dist.bandiera || 'distributore').toLowerCase().replace(/[^a-z0-9]/g, '-');
+        const comune = (dist.comune || '').toLowerCase().replace(/[^a-z0-9]/g, '-');
+        const slug = `${bandiera}-${comune}-${dist.impiantoId}`;
+        const pageUrl = `https://www.benzinaoggi.it/distributore/${slug}`;
+        locationText += `🔗 <a href="${pageUrl}">Vedi dettagli</a>\n`;
       }
       
       locationText += '\n';
