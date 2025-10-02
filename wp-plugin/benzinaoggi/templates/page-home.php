@@ -58,6 +58,14 @@ get_header(); ?>
         </div>
     </section>
 
+    <!-- Video Hero Section -->
+    <?php 
+    $video_template = plugin_dir_path(__FILE__) . 'video-hero-section.php';
+    if (file_exists($video_template)) {
+        include $video_template;
+    }
+    ?>
+    
     <!-- Mappa e risultati -->
     <section class="bo-results-section">
         <div class="bo-container">

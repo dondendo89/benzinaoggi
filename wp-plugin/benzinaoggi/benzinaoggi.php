@@ -2609,6 +2609,9 @@ class BenzinaOggiPlugin {
     }
 }
 
+// Include video configuration
+require_once plugin_dir_path(__FILE__) . 'video-config.php';
+
 // Register SEO cron actions
 add_action('benzinaoggi_cron_generate_seo_landing_pages', [new BenzinaOggiPlugin(), 'cron_generate_seo_landing_pages']);
 add_action('benzinaoggi_cron_generate_faq_pages', [new BenzinaOggiPlugin(), 'cron_generate_faq_pages']);
