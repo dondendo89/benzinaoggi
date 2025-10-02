@@ -77,38 +77,23 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Fetch latest two distinct days to allow fallback when some distributors have no price today
-    const lastTwoDays = await prisma.price.findMany({ select: { day: true }, orderBy: { day: "desc" }, distinct: ["day"], take: 2 });
-    const day = lastTwoDays[0]?.day;
-    const prevDay = lastTwoDays[1]?.day;
-
-    const prices = day ? await prisma.price.findMany({
+    // Fetch current prices from CurrentPrice table
+    const prices = await prisma.currentPrice.findMany({
       where: {
-        day,
         fuelType: fuel || undefined,
       },
-    }) : [];
+    });
 
-    const prevPrices = prevDay ? await prisma.price.findMany({
-      where: {
-        day: prevDay,
-        fuelType: fuel || undefined,
-      },
-    }) : [];
+    // Get the most recent update time for display
+    const lastUpdatedAt = prices.length > 0 
+      ? prices.reduce((latest, p) => p.updatedAt > latest ? p.updatedAt : latest, prices[0].updatedAt)
+      : null;
 
     const byDistributor = new Map<number, any[]>();
     for (const p of prices) {
       const arr = byDistributor.get(p.distributorId) || [];
       arr.push({ fuelType: p.fuelType, price: p.price, isSelfService: p.isSelfService });
       byDistributor.set(p.distributorId, arr);
-    }
-    // Fill gaps with previous day prices only if no entry exists yet for that distributor
-    if (prevPrices.length > 0) {
-      for (const p of prevPrices) {
-        if (!byDistributor.has(p.distributorId)) {
-          byDistributor.set(p.distributorId, [{ fuelType: p.fuelType, price: p.price, isSelfService: p.isSelfService }]);
-        }
-      }
     }
 
     // If a specific fuel is requested, keep only distributors that have at least one price after fallback
@@ -143,7 +128,7 @@ export async function GET(req: NextRequest) {
     // Update total count for radius filtering (after fuel filtering)
     const finalTotal = hasRadius ? filtered.length : total;
     const totalPages = Math.max(1, Math.ceil(finalTotal / limit));
-    return NextResponse.json({ ok: true, day, count: result.length, total: finalTotal, page, pageSize: limit, totalPages, distributors: result });
+    return NextResponse.json({ ok: true, lastUpdatedAt, count: result.length, total: finalTotal, page, pageSize: limit, totalPages, distributors: result });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
   }
