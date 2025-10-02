@@ -186,7 +186,7 @@ export async function GET(req: NextRequest) {
             const bandiera = sample!.distributor?.bandiera || 'distributore';
             const comune = sample!.distributor?.comune || 'italia';
             const slug = `${bandiera.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${comune.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${impiantoId}`;
-            const distributorUrl = `${process.env.WORDPRESS_URL || 'https://benzinaoggi.it'}/distributore/${slug}`;
+            const distributorUrl = `${process.env.WORDPRESS_URL || 'https://www.benzinaoggi.it'}/distributore/${slug}`;
             
             // Salva il messaggio per il debug
             if (i === 0) { // Solo per il primo chunk per evitare duplicati
