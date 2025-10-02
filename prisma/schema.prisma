@@ -89,3 +89,59 @@ model Subscription {
   @@unique([externalId, impiantoId, fuelType], name: "Subscription_unique")
   @@index([impiantoId, fuelType])
 }
+
+// Telegram Bot Support
+model TelegramUser {
+  id           Int      @id @default(autoincrement())
+  telegramId   BigInt   @unique
+  chatId       BigInt
+  firstName    String
+  lastName     String?
+  username     String?
+  languageCode String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  lastActivity DateTime @default(now())
+
+  subscriptions TelegramSubscription[]
+  messages      TelegramMessage[]
+
+  @@index([telegramId])
+  @@index([isActive])
+}
+
+model TelegramSubscription {
+  id         Int      @id @default(autoincrement())
+  telegramId BigInt
+  type       String // 'ALL', 'CITY', 'STATION'
+  impiantoId Int?
+  fuelType   String?
+  city       String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user TelegramUser @relation(fields: [telegramId], references: [telegramId])
+
+  @@unique([telegramId, type, impiantoId, fuelType, city], name: "TelegramSubscription_unique")
+  @@index([telegramId])
+  @@index([isActive])
+  @@index([type])
+  @@index([impiantoId])
+}
+
+model TelegramMessage {
+  id         Int      @id @default(autoincrement())
+  telegramId BigInt
+  chatId     BigInt
+  messageId  Int
+  text       String?
+  command    String?
+  isIncoming Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  user TelegramUser @relation(fields: [telegramId], references: [telegramId])
+
+  @@index([telegramId])
+  @@index([createdAt])
+}

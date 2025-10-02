@@ -182,6 +182,80 @@
         }
       },
       "description": "Elimina tutti i record PriceVariation per una data specifica (default: ieri). Richiede Bearer token."
+    },
+    {
+      "name": "Telegram: Setup Webhook",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"action\": \"set\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/telegram/setup",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","telegram","setup"]
+        }
+      },
+      "description": "Configura il webhook Telegram per ricevere messaggi dal bot. Usa action: 'set' per configurare, 'delete' per rimuovere."
+    },
+    {
+      "name": "Telegram: Get Bot Info",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/telegram/setup",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","telegram","setup"]
+        }
+      },
+      "description": "Ottieni informazioni sul bot Telegram e status del webhook."
+    },
+    {
+      "name": "Telegram: Send Notifications",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{apiSecret}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"type\": \"price_drop\",\n  \"data\": {\n    \"notifications\": [\n      {\n        \"distributorId\": 123,\n        \"impiantoId\": 8284,\n        \"distributor\": {\n          \"bandiera\": \"Test Station\",\n          \"comune\": \"Roma\",\n          \"indirizzo\": \"Via Test 123\"\n        },\n        \"fuelType\": \"Benzina\",\n        \"baseFuelType\": \"Benzina\",\n        \"isSelfService\": false,\n        \"oldPrice\": 1.650,\n        \"newPrice\": 1.640,\n        \"direction\": \"down\",\n        \"delta\": -0.010,\n        \"percentage\": -0.6\n      }\n    ]\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/telegram/notify",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","telegram","notify"]
+        }
+      },
+      "description": "Invia notifiche di ribassi prezzi agli utenti Telegram iscritti. Richiede Bearer token."
+    },
+    {
+      "name": "Telegram: Get Stats",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/telegram/notify",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","telegram","notify"]
+        }
+      },
+      "description": "Ottieni statistiche sugli utenti Telegram attivi e iscrizioni."
     }
   ],
   "event": [],

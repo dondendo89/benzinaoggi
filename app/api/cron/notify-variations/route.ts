@@ -253,7 +253,74 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true, createdDay: todayIso, groups: Object.keys(grouped).length, sent, failures, messages });
+    // Invia anche notifiche Telegram
+    let telegramSent = 0;
+    let telegramErrors = 0;
+    
+    try {
+      const telegramNotifications = Object.values(grouped).map(items => {
+        const sample = items[0];
+        const best = items.reduce((min, item) => 
+          !min || (item.newPrice ?? 0) < (min.newPrice ?? 0) ? item : min
+        );
+        
+        return {
+          distributorId: sample.distributorId,
+          impiantoId: sample.impiantoId,
+          distributor: sample.distributor,
+          fuelType: sample.fuelType,
+          baseFuelType: sample.baseFuelType,
+          isSelfService: sample.isSelfService,
+          oldPrice: best.oldPrice ?? 0,
+          newPrice: best.newPrice ?? 0,
+          direction: 'down' as const,
+          delta: (best.newPrice ?? 0) - (best.oldPrice ?? 0),
+          percentage: best.oldPrice ? (((best.newPrice ?? 0) - (best.oldPrice ?? 0)) / (best.oldPrice ?? 0)) * 100 : 0
+        };
+      });
+      
+      if (telegramNotifications.length > 0) {
+        const telegramResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://benzinaoggi.vercel.app'}/api/telegram/notify`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.API_SECRET}`
+          },
+          body: JSON.stringify({
+            type: 'price_drop',
+            data: {
+              notifications: telegramNotifications
+            }
+          })
+        });
+        
+        if (telegramResponse.ok) {
+          const telegramResult = await telegramResponse.json();
+          telegramSent = telegramResult.sent || 0;
+          telegramErrors = telegramResult.errors || 0;
+          console.log(`Telegram notifications: sent=${telegramSent}, errors=${telegramErrors}`);
+        } else {
+          console.error('Failed to send Telegram notifications:', telegramResponse.status);
+          telegramErrors = 1;
+        }
+      }
+    } catch (error) {
+      console.error('Error sending Telegram notifications:', error);
+      telegramErrors = 1;
+    }
+
+    return NextResponse.json({ 
+      ok: true, 
+      createdDay: todayIso, 
+      groups: Object.keys(grouped).length, 
+      sent, 
+      failures, 
+      messages,
+      telegram: {
+        sent: telegramSent,
+        errors: telegramErrors
+      }
+    });
 
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
