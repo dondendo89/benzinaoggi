@@ -216,16 +216,26 @@ export async function GET(req: NextRequest) {
               failures.push({ key, error: msg });
             }
             else {
-              sent += chunk.length;
               // Log della risposta OneSignal per debug
               try {
                 const responseData = await r.json();
                 console.log(`OneSignal success for ${key}:`, JSON.stringify(responseData));
+                
+                // Controlla se ci sono external ID invalidi
+                const invalidExternals = responseData.errors?.invalid_aliases?.external_id || [];
+                const actualSent = chunk.length - invalidExternals.length;
+                sent += actualSent;
+                
+                if (invalidExternals.length > 0) {
+                  console.log(`Found ${invalidExternals.length} invalid external IDs for ${key}:`, invalidExternals);
+                }
+                
                 if (i === 0) { // Solo per il primo chunk
                   messages[messages.length - 1].oneSignalResponse = responseData;
                 }
               } catch (e) {
                 console.log(`OneSignal success for ${key} but couldn't parse response`);
+                sent += chunk.length; // Fallback se non riusciamo a parsare
               }
             }
           } catch (e: any) {
