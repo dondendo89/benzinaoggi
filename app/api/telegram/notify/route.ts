@@ -18,6 +18,14 @@ interface PriceNotification {
   percentage: number;
 }
 
+// Custom JSON.stringify replacer to handle BigInt
+function replacer(key: string, value: any) {
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  return value;
+}
+
 async function sendTelegramMessage(chatId: number | bigint, text: string, options: any = {}) {
   if (!TELEGRAM_BOT_TOKEN) {
     console.error('TELEGRAM_BOT_TOKEN not configured');
@@ -25,31 +33,42 @@ async function sendTelegramMessage(chatId: number | bigint, text: string, option
   }
 
   try {
+    const payload = {
+      chat_id: chatId,
+      text,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+      ...options
+    };
+
     const response = await fetch(`${TELEGRAM_API_URL}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        parse_mode: 'HTML',
-        disable_web_page_preview: true,
-        ...options
-      })
+      body: JSON.stringify(payload, replacer) // Use the replacer here
     });
     
     const result = await response.json();
     
     if (!result.ok) {
-      console.error('Telegram API error:', result);
+      console.error(`Telegram API error for chatId ${chatId}:`, {
+        error_code: result.error_code,
+        description: result.description,
+        parameters: result.parameters
+      });
       
       // Se l'utente ha bloccato il bot o la chat non esiste più
       if (result.error_code === 403 || result.error_code === 400) {
+        console.log(`Deactivating user with chatId ${chatId} due to error ${result.error_code}`);
         // Disattiva l'utente
         await prisma.telegramUser.update({
-          where: { chatId },
+          where: { chatId: typeof chatId === 'bigint' ? chatId : BigInt(chatId) },
           data: { isActive: false }
-        }).catch(() => {});
+        }).catch((updateError) => {
+          console.error('Error deactivating user:', updateError);
+        });
       }
+    } else {
+      console.log(`Telegram message sent successfully to chatId ${chatId}`);
     }
     
     return result;
