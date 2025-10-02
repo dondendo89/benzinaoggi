@@ -128,6 +128,13 @@ class BenzinaOggiPlugin {
 
         // Admin post action to trigger notifications for today's variations
         add_action('admin_post_benzinaoggi_notify_variations', [$this, 'handle_notify_variations']);
+        
+        // SEO Content Generation Actions
+        add_action('admin_post_benzinaoggi_generate_seo_landing_pages', [$this, 'handle_generate_seo_landing_pages']);
+        add_action('admin_post_benzinaoggi_generate_faq_pages', [$this, 'handle_generate_faq_pages']);
+        add_action('admin_post_benzinaoggi_generate_local_seo', [$this, 'handle_generate_local_seo']);
+        add_action('admin_post_benzinaoggi_generate_brand_comparisons', [$this, 'handle_generate_brand_comparisons']);
+        add_action('admin_post_benzinaoggi_generate_seasonal_content', [$this, 'handle_generate_seasonal_content']);
     }
 
     private function get_italian_capitals() {
@@ -2467,7 +2474,147 @@ class BenzinaOggiPlugin {
         
         $this->log_progress("Aggiornamento titoli completato: {$updated} aggiornate, {$skipped} saltate, {$errors} errori su {$pagesFound} pagine totali");
     }
+    
+    // SEO Content Generation Handlers
+    public function handle_generate_seo_landing_pages() {
+        if (!current_user_can('manage_options')) wp_die('Not allowed');
+        check_admin_referer('bo_generate_seo_landing_pages');
+        
+        require_once plugin_dir_path(__FILE__) . 'seo-content-generator.php';
+        $generator = benzinaoggi_seo_content_init();
+        
+        if (!$generator) {
+            set_transient('benzinaoggi_notice', 'Chiave API Gemini non configurata per la generazione SEO.', 30);
+        } else {
+            // Esegui in background
+            wp_schedule_single_event(time() + 5, 'benzinaoggi_cron_generate_seo_landing_pages');
+            set_transient('benzinaoggi_notice', 'Generazione landing page SEO avviata in background.', 30);
+        }
+        
+        wp_redirect(admin_url('options-general.php?page=benzinaoggi&tab=seo'));
+        exit;
+    }
+    
+    public function handle_generate_faq_pages() {
+        if (!current_user_can('manage_options')) wp_die('Not allowed');
+        check_admin_referer('bo_generate_faq_pages');
+        
+        require_once plugin_dir_path(__FILE__) . 'seo-content-generator.php';
+        $generator = benzinaoggi_seo_content_init();
+        
+        if (!$generator) {
+            set_transient('benzinaoggi_notice', 'Chiave API Gemini non configurata.', 30);
+        } else {
+            wp_schedule_single_event(time() + 5, 'benzinaoggi_cron_generate_faq_pages');
+            set_transient('benzinaoggi_notice', 'Generazione pagine FAQ avviata.', 30);
+        }
+        
+        wp_redirect(admin_url('options-general.php?page=benzinaoggi&tab=seo'));
+        exit;
+    }
+    
+    public function handle_generate_local_seo() {
+        if (!current_user_can('manage_options')) wp_die('Not allowed');
+        check_admin_referer('bo_generate_local_seo');
+        
+        require_once plugin_dir_path(__FILE__) . 'seo-content-generator.php';
+        $generator = benzinaoggi_seo_content_init();
+        
+        if (!$generator) {
+            set_transient('benzinaoggi_notice', 'Chiave API Gemini non configurata.', 30);
+        } else {
+            wp_schedule_single_event(time() + 5, 'benzinaoggi_cron_generate_local_seo');
+            set_transient('benzinaoggi_notice', 'Generazione contenuti SEO locali avviata.', 30);
+        }
+        
+        wp_redirect(admin_url('options-general.php?page=benzinaoggi&tab=seo'));
+        exit;
+    }
+    
+    public function handle_generate_brand_comparisons() {
+        if (!current_user_can('manage_options')) wp_die('Not allowed');
+        check_admin_referer('bo_generate_brand_comparisons');
+        
+        require_once plugin_dir_path(__FILE__) . 'seo-content-generator.php';
+        $generator = benzinaoggi_seo_content_init();
+        
+        if (!$generator) {
+            set_transient('benzinaoggi_notice', 'Chiave API Gemini non configurata.', 30);
+        } else {
+            wp_schedule_single_event(time() + 5, 'benzinaoggi_cron_generate_brand_comparisons');
+            set_transient('benzinaoggi_notice', 'Generazione confronti brand avviata.', 30);
+        }
+        
+        wp_redirect(admin_url('options-general.php?page=benzinaoggi&tab=seo'));
+        exit;
+    }
+    
+    public function handle_generate_seasonal_content() {
+        if (!current_user_can('manage_options')) wp_die('Not allowed');
+        check_admin_referer('bo_generate_seasonal_content');
+        
+        require_once plugin_dir_path(__FILE__) . 'seo-content-generator.php';
+        $generator = benzinaoggi_seo_content_init();
+        
+        if (!$generator) {
+            set_transient('benzinaoggi_notice', 'Chiave API Gemini non configurata.', 30);
+        } else {
+            wp_schedule_single_event(time() + 5, 'benzinaoggi_cron_generate_seasonal_content');
+            set_transient('benzinaoggi_notice', 'Generazione contenuti stagionali avviata.', 30);
+        }
+        
+        wp_redirect(admin_url('options-general.php?page=benzinaoggi&tab=seo'));
+        exit;
+    }
+    
+    // Cron handlers for SEO content generation
+    public function cron_generate_seo_landing_pages() {
+        require_once plugin_dir_path(__FILE__) . 'seo-content-generator.php';
+        $generator = benzinaoggi_seo_content_init();
+        if ($generator) {
+            $generator->generate_keyword_landing_pages();
+        }
+    }
+    
+    public function cron_generate_faq_pages() {
+        require_once plugin_dir_path(__FILE__) . 'seo-content-generator.php';
+        $generator = benzinaoggi_seo_content_init();
+        if ($generator) {
+            $generator->generate_faq_pages();
+        }
+    }
+    
+    public function cron_generate_local_seo() {
+        require_once plugin_dir_path(__FILE__) . 'seo-content-generator.php';
+        $generator = benzinaoggi_seo_content_init();
+        if ($generator) {
+            $generator->generate_local_seo_pages();
+        }
+    }
+    
+    public function cron_generate_brand_comparisons() {
+        require_once plugin_dir_path(__FILE__) . 'seo-content-generator.php';
+        $generator = benzinaoggi_seo_content_init();
+        if ($generator) {
+            $generator->generate_brand_comparisons();
+        }
+    }
+    
+    public function cron_generate_seasonal_content() {
+        require_once plugin_dir_path(__FILE__) . 'seo-content-generator.php';
+        $generator = benzinaoggi_seo_content_init();
+        if ($generator) {
+            $generator->generate_seasonal_content();
+        }
+    }
 }
+
+// Register SEO cron actions
+add_action('benzinaoggi_cron_generate_seo_landing_pages', [new BenzinaOggiPlugin(), 'cron_generate_seo_landing_pages']);
+add_action('benzinaoggi_cron_generate_faq_pages', [new BenzinaOggiPlugin(), 'cron_generate_faq_pages']);
+add_action('benzinaoggi_cron_generate_local_seo', [new BenzinaOggiPlugin(), 'cron_generate_local_seo']);
+add_action('benzinaoggi_cron_generate_brand_comparisons', [new BenzinaOggiPlugin(), 'cron_generate_brand_comparisons']);
+add_action('benzinaoggi_cron_generate_seasonal_content', [new BenzinaOggiPlugin(), 'cron_generate_seasonal_content']);
 
 new BenzinaOggiPlugin();
 
