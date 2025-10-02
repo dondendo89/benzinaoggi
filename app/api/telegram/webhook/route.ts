@@ -132,7 +132,7 @@ async function handleCommand(message: TelegramMessage) {
     
     case '/unsubscribe':
     case '/disiscriviti':
-      return handleUnsubscribeCommand(chatId, userId);
+      return handleUnsubscribeCommand(chatId, userId, text);
     
     case '/prezzi':
       return handlePricesCommand(chatId, text);
@@ -194,6 +194,7 @@ Ciao ${user.first_name}! Sono il bot ufficiale di BenzinaOggi.it 🚗
 📊 Fornirti statistiche sui prezzi
 
 <b>Comandi disponibili:</b>
+/subscribe [città] - Notifiche per una città specifica
 /subscribe all - Iscriviti a tutte le notifiche ribassi
 /prezzi [città] - Mostra prezzi in una città
 /cerca [località] - Cerca distributori
@@ -201,8 +202,8 @@ Ciao ${user.first_name}! Sono il bot ufficiale di BenzinaOggi.it 🚗
 /help - Mostra tutti i comandi
 
 <b>Per iniziare subito:</b>
-1. Clicca "🔔 Iscriviti alle notifiche" qui sotto
-2. Oppure scrivi: <code>/subscribe all</code>
+1. Scrivi: <code>/subscribe Roma</code> per notifiche da Roma
+2. Oppure: <code>/subscribe all</code> per tutte le notifiche
 3. Invia la tua posizione per trovare distributori vicini
 
 Visita anche il nostro sito: https://www.benzinaoggi.it
@@ -297,11 +298,88 @@ Usa /status per vedere le tue iscrizioni attive.
     }
   }
 
-  // Altri tipi di iscrizione...
-  return sendMessage(chatId, 'Funzionalità in sviluppo. Usa <code>/subscribe all</code> per ora.');
+  // Gestione iscrizione per città
+  const cityName = parts.slice(1).join(' ').trim();
+  if (cityName && cityName !== 'all') {
+    try {
+      // Cerca se esiste già una subscription di tipo CITY per questa città
+      const existing = await prisma.telegramSubscription.findFirst({
+        where: {
+          telegramId: userId,
+          type: 'CITY',
+          city: cityName
+        }
+      });
+
+      if (existing) {
+        // Aggiorna quella esistente
+        await prisma.telegramSubscription.update({
+          where: { id: existing.id },
+          data: { isActive: true }
+        });
+      } else {
+        // Crea una nuova subscription per città
+        await prisma.telegramSubscription.create({
+          data: {
+            telegramId: userId,
+            type: 'CITY',
+            city: cityName,
+            isActive: true
+          }
+        });
+      }
+
+      return sendMessage(chatId, `
+✅ <b>Iscrizione completata!</b>
+
+Riceverai notifiche per i ribassi di prezzo a <b>${cityName}</b>.
+
+Usa /status per vedere le tue iscrizioni attive.
+`);
+    } catch (error) {
+      console.error('Error creating city subscription:', error);
+      return sendMessage(chatId, '❌ Errore durante l\'iscrizione alla città. Riprova più tardi.');
+    }
+  }
+
+  return sendMessage(chatId, 'Formato non riconosciuto. Usa <code>/subscribe [città]</code> o <code>/subscribe all</code>.');
 }
 
-async function handleUnsubscribeCommand(chatId: number | bigint, userId: number) {
+async function handleUnsubscribeCommand(chatId: number | bigint, userId: number, text: string) {
+  const parts = text.split(' ');
+  
+  // Se viene specificata una città, disiscriviti solo da quella
+  if (parts.length > 1) {
+    const cityName = parts.slice(1).join(' ').trim();
+    
+    try {
+      const result = await prisma.telegramSubscription.updateMany({
+        where: { 
+          telegramId: userId,
+          type: 'CITY',
+          city: cityName
+        },
+        data: { isActive: false }
+      });
+
+      if (result.count > 0) {
+        return sendMessage(chatId, `
+✅ <b>Disiscrizione completata!</b>
+
+Non riceverai più notifiche per i ribassi a <b>${cityName}</b>.
+
+Le altre tue iscrizioni rimangono attive.
+Usa /status per vedere tutte le iscrizioni.
+`);
+      } else {
+        return sendMessage(chatId, `Non risulti iscritto alle notifiche per "${cityName}".`);
+      }
+    } catch (error) {
+      return sendMessage(chatId, '❌ Errore durante la disiscrizione. Riprova più tardi.');
+    }
+  }
+
+  // Disiscrizione da tutte le notifiche
   try {
     const result = await prisma.telegramSubscription.updateMany({
       where: { telegramId: userId },
@@ -442,7 +520,15 @@ Usa /subscribe per iscriverti alle notifiche sui prezzi.
       }
     });
 
-    statusText += '\nUsa /unsubscribe per disiscriverti da tutte le notifiche.';
+    statusText += `
+<b>Gestione iscrizioni:</b>
+• /unsubscribe - Disiscriviti da tutto
+• /unsubscribe [città] - Disiscriviti da una città specifica
+
+<b>Esempi:</b>
+• <code>/unsubscribe Roma</code>
+• <code>/subscribe Milano</code>
+`;
 
     return sendMessage(chatId, statusText);
   } catch (error) {
@@ -455,8 +541,10 @@ async function handleHelpCommand(chatId: number | bigint) {
 ❓ <b>Comandi disponibili</b>
 
 <b>Notifiche:</b>
-/subscribe - Iscriviti alle notifiche
-/unsubscribe - Disiscriviti dalle notifiche
+/subscribe [città] - Iscriviti alle notifiche per una città
+/subscribe all - Iscriviti a tutte le notifiche
+/unsubscribe - Disiscriviti da tutte le notifiche
+/unsubscribe [città] - Disiscriviti da una città specifica
 /status - Vedi le tue iscrizioni
 
 <b>Prezzi e Ricerca:</b>
@@ -469,9 +557,11 @@ async function handleHelpCommand(chatId: number | bigint) {
 /start - Messaggio di benvenuto
 
 <b>Esempi pratici:</b>
-• <code>/prezzi Roma</code>
-• <code>/cerca Milano</code>
-• <code>/subscribe all</code>
+• <code>/subscribe Roma</code> - Notifiche per Roma
+• <code>/subscribe all</code> - Tutte le notifiche
+• <code>/unsubscribe Milano</code> - Stop notifiche Milano
+• <code>/prezzi Napoli</code> - Prezzi a Napoli
+• <code>/cerca Milano centro</code> - Cerca a Milano centro
 
 🌐 Sito web: https://www.benzinaoggi.it
 `;
