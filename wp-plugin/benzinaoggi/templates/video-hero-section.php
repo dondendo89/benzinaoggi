@@ -6,7 +6,7 @@
 
 // Get plugin options for video settings
 $options = get_option('benzinaoggi_options', []);
-$video_enabled = $options['hero_video_enabled'] ?? true;
+$video_enabled = !isset($options['disable_hero_video']) || !$options['disable_hero_video'];
 $video_autoplay = $options['hero_video_autoplay'] ?? true;
 $video_loop = $options['hero_video_loop'] ?? true;
 $video_muted = $options['hero_video_muted'] ?? true;

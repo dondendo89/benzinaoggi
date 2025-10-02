@@ -420,6 +420,7 @@ class BenzinaOggiPlugin {
         add_settings_field('api_secret', 'API Bearer Secret', [$this, 'field_api_secret'], 'benzinaoggi', 'benzinaoggi_section');
         add_settings_field('gemini_api_key', 'Google Gemini API Key', [$this, 'field_gemini_api_key'], 'benzinaoggi', 'benzinaoggi_section');
         add_settings_field('city_posts_targets', __('Città per articoli (uno per riga)', 'benzinaoggi'), [$this, 'field_city_posts_targets'], 'benzinaoggi', 'benzinaoggi_section');
+        add_settings_field('disable_hero_video', __('Disabilita Video Hero', 'benzinaoggi'), [$this, 'field_disable_hero_video'], 'benzinaoggi', 'benzinaoggi_section');
 
         // Sezione per il logo
         add_settings_section('benzinaoggi_logo_section', __('Logo e Branding', 'benzinaoggi'), function() {
@@ -478,6 +479,13 @@ class BenzinaOggiPlugin {
         $val = (string)($opts['city_posts_targets'] ?? '');
         echo '<textarea name="'.self::OPTION_NAME.'[city_posts_targets]" rows="6" class="large-text" placeholder="Milano\nRoma\n…">'.esc_textarea($val).'</textarea>';
         echo '<p class="description">Elenco di capoluoghi o città per cui generare articoli. Uno per riga.</p>';
+    }
+
+    public function field_disable_hero_video() {
+        $opts = $this->get_options();
+        $checked = isset($opts['disable_hero_video']) && $opts['disable_hero_video'] ? 'checked' : '';
+        echo '<label><input type="checkbox" name="'.self::OPTION_NAME.'[disable_hero_video]" value="1" '.$checked.' /> Nascondi il video promozionale nell\'header</label>';
+        echo '<p class="description">Disabilita la visualizzazione del video hero nella homepage per migliorare le performance o per preferenze di design.</p>';
     }
 
     public function field_logo_url() {
@@ -581,6 +589,7 @@ class BenzinaOggiPlugin {
                 <a href="?page=benzinaoggi&tab=settings" class="nav-tab <?php echo $active_tab == 'settings' ? 'nav-tab-active' : ''; ?>">Impostazioni</a>
                 <a href="?page=benzinaoggi&tab=import" class="nav-tab <?php echo $active_tab == 'import' ? 'nav-tab-active' : ''; ?>">Importa Dati</a>
                 <a href="?page=benzinaoggi&tab=notifications" class="nav-tab <?php echo $active_tab == 'notifications' ? 'nav-tab-active' : ''; ?>">Notifiche</a>
+                <a href="?page=benzinaoggi&tab=video" class="nav-tab <?php echo $active_tab == 'video' ? 'nav-tab-active' : ''; ?>">Video Hero</a>
                 <a href="?page=benzinaoggi&tab=pages" class="nav-tab <?php echo $active_tab == 'pages' ? 'nav-tab-active' : ''; ?>">Pagine Template</a>
                 <a href="?page=benzinaoggi&tab=seo" class="nav-tab <?php echo $active_tab == 'seo' ? 'nav-tab-active' : ''; ?>">SEO</a>
             </nav>
@@ -608,6 +617,103 @@ class BenzinaOggiPlugin {
                     submit_button();
                     ?>
                 </form>
+            <?php elseif ($active_tab == 'video'): ?>
+                <h2>🎬 Impostazioni Video Hero</h2>
+                <p>Configura il video promozionale che appare nell'header della homepage.</p>
+                
+                <div class="video-settings-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin: 20px 0;">
+                    <div class="video-settings">
+                        <h3>Configurazione</h3>
+                        <form method="post" action="options.php">
+                            <?php
+                            settings_fields(self::OPTION_GROUP);
+                            ?>
+                            <table class="form-table">
+                                <tr>
+                                    <th scope="row">Abilita Video Hero</th>
+                                    <td>
+                                        <?php $this->field_disable_hero_video(); ?>
+                                    </td>
+                                </tr>
+                            </table>
+                            <?php submit_button('Salva Impostazioni Video'); ?>
+                        </form>
+                        
+                        <hr/>
+                        <h3>📁 Caricamento Video</h3>
+                        <p>Per sostituire il video predefinito, carica i tuoi file nella cartella:</p>
+                        <code>/wp-content/plugins/benzinaoggi/assets/videos/</code>
+                        
+                        <h4>File Richiesti:</h4>
+                        <ul style="list-style: disc; margin-left: 20px;">
+                            <li><strong>benzinaoggi-hero.mp4</strong> - Video principale (formato MP4)</li>
+                            <li><strong>benzinaoggi-hero.webm</strong> - Video ottimizzato (formato WebM)</li>
+                            <li><strong>benzinaoggi-hero-poster.jpg</strong> - Immagine di anteprima</li>
+                            <li><strong>benzinaoggi-hero-fallback.jpg</strong> - Immagine fallback</li>
+                        </ul>
+                        
+                        <h4>Specifiche Consigliate:</h4>
+                        <ul style="background: #f8f9fa; padding: 15px 30px; border-radius: 6px; border-left: 4px solid #10b981;">
+                            <li><strong>Risoluzione:</strong> 1920x1080 (16:9)</li>
+                            <li><strong>Durata:</strong> 45-60 secondi</li>
+                            <li><strong>Bitrate:</strong> 2-4 Mbps</li>
+                            <li><strong>Formato Audio:</strong> AAC 128kbps</li>
+                            <li><strong>Dimensione:</strong> &lt; 10MB</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="video-preview">
+                        <h3>Anteprima Video</h3>
+                        <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; border: 1px solid #ddd;">
+                            <?php
+                            $options = get_option(self::OPTION_NAME, []);
+                            $video_disabled = isset($options['disable_hero_video']) && $options['disable_hero_video'];
+                            
+                            if ($video_disabled) {
+                                echo '<div style="text-align: center; padding: 40px; color: #666;">';
+                                echo '<p><strong>📴 Video Hero Disabilitato</strong></p>';
+                                echo '<p>Il video è attualmente nascosto dalla homepage.</p>';
+                                echo '<p>Abilita il video nelle impostazioni per vedere l\'anteprima.</p>';
+                                echo '</div>';
+                            } else {
+                                // Include video template for preview
+                                $video_template = plugin_dir_path(__FILE__) . 'templates/video-hero-section.php';
+                                if (file_exists($video_template)) {
+                                    echo '<div style="max-width: 100%; margin: 0;">';
+                                    include $video_template;
+                                    echo '</div>';
+                                } else {
+                                    echo '<div style="text-align: center; padding: 40px; color: #666;">';
+                                    echo '<p><strong>⚠️ Template Video Non Trovato</strong></p>';
+                                    echo '<p>Il file del template video non è presente.</p>';
+                                    echo '<p>Verifica che il file <code>templates/video-hero-section.php</code> esista.</p>';
+                                    echo '</div>';
+                                }
+                            }
+                            ?>
+                        </div>
+                        
+                        <div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-left: 4px solid #2563eb; border-radius: 4px;">
+                            <h4 style="margin-top: 0;">💡 Script Video Pronto</h4>
+                            <p>Abbiamo preparato uno script completo per il video promozionale:</p>
+                            <ul style="margin-bottom: 0;">
+                                <li><strong>Durata:</strong> 45-60 secondi</li>
+                                <li><strong>Narrative:</strong> Problema → Soluzione → CTA</li>
+                                <li><strong>Stile:</strong> Professionale e moderno</li>
+                            </ul>
+                            <p style="margin-bottom: 0;"><a href="<?php echo plugin_dir_url(__FILE__); ?>../BENZINAOGGI_VIDEO_SCRIPT.md" target="_blank" class="button button-secondary">📄 Visualizza Script Completo</a></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <style>
+                @media (max-width: 768px) {
+                    .video-settings-container {
+                        grid-template-columns: 1fr !important;
+                    }
+                }
+                </style>
+                
             <?php elseif ($active_tab == 'seo'): ?>
                 <h2>Generazione SEO (Gemini)</h2>
                 <p>Genera la descrizione SEO per tutte le pagine pubblicate. Usa il titolo come prompt.</p>

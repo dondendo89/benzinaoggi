@@ -45,73 +45,21 @@ class BenzinaOggi_Video_Config {
     
     /**
      * Register video settings in WordPress admin
+     * Note: Settings are now managed in the main plugin settings
      */
     public function register_video_settings() {
-        // Register settings group
-        register_setting('benzinaoggi_video_settings', 'benzinaoggi_video_options');
-        
-        // Add settings section
-        add_settings_section(
-            'benzinaoggi_video_section',
-            'Impostazioni Video Hero',
-            [$this, 'video_section_callback'],
-            'benzinaoggi_video_settings'
-        );
-        
-        // Video enabled field
-        add_settings_field(
-            'hero_video_enabled',
-            'Abilita Video Hero',
-            [$this, 'video_enabled_callback'],
-            'benzinaoggi_video_settings',
-            'benzinaoggi_video_section'
-        );
-        
-        // Video autoplay field
-        add_settings_field(
-            'hero_video_autoplay',
-            'Riproduzione Automatica',
-            [$this, 'video_autoplay_callback'],
-            'benzinaoggi_video_settings',
-            'benzinaoggi_video_section'
-        );
-        
-        // Video loop field
-        add_settings_field(
-            'hero_video_loop',
-            'Riproduzione Continua',
-            [$this, 'video_loop_callback'],
-            'benzinaoggi_video_settings',
-            'benzinaoggi_video_section'
-        );
-        
-        // Video muted field
-        add_settings_field(
-            'hero_video_muted',
-            'Avvia Senza Audio',
-            [$this, 'video_muted_callback'],
-            'benzinaoggi_video_settings',
-            'benzinaoggi_video_section'
-        );
-        
-        // Video quality field
-        add_settings_field(
-            'hero_video_quality',
-            'Qualità Video',
-            [$this, 'video_quality_callback'],
-            'benzinaoggi_video_settings',
-            'benzinaoggi_video_section'
-        );
+        // Video settings are now integrated in the main plugin settings
+        // This method is kept for compatibility but doesn't register duplicate settings
     }
     
     /**
      * Get current video settings with defaults
      */
     public function get_video_settings() {
-        $options = get_option('benzinaoggi_video_options', []);
+        $main_options = get_option('benzinaoggi_options', []);
         
-        return array_merge([
-            'enabled' => true,
+        return [
+            'enabled' => !isset($main_options['disable_hero_video']) || !$main_options['disable_hero_video'],
             'autoplay' => true,
             'loop' => true,
             'muted' => true,
@@ -120,7 +68,7 @@ class BenzinaOggi_Video_Config {
             'show_cta' => true,
             'cta_text' => '🔔 Attiva Notifiche Gratuite',
             'analytics_enabled' => true
-        ], $options);
+        ];
     }
     
     /**
