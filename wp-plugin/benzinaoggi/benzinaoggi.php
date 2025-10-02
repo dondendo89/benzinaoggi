@@ -1905,6 +1905,16 @@ class BenzinaOggiPlugin {
         // Stili comuni
         wp_enqueue_style('benzinaoggi-style', plugins_url('public/style.css', __FILE__), [], '1.0.0');
         
+        // Script di engagement per notifiche (sempre caricato)
+        wp_register_script('benzinaoggi-engagement', plugins_url('public/notification-engagement.js', __FILE__), [], '1.0.0', true);
+        wp_localize_script('benzinaoggi-engagement', 'BenzinaOggi', [
+            'apiBase' => rtrim($opts['api_base'], '/'),
+            'onesignalAppId' => $opts['onesignal_app_id'],
+            'onesignalOfficial' => false,
+            'useOwnOneSignal' => true
+        ]);
+        wp_enqueue_script('benzinaoggi-engagement');
+        
         // Se la pagina ha lo shortcode del distributore, carica solo lo script dedicato
         if ($has_distributor_shortcode) {
             wp_register_script('benzinaoggi-distributor', plugins_url('public/distributor.js', __FILE__), [], '2.0.0', true);
