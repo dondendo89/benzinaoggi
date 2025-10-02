@@ -195,9 +195,7 @@ export async function GET(req: NextRequest) {
               },
               body: JSON.stringify({
                 app_id: appId,
-                include_aliases: { external_id: chunk },
-                channel_for_external_user_ids: 'push',
-                target_channel: 'push',
+                include_external_user_ids: chunk,
                 headings: { it: title, en: title },
                 contents: { it: body, en: body },
                 data: {
