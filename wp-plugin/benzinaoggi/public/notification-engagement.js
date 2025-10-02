@@ -69,17 +69,48 @@
   function requestNotificationPermission() {
     return new Promise(function(resolve, reject) {
       try {
-        if (window.OneSignal && OneSignal.Notifications && OneSignal.Notifications.requestPermission) {
-          OneSignal.Notifications.requestPermission().then(resolve).catch(reject);
-        } else if (window.Notification && Notification.requestPermission) {
-          Notification.requestPermission().then(resolve).catch(reject);
+        console.log('Requesting notification permission...');
+        
+        // Check if OneSignal is available and initialized
+        if (window.OneSignal && typeof OneSignal.Notifications !== 'undefined') {
+          console.log('Using OneSignal for permission request');
+          
+          // OneSignal v16 API
+          OneSignal.Notifications.requestPermission().then(function(accepted) {
+            console.log('OneSignal permission result:', accepted);
+            resolve(accepted ? 'granted' : 'denied');
+          }).catch(function(error) {
+            console.error('OneSignal permission error:', error);
+            // Fallback to native API
+            fallbackToNativePermission(resolve, reject);
+          });
+          
         } else {
-          reject(new Error('Notifications not supported'));
+          console.log('OneSignal not available, using native Notification API');
+          fallbackToNativePermission(resolve, reject);
         }
       } catch(e) {
-        reject(e);
+        console.error('Permission request exception:', e);
+        fallbackToNativePermission(resolve, reject);
       }
     });
+  }
+  
+  // Fallback to native notification permission
+  function fallbackToNativePermission(resolve, reject) {
+    if (window.Notification && Notification.requestPermission) {
+      // Modern browsers return a Promise
+      if (typeof Notification.requestPermission().then === 'function') {
+        Notification.requestPermission().then(resolve).catch(reject);
+      } else {
+        // Older browsers use callback
+        Notification.requestPermission(function(permission) {
+          resolve(permission);
+        });
+      }
+    } else {
+      reject(new Error('Notifications not supported by this browser'));
+    }
   }
   
   // Subscribe to fuel type notifications
@@ -207,6 +238,7 @@
       enableBtn.disabled = true;
       
       requestNotificationPermission().then(function(permission) {
+        console.log('Modal permission result:', permission);
         if (permission === 'granted') {
           markAsPrompted();
           modal.style.display = 'none';
@@ -214,21 +246,30 @@
           // Show success message
           showSuccessMessage('🎉 Notifiche abilitate! Ora puoi selezionare i distributori che ti interessano.');
         } else {
+          console.warn('Permission denied:', permission);
           enableBtn.textContent = '❌ Autorizzazione negata';
           enableBtn.style.background = '#dc3545';
+          
+          // Show helpful message
+          var helpText = document.createElement('div');
+          helpText.style.cssText = 'margin-top: 10px; font-size: 12px; color: #666; text-align: center;';
+          helpText.textContent = 'Controlla le impostazioni del browser per abilitare le notifiche per questo sito.';
+          enableBtn.parentNode.appendChild(helpText);
+          
           setTimeout(function() {
             modal.style.display = 'none';
             markAsPrompted();
-          }, 2000);
+          }, 4000);
         }
       }).catch(function(err) {
         console.error('Permission request failed:', err);
-        enableBtn.textContent = '❌ Errore';
+        enableBtn.textContent = '❌ Errore: ' + (err.message || 'Sconosciuto');
         enableBtn.style.background = '#dc3545';
+        enableBtn.style.fontSize = '12px';
         setTimeout(function() {
           modal.style.display = 'none';
           markAsPrompted();
-        }, 2000);
+        }, 3000);
       });
     });
     
@@ -321,23 +362,27 @@
       }, 150);
       
       requestNotificationPermission().then(function(permission) {
+        console.log('Widget permission result:', permission);
         if (permission === 'granted') {
           widget.style.display = 'none';
           showSuccessMessage('🎉 Notifiche abilitate! Seleziona i distributori nelle pagine dettaglio.');
         } else {
-          widget.innerHTML = '<span>❌</span><span>Autorizzazione negata</span>';
+          console.warn('Widget permission denied:', permission);
+          widget.innerHTML = '<span>❌</span><span style="font-size: 11px;">Autorizzazione negata</span>';
           widget.style.background = '#dc3545';
+          widget.style.cursor = 'default';
           setTimeout(function() {
             widget.style.display = 'none';
-          }, 3000);
+          }, 4000);
         }
       }).catch(function(err) {
-        console.error('Permission request failed:', err);
-        widget.innerHTML = '<span>❌</span><span>Errore</span>';
+        console.error('Widget permission request failed:', err);
+        widget.innerHTML = '<span>❌</span><span style="font-size: 10px;">Errore: ' + (err.message || 'Browser') + '</span>';
         widget.style.background = '#dc3545';
+        widget.style.cursor = 'default';
         setTimeout(function() {
           widget.style.display = 'none';
-        }, 3000);
+        }, 4000);
       });
     });
     
@@ -470,37 +515,61 @@
     }
   }
   
+  // Wait for OneSignal to be ready
+  function waitForOneSignal(callback, maxWait) {
+    maxWait = maxWait || 10000; // 10 seconds max wait
+    var startTime = Date.now();
+    
+    function checkOneSignal() {
+      if (window.OneSignal && typeof OneSignal.Notifications !== 'undefined') {
+        console.log('OneSignal is ready');
+        callback(true);
+      } else if (Date.now() - startTime > maxWait) {
+        console.log('OneSignal timeout, proceeding without it');
+        callback(false);
+      } else {
+        setTimeout(checkOneSignal, 100);
+      }
+    }
+    
+    checkOneSignal();
+  }
+
   // Initialize engagement system
   function init() {
-    // Wait for DOM and OneSignal to be ready
+    // Wait for DOM to be ready first
     setTimeout(function() {
-      var isDistributorPage = !!document.querySelector('#bo_distributor_detail');
-      var isHomePage = !!document.querySelector('#bo_map');
-      
-      // Show welcome modal on first visit (not on distributor pages) if not disabled
-      if (!isDistributorPage && !hasBeenPrompted() && !areNotificationsEnabled() && !isModalDisabled()) {
-        setTimeout(function() {
-          var modal = createWelcomeModal();
-          if (modal) {
-            document.body.appendChild(modal);
-          }
-        }, 2000); // Show after 2 seconds
-      }
-      
-      // Show floating widget on subsequent visits or after modal dismissal if not disabled
-      if (!areNotificationsEnabled() && !isFloatDisabled()) {
-        setTimeout(function() {
-          if (!document.querySelector('.bo-welcome-modal')) {
-            showFloatingWidget();
-          }
-        }, hasBeenPrompted() ? 5000 : 15000);
-      }
-      
-      // Enhance distributor pages
-      if (isDistributorPage) {
-        enhanceDistributorPage();
-      }
-      
+      // Then wait for OneSignal to be ready
+      waitForOneSignal(function(oneSignalReady) {
+        console.log('Initializing engagement system, OneSignal ready:', oneSignalReady);
+        
+        var isDistributorPage = !!document.querySelector('#bo_distributor_detail');
+        var isHomePage = !!document.querySelector('#bo_map');
+        
+        // Show welcome modal on first visit (not on distributor pages) if not disabled
+        if (!isDistributorPage && !hasBeenPrompted() && !areNotificationsEnabled() && !isModalDisabled()) {
+          setTimeout(function() {
+            var modal = createWelcomeModal();
+            if (modal) {
+              document.body.appendChild(modal);
+            }
+          }, 2000); // Show after 2 seconds
+        }
+        
+        // Show floating widget on subsequent visits or after modal dismissal if not disabled
+        if (!areNotificationsEnabled() && !isFloatDisabled()) {
+          setTimeout(function() {
+            if (!document.querySelector('.bo-welcome-modal')) {
+              showFloatingWidget();
+            }
+          }, hasBeenPrompted() ? 5000 : 15000);
+        }
+        
+        // Enhance distributor pages
+        if (isDistributorPage) {
+          enhanceDistributorPage();
+        }
+      });
     }, 1000);
   }
   
@@ -512,3 +581,4 @@
   }
   
 })();
+
