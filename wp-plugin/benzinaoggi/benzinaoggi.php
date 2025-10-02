@@ -77,6 +77,10 @@ class BenzinaOggiPlugin {
         add_action('admin_post_benzinaoggi_generate_city_posts', [$this, 'handle_generate_city_posts']);
         // Cron job hook to process city posts generation in background
         add_action('benzinaoggi_generate_city_posts', [$this, 'cron_generate_city_posts']);
+        // Admin post action to update page titles from CSV anagrafica
+        add_action('admin_post_benzinaoggi_update_page_titles', [$this, 'handle_update_page_titles']);
+        // Cron job hook to update page titles in background
+        add_action('benzinaoggi_update_page_titles_job', [$this, 'cron_update_page_titles']);
         // Single-run cron to sync pages
         add_action('benzinaoggi_sync_pages', [$this, 'cron_sync_pages']);
         // Ensure daily sync at 05:00 local time
@@ -743,6 +747,34 @@ class BenzinaOggiPlugin {
                             🗑️ Elimina Pagine Distributori
                         </button>
                     </form>
+                </div>
+                
+                <div class="card" style="max-width: 600px; margin-bottom: 20px;">
+                    <h4>📝 Aggiorna Titoli Pagine Distributori</h4>
+                    <p>Aggiorna i titoli delle pagine esistenti con formato <strong>"bandiera comune indirizzo"</strong> utilizzando i dati più recenti dal CSV anagrafica.</p>
+                    <p><em>Nota: Vengono aggiornati solo i titoli, gli slug rimangono invariati.</em></p>
+                    
+                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top: 15px;" onsubmit="return confirm('Aggiornare i titoli di tutte le pagine distributori con i dati dal CSV anagrafica?');">
+                        <input type="hidden" name="action" value="benzinaoggi_update_page_titles" />
+                        <?php wp_nonce_field('bo_update_page_titles'); ?>
+                        <button type="submit" class="button button-primary">
+                            🔄 Aggiorna Titoli da CSV Anagrafica
+                        </button>
+                    </form>
+                    
+                    <?php
+                    $lastTitleUpdate = get_option('benzinaoggi_last_title_update');
+                    if ($lastTitleUpdate && is_array($lastTitleUpdate)) {
+                        echo '<div style="margin-top: 15px; padding: 10px; background: #f0f0f1; border-radius: 4px;">';
+                        echo '<p><strong>Ultimo aggiornamento titoli:</strong> ' . esc_html($lastTitleUpdate['when']) . '</p>';
+                        echo '<p>Statistiche: ' . intval($lastTitleUpdate['pages_processed'] ?? 0) . ' pagine processate, ' . 
+                             intval($lastTitleUpdate['updated'] ?? 0) . ' aggiornate, ' . 
+                             intval($lastTitleUpdate['skipped'] ?? 0) . ' saltate, ' . 
+                             intval($lastTitleUpdate['errors'] ?? 0) . ' errori</p>';
+                        echo '<p>Distributori nel CSV: ' . intval($lastTitleUpdate['distributors_total'] ?? 0) . '</p>';
+                        echo '</div>';
+                    }
+                    ?>
                 </div>
                 
                 <h3>Pagine esistenti:</h3>
@@ -2227,6 +2259,191 @@ class BenzinaOggiPlugin {
         if (is_wp_error($resp)) {
             error_log('[BenzinaOggi] notify cron error: '.$resp->get_error_message());
         }
+    }
+
+    /**
+     * Gestisce l'aggiornamento dei titoli delle pagine esistenti dal CSV anagrafica
+     */
+    public function handle_update_page_titles() {
+        if (!current_user_can('manage_options')) wp_die('Not allowed');
+        check_admin_referer('bo_update_page_titles');
+        
+        $opts = $this->get_options();
+        $api_base = rtrim($opts['api_base'], '/');
+        if (!$api_base) {
+            set_transient('benzinaoggi_notice', 'Configura prima API Base URL nelle impostazioni.', 30);
+            wp_redirect(admin_url('options-general.php?page=benzinaoggi&tab=pages'));
+            exit;
+        }
+        
+        // Avvia il processo in background
+        wp_schedule_single_event(time() + 5, 'benzinaoggi_update_page_titles_job');
+        if (function_exists('spawn_cron')) { @spawn_cron(time() + 1); }
+        
+        set_transient('benzinaoggi_notice', 'Aggiornamento titoli pagine avviato in background.', 30);
+        wp_redirect(admin_url('options-general.php?page=benzinaoggi&tab=pages'));
+        exit;
+    }
+
+    /**
+     * Job: aggiorna i titoli delle pagine esistenti con formato "bandiera comune indirizzo"
+     */
+    public function cron_update_page_titles() {
+        $opts = $this->get_options();
+        $api_base = rtrim($opts['api_base'], '/');
+        if (!$api_base) {
+            $this->log_progress('Update page titles: API base non configurata');
+            return;
+        }
+        
+        @ignore_user_abort(true);
+        @set_time_limit(1800); // 30 minuti
+        @ini_set('memory_limit', '512M');
+        
+        $this->log_progress('Inizio aggiornamento titoli pagine distributori...');
+        
+        // Headers per API autenticata
+        $headers = [];
+        if (!empty($opts['api_secret'])) {
+            $headers['Authorization'] = 'Bearer ' . $opts['api_secret'];
+        }
+        
+        // Scarica tutti i distributori dal CSV anagrafica
+        $this->log_progress('Scaricamento dati distributori da API...');
+        $response = wp_remote_get($api_base . '/api/distributors-all', [
+            'timeout' => 600,
+            'headers' => $headers
+        ]);
+        
+        if (is_wp_error($response)) {
+            $this->log_progress('ERRORE chiamata API distributors-all: ' . $response->get_error_message());
+            return;
+        }
+        
+        $data = json_decode(wp_remote_retrieve_body($response), true);
+        if (empty($data['distributors']) || !is_array($data['distributors'])) {
+            $this->log_progress('Nessun distributore ricevuto dall\'API');
+            return;
+        }
+        
+        $distributors = $data['distributors'];
+        $total = count($distributors);
+        $this->log_progress("Ricevuti {$total} distributori dal CSV anagrafica");
+        
+        // Crea un indice per impiantoId per lookup veloce
+        $distributorsByImpianto = [];
+        foreach ($distributors as $distributor) {
+            if (!empty($distributor['impiantoId'])) {
+                $distributorsByImpianto[$distributor['impiantoId']] = $distributor;
+            }
+        }
+        
+        // Trova tutte le pagine che contengono lo shortcode carburante_distributor
+        $this->log_progress('Ricerca pagine con shortcode carburante_distributor...');
+        
+        $pages = get_posts([
+            'post_type' => 'page',
+            'post_status' => 'publish',
+            'posts_per_page' => -1,
+            'meta_query' => [
+                'relation' => 'OR',
+                [
+                    'key' => '_wp_page_template',
+                    'value' => 'page-distributor.php',
+                    'compare' => '='
+                ]
+            ]
+        ]);
+        
+        // Se non trova pagine con template, cerca per contenuto shortcode
+        if (empty($pages)) {
+            $pages = get_posts([
+                'post_type' => 'page',
+                'post_status' => 'publish',
+                'posts_per_page' => -1,
+                's' => '[carburante_distributor'
+            ]);
+        }
+        
+        $pagesFound = count($pages);
+        $this->log_progress("Trovate {$pagesFound} pagine con shortcode distributore");
+        
+        if (empty($pages)) {
+            $this->log_progress('Nessuna pagina trovata con shortcode carburante_distributor');
+            return;
+        }
+        
+        $updated = 0;
+        $skipped = 0;
+        $errors = 0;
+        
+        foreach ($pages as $page) {
+            // Estrai l'impianto_id dallo shortcode
+            $content = $page->post_content;
+            if (preg_match('/\[carburante_distributor[^]]*impianto_id=["\']?(\d+)["\']?[^]]*\]/', $content, $matches)) {
+                $impiantoId = $matches[1];
+                
+                // Cerca il distributore corrispondente
+                if (isset($distributorsByImpianto[$impiantoId])) {
+                    $distributor = $distributorsByImpianto[$impiantoId];
+                    
+                    // Costruisci il nuovo titolo: "bandiera comune indirizzo"
+                    $bandiera = trim($distributor['bandiera'] ?: 'Distributore');
+                    $comune = trim($distributor['comune'] ?: '');
+                    $indirizzo = trim($distributor['indirizzo'] ?: '');
+                    
+                    // Formato: "Bandiera Comune Indirizzo" (rimuovi spazi multipli)
+                    $titleParts = array_filter([$bandiera, $comune, $indirizzo]);
+                    $newTitle = trim(preg_replace('/\s+/', ' ', implode(' ', $titleParts)));
+                    
+                    // Aggiorna solo se il titolo è diverso
+                    if ($page->post_title !== $newTitle) {
+                        $result = wp_update_post([
+                            'ID' => $page->ID,
+                            'post_title' => $newTitle
+                        ]);
+                        
+                        if (is_wp_error($result)) {
+                            $errors++;
+                            $this->log_progress("ERRORE aggiornamento pagina ID {$page->ID} (impianto {$impiantoId}): " . $result->get_error_message());
+                        } else {
+                            $updated++;
+                            $this->log_progress("Aggiornato titolo pagina ID {$page->ID}: '{$page->post_title}' → '{$newTitle}'");
+                        }
+                    } else {
+                        $skipped++;
+                        // Log solo ogni 100 per non spammare
+                        if ($skipped % 100 === 0) {
+                            $this->log_progress("Saltate {$skipped} pagine (titolo già corretto)");
+                        }
+                    }
+                } else {
+                    $skipped++;
+                    $this->log_progress("Distributore impianto {$impiantoId} non trovato nel CSV (pagina ID {$page->ID})");
+                }
+            } else {
+                $skipped++;
+                $this->log_progress("Shortcode impianto_id non trovato nella pagina ID {$page->ID}");
+            }
+            
+            // Progress ogni 500 pagine
+            if (($updated + $skipped + $errors) % 500 === 0) {
+                $processed = $updated + $skipped + $errors;
+                $this->log_progress("Progresso: {$processed}/{$pagesFound} - aggiornate: {$updated}, saltate: {$skipped}, errori: {$errors}");
+            }
+        }
+        
+        // Salva statistiche finali
+        update_option('benzinaoggi_last_title_update', [
+            'when' => current_time('mysql'),
+            'pages_processed' => $pagesFound,
+            'updated' => $updated,
+            'skipped' => $skipped,
+            'errors' => $errors,
+            'distributors_total' => $total
+        ], false);
+        
+        $this->log_progress("Aggiornamento titoli completato: {$updated} aggiornate, {$skipped} saltate, {$errors} errori su {$pagesFound} pagine totali");
     }
 }
 
