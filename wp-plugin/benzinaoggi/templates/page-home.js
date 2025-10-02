@@ -414,6 +414,168 @@
         if (wrap) { wrap.style.paddingBottom = '48px'; }
       } catch(_) {}
     }
+    
+    // Richiedi automaticamente la geolocalizzazione dopo 1 secondo
+    setTimeout(requestLocationAndSearch, 1000);
+  }
+
+  // Richiesta automatica della geolocalizzazione
+  function requestLocationAndSearch() {
+    if (!navigator.geolocation) {
+      console.log('Geolocation not supported by this browser');
+      return;
+    }
+    
+    // Check if user previously denied location
+    try {
+      var locationDenied = localStorage.getItem('bo_location_denied');
+      if (locationDenied === 'true') {
+        console.log('User previously denied location access');
+        return;
+      }
+    } catch(e) {
+      // localStorage not available, continue
+    }
+    
+    // Show location request message with skip option
+    var locationMsg = document.createElement('div');
+    locationMsg.className = 'bo-location-request';
+    locationMsg.innerHTML = '<div class="bo-location-content">' +
+      '<div class="bo-location-icon">📍</div>' +
+      '<div class="bo-location-text">Richiesta posizione...</div>' +
+      '<div class="bo-location-subtext">Trovare i distributori più vicini a te</div>' +
+      '<button class="bo-location-skip" onclick="this.parentNode.parentNode.parentNode.style.display=\'none\'">Salta</button>' +
+      '</div>';
+    locationMsg.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #fff;
+      border: 2px solid #0ea5e9;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 1000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 280px;
+      animation: slideIn 0.3s ease-out;
+    `;
+    
+    // Add CSS animation
+    if (!document.querySelector('#bo-location-styles')) {
+      var style = document.createElement('style');
+      style.id = 'bo-location-styles';
+      style.textContent = `
+        @keyframes slideIn {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        .bo-location-content {
+          text-align: center;
+        }
+        .bo-location-icon {
+          font-size: 24px;
+          margin-bottom: 8px;
+        }
+        .bo-location-text {
+          font-weight: 600;
+          color: #0ea5e9;
+          margin-bottom: 4px;
+        }
+        .bo-location-subtext {
+          font-size: 12px;
+          color: #666;
+          margin-bottom: 8px;
+        }
+        .bo-location-skip {
+          background: #f3f4f6;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          padding: 4px 12px;
+          font-size: 11px;
+          color: #6b7280;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .bo-location-skip:hover {
+          background: #e5e7eb;
+          color: #374151;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    document.body.appendChild(locationMsg);
+    
+    navigator.geolocation.getCurrentPosition(function(pos){
+      // Success: got location
+      state.userLocation = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude
+      };
+      
+      // Update message to success
+      locationMsg.querySelector('.bo-location-icon').textContent = '✅';
+      locationMsg.querySelector('.bo-location-text').textContent = 'Posizione trovata!';
+      locationMsg.querySelector('.bo-location-subtext').textContent = 'Caricamento distributori vicini...';
+      
+      // Center map on user location
+      if (elements.map) {
+        elements.map.setView([state.userLocation.lat, state.userLocation.lng], 13);
+      }
+      
+      // Update search filters
+      state.currentFilters.location = `${state.userLocation.lat},${state.userLocation.lng}`;
+      if (elements.locationInput) {
+        elements.locationInput.value = 'La mia posizione';
+      }
+      
+      // Start search automatically
+      handleSearch();
+      
+      // Remove message after 2 seconds
+      setTimeout(function() {
+        if (locationMsg.parentNode) {
+          locationMsg.style.animation = 'slideIn 0.3s ease-out reverse';
+          setTimeout(function() {
+            if (locationMsg.parentNode) locationMsg.parentNode.removeChild(locationMsg);
+          }, 300);
+        }
+      }, 2000);
+      
+    }, function(error){
+      // Error: couldn't get location
+      console.log('Geolocation error:', error);
+      
+      // Save denial to localStorage if user explicitly denied
+      if (error.code === error.PERMISSION_DENIED) {
+        try {
+          localStorage.setItem('bo_location_denied', 'true');
+        } catch(e) {
+          // localStorage not available
+        }
+      }
+      
+      locationMsg.querySelector('.bo-location-icon').textContent = '❌';
+      locationMsg.querySelector('.bo-location-text').textContent = 'Posizione non disponibile';
+      locationMsg.querySelector('.bo-location-subtext').textContent = 'Usa i filtri per cercare manualmente';
+      locationMsg.style.borderColor = '#ef4444';
+      
+      // Remove message after 3 seconds
+      setTimeout(function() {
+        if (locationMsg.parentNode) {
+          locationMsg.style.animation = 'slideIn 0.3s ease-out reverse';
+          setTimeout(function() {
+            if (locationMsg.parentNode) locationMsg.parentNode.removeChild(locationMsg);
+          }, 300);
+        }
+      }, 3000);
+      
+    }, { 
+      enableHighAccuracy: true, 
+      timeout: 10000,
+      maximumAge: 300000 // 5 minutes cache
+    });
   }
 
   // Mostra/nascondi loading
