@@ -135,6 +135,53 @@
         }
       },
       "description": "Ritorna gli externalId iscritti a (impiantoId, fuelType)."
+    },
+    {
+      "name": "Cleanup PriceVariation (GET - check)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{apiSecret}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/cleanup-price-variations?date={{cleanupDate}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","cleanup-price-variations"],
+          "query": [
+            { "key": "date", "value": "{{cleanupDate}}" }
+          ]
+        }
+      },
+      "description": "Controlla quanti record PriceVariation esistono per una data specifica (default: ieri). Non elimina nulla."
+    },
+    {
+      "name": "Cleanup PriceVariation (POST - delete)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{apiSecret}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"date\": \"{{cleanupDate}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/cleanup-price-variations",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","cleanup-price-variations"]
+        }
+      },
+      "description": "Elimina tutti i record PriceVariation per una data specifica (default: ieri). Richiede Bearer token."
     }
   ],
   "event": [],
@@ -148,7 +195,9 @@
     { "key": "lon", "value": "" },
     { "key": "limit", "value": "200" },
     { "key": "impiantoId", "value": "59183" },
-    { "key": "fuelType", "value": "Benzina" }
+    { "key": "fuelType", "value": "Benzina" },
+    { "key": "apiSecret", "value": "your-api-secret-token" },
+    { "key": "cleanupDate", "value": "2025-10-01" }
   ]
 }
 
