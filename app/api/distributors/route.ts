@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/src/lib/db";
+import { cache, generateCacheKey, SafeCache } from "@/src/lib/cache";
 
 export async function GET(req: NextRequest) {
   try {
@@ -19,6 +20,36 @@ export async function GET(req: NextRequest) {
     const limit = Math.max(limitParam, 1); // nessun cap artificiale; il DB gestisce
     const page = Math.max(parseInt(searchParams.get("page") || "1", 10), 1);
     const skip = (page - 1) * limit;
+
+    // Generate cache key for this specific request
+    const cacheKey = generateCacheKey('distributors', {
+      city: city || '',
+      fuel: fuel || '',
+      brand: brand || '',
+      sort: sortParam,
+      lat: userLat ? userLat.toFixed(4) : '', // Round coords for better cache hits
+      lon: userLon ? userLon.toFixed(4) : '',
+      radius: radiusKm || '',
+      limit,
+      page
+    });
+
+    // Try to get from cache first
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      console.log(`Cache HIT for distributors: ${cacheKey}`);
+      
+      // Add cache headers
+      return NextResponse.json(cached, {
+        headers: {
+          'X-Cache': 'HIT',
+          'Cache-Control': 'public, max-age=300, s-maxage=600', // 5min browser, 10min CDN
+          'X-Cache-Key': cacheKey
+        }
+      });
+    }
+
+    console.log(`Cache MISS for distributors: ${cacheKey}`);
 
     // Build where clause for database query
     const whereClause: any = {};
@@ -128,7 +159,34 @@ export async function GET(req: NextRequest) {
     // Update total count for radius filtering (after fuel filtering)
     const finalTotal = hasRadius ? filtered.length : total;
     const totalPages = Math.max(1, Math.ceil(finalTotal / limit));
-    return NextResponse.json({ ok: true, lastUpdatedAt, count: result.length, total: finalTotal, page, pageSize: limit, totalPages, distributors: result });
+    
+    // Prepare response data
+    const responseData = { 
+      ok: true, 
+      lastUpdatedAt, 
+      count: result.length, 
+      total: finalTotal, 
+      page, 
+      pageSize: limit, 
+      totalPages, 
+      distributors: result 
+    };
+
+    // Cache the result (with conservative TTL)
+    const cacheSuccess = cache.set(cacheKey, responseData, SafeCache.TTL.DISTRIBUTORS_LIST);
+    if (!cacheSuccess) {
+      console.warn(`Failed to cache distributors result for key: ${cacheKey}`);
+    }
+
+    // Return response with cache headers
+    return NextResponse.json(responseData, {
+      headers: {
+        'X-Cache': 'MISS',
+        'Cache-Control': 'public, max-age=300, s-maxage=600', // 5min browser, 10min CDN
+        'X-Cache-Key': cacheKey,
+        'X-Cache-Stats': JSON.stringify(cache.getStats())
+      }
+    });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
   }
