@@ -78,6 +78,14 @@
     elements.locationInput?.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') handleSearch();
     });
+    // Pulisci geolocalizzazione quando l'utente inizia a digitare
+    elements.locationInput?.addEventListener('input', (e) => {
+      const value = e.target.value.trim();
+      if (value && value !== 'La mia posizione') {
+        console.log('User is typing, clearing geolocation state');
+        state.userLocation = null;
+      }
+    });
     elements.fuelSelect?.addEventListener('change', handleSearch);
     elements.radiusSelect?.addEventListener('change', handleSearch);
   }
@@ -166,14 +174,18 @@
     const fuel = elements.fuelSelect?.value || '';
     const radius = parseInt(elements.radiusSelect?.value) || 100;
 
-    state.currentFilters = { location, fuel, radius };
-    state.pagination.currentPage = 1; // Reset alla prima pagina
-
     // Se l'utente ha digitato qualcosa nel campo location, resetta la geolocalizzazione
     if (location && location !== 'La mia posizione') {
       console.log('User typed city name, clearing geolocation:', location);
       state.userLocation = null;
+      // Rimuovi anche il flag di geolocalizzazione dai filtri correnti
+      if (state.currentFilters.location === 'La mia posizione') {
+        console.log('Clearing previous geolocation filter');
+      }
     }
+
+    state.currentFilters = { location, fuel, radius };
+    state.pagination.currentPage = 1; // Reset alla prima pagina
 
     if (!location && !state.userLocation) {
       alert('Inserisci una località o usa "La mia posizione"');
@@ -207,6 +219,12 @@
 
       if (state.currentFilters.fuel) {
         params.append('fuel', state.currentFilters.fuel);
+      }
+
+      // Controlla se la cache è disabilitata nelle impostazioni del plugin
+      if (window.BenzinaOggi && window.BenzinaOggi.disableApiCache) {
+        params.append('nocache', '1');
+        console.log('Cache API disabilitata nelle impostazioni');
       }
 
       const apiUrl = `${config.apiBase}/api/distributors?${params}`;

@@ -19,11 +19,11 @@ get_header(); ?>
 <main id="main" class="site-main">
     <div class="container">
         <div class="bo-container">
-            <style>
+    <style>
                 .bo-container { max-width: 1200px; margin: 0 auto; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
                 .bo-title { font-size: 28px; margin: 0 0 10px 0; font-weight: 600; }
                 .bo-subtitle { font-size: 16px; opacity: 0.9; margin: 0; }
-            </style>
+    </style>
 
             <?php
             // Stampa il contenuto esistente (può già contenere lo shortcode)

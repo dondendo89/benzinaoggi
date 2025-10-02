@@ -421,6 +421,7 @@ class BenzinaOggiPlugin {
         add_settings_field('gemini_api_key', 'Google Gemini API Key', [$this, 'field_gemini_api_key'], 'benzinaoggi', 'benzinaoggi_section');
         add_settings_field('city_posts_targets', __('Città per articoli (uno per riga)', 'benzinaoggi'), [$this, 'field_city_posts_targets'], 'benzinaoggi', 'benzinaoggi_section');
         add_settings_field('disable_hero_video', __('Disabilita Video Hero', 'benzinaoggi'), [$this, 'field_disable_hero_video'], 'benzinaoggi', 'benzinaoggi_section');
+        add_settings_field('disable_api_cache', __('Disabilita Cache API', 'benzinaoggi'), [$this, 'field_disable_api_cache'], 'benzinaoggi', 'benzinaoggi_section');
 
         // Sezione per il logo
         add_settings_section('benzinaoggi_logo_section', __('Logo e Branding', 'benzinaoggi'), function() {
@@ -486,6 +487,13 @@ class BenzinaOggiPlugin {
         $checked = isset($opts['disable_hero_video']) && $opts['disable_hero_video'] ? 'checked' : '';
         echo '<label><input type="checkbox" name="'.self::OPTION_NAME.'[disable_hero_video]" value="1" '.$checked.' /> Nascondi il video promozionale nell\'header</label>';
         echo '<p class="description">Disabilita la visualizzazione del video hero nella homepage per migliorare le performance o per preferenze di design.</p>';
+    }
+
+    public function field_disable_api_cache() {
+        $opts = $this->get_options();
+        $checked = isset($opts['disable_api_cache']) && $opts['disable_api_cache'] ? 'checked' : '';
+        echo '<label><input type="checkbox" name="'.self::OPTION_NAME.'[disable_api_cache]" value="1" '.$checked.' /> Disabilita cache per le API distributori</label>';
+        echo '<p class="description">Disabilita il sistema di cache per le chiamate API ai distributori. Utile per debug o se si riscontrano problemi con dati obsoleti.</p>';
     }
 
     public function field_logo_url() {
@@ -2078,7 +2086,8 @@ class BenzinaOggiPlugin {
             'apiBase' => rtrim($opts['api_base'], '/'),
             'onesignalAppId' => $opts['onesignal_app_id'],
             'onesignalOfficial' => false,
-            'useOwnOneSignal' => true
+            'useOwnOneSignal' => true,
+            'disableApiCache' => !empty($opts['disable_api_cache'])
         ]);
         wp_enqueue_script('benzinaoggi-engagement');
         
@@ -2089,7 +2098,8 @@ class BenzinaOggiPlugin {
                 'apiBase' => rtrim($opts['api_base'], '/'),
                 'onesignalAppId' => $opts['onesignal_app_id'],
                 'onesignalOfficial' => false,
-                'useOwnOneSignal' => true
+                'useOwnOneSignal' => true,
+                'disableApiCache' => !empty($opts['disable_api_cache'])
             ]);
             wp_enqueue_script('benzinaoggi-distributor');
             return; // Non caricare app.js per evitare conflitti
@@ -2116,6 +2126,7 @@ class BenzinaOggiPlugin {
             'onesignalAppId' => $opts['onesignal_app_id'],
             'onesignalOfficial' => false,
             'useOwnOneSignal' => true,
+            'disableApiCache' => !empty($opts['disable_api_cache'])
         ]);
         wp_enqueue_script('benzinaoggi-app');
         // lo script distributor è caricato solo quando è presente lo shortcode

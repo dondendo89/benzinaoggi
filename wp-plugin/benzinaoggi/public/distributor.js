@@ -624,7 +624,12 @@
                     if (!apiBaseEarly) { console.warn('BenzinaOggi.apiBase non configurato: POST /api/subscriptions potrebbe fallire'); }
                     var subUrlEarly = (apiBaseEarly || '') + '/api/subscriptions';
                     var subIdEarly = null;
-                    try { subIdEarly = await (OneSignal && OneSignal.User && OneSignal.User.PushSubscription && OneSignal.User.PushSubscription.getId ? OneSignal.User.PushSubscription.getId() : null); } catch(_sidE){}
+                    try { 
+              subIdEarly = await (OneSignal && OneSignal.User && OneSignal.User.PushSubscription && OneSignal.User.PushSubscription.getId ? OneSignal.User.PushSubscription.getId() : null); 
+              console.log('OneSignal subscription ID retrieved:', subIdEarly);
+            } catch(_sidE){
+              console.warn('Error getting OneSignal subscription ID:', _sidE);
+            }
                     var payloadEarly = { externalId: externalId, impiantoId: d.impiantoId, fuelType: fuel };
                     if (subIdEarly) payloadEarly.subscriptionId = subIdEarly;
                     console.log('POST /api/subscriptions (subscribe)', subUrlEarly, payloadEarly);

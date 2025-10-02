@@ -112,7 +112,8 @@
         + (brand ? ('&brand=' + encodeURIComponent(brand)) : '')
         + (sort ? ('&sort=' + encodeURIComponent(sort)) : '')
         + ((lat!=null && lon!=null) ? ('&lat=' + encodeURIComponent(lat) + '&lon=' + encodeURIComponent(lon)) : '')
-        + ((lat!=null && lon!=null && rad!=null) ? ('&radiusKm=' + encodeURIComponent(rad)) : '');
+        + ((lat!=null && lon!=null && rad!=null) ? ('&radiusKm=' + encodeURIComponent(rad)) : '')
+        + ((window.BenzinaOggi && window.BenzinaOggi.disableApiCache) ? '&nocache=1' : '');
       fetch(url).then(function(r){ return r.json(); }).then(function(data){
         clearMarkers();
         if(!data || !data.distributors){ return; }

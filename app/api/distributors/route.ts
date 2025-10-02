@@ -20,6 +20,10 @@ export async function GET(req: NextRequest) {
     const limit = Math.max(limitParam, 1); // nessun cap artificiale; il DB gestisce
     const page = Math.max(parseInt(searchParams.get("page") || "1", 10), 1);
     const skip = (page - 1) * limit;
+    
+    // Check if cache is disabled via nocache parameter
+    const noCacheParam = searchParams.get("nocache");
+    const cacheDisabled = noCacheParam === "1" || noCacheParam === "true";
 
     // Generate cache key for this specific request
     const cacheKey = generateCacheKey('distributors', {
@@ -34,19 +38,23 @@ export async function GET(req: NextRequest) {
       page
     });
 
-    // Try to get from cache first
-    const cached = cache.get(cacheKey);
-    if (cached) {
-      console.log(`Cache HIT for distributors: ${cacheKey}`);
-      
-      // Add cache headers
-      return NextResponse.json(cached, {
-        headers: {
-          'X-Cache': 'HIT',
-          'Cache-Control': 'public, max-age=300, s-maxage=600', // 5min browser, 10min CDN
-          'X-Cache-Key': cacheKey
-        }
-      });
+    // Try to get from cache first (only if cache is not disabled)
+    if (!cacheDisabled) {
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        console.log(`Cache HIT for distributors: ${cacheKey}`);
+        
+        // Add cache headers
+        return NextResponse.json(cached, {
+          headers: {
+            'X-Cache': 'HIT',
+            'Cache-Control': 'public, max-age=300, s-maxage=600', // 5min browser, 10min CDN
+            'X-Cache-Key': cacheKey
+          }
+        });
+      }
+    } else {
+      console.log(`Cache DISABLED for distributors: ${cacheKey}`);
     }
 
     console.log(`Cache MISS for distributors: ${cacheKey}`);
@@ -172,17 +180,20 @@ export async function GET(req: NextRequest) {
       distributors: result 
     };
 
-    // Cache the result (with conservative TTL)
-    const cacheSuccess = cache.set(cacheKey, responseData, SafeCache.TTL.DISTRIBUTORS_LIST);
-    if (!cacheSuccess) {
-      console.warn(`Failed to cache distributors result for key: ${cacheKey}`);
+    // Cache the result (only if cache is not disabled)
+    if (!cacheDisabled) {
+      const cacheSuccess = cache.set(cacheKey, responseData, SafeCache.TTL.DISTRIBUTORS_LIST);
+      if (!cacheSuccess) {
+        console.warn(`Failed to cache distributors result for key: ${cacheKey}`);
+      }
     }
 
     // Return response with cache headers
+    const cacheStatus = cacheDisabled ? 'DISABLED' : 'MISS';
     return NextResponse.json(responseData, {
       headers: {
-        'X-Cache': 'MISS',
-        'Cache-Control': 'public, max-age=300, s-maxage=600', // 5min browser, 10min CDN
+        'X-Cache': cacheStatus,
+        'Cache-Control': cacheDisabled ? 'no-cache, no-store, must-revalidate' : 'public, max-age=300, s-maxage=600',
         'X-Cache-Key': cacheKey,
         'X-Cache-Stats': JSON.stringify(cache.getStats())
       }
