@@ -862,13 +862,17 @@ class BenzinaOggiPlugin {
         @ignore_user_abort(true);
         @set_time_limit(300);
 
-        $generated = 0; $skipped = 0; $errors = 0;
+        $generated = 0; $updated = 0; $skipped = 0; $errors = 0;
         $remaining = [];
         foreach ($cities as $idx => $city) {
             try {
                 $res = $this->generate_city_post($city, $api_key);
                 if ($res['created']) {
-                    $generated++;
+                    if (isset($res['updated']) && $res['updated']) {
+                        $updated++;
+                    } else {
+                        $generated++;
+                    }
                 } elseif (isset($res['skipped']) && $res['skipped']) {
                     $skipped++;
                 } 
@@ -884,7 +888,7 @@ class BenzinaOggiPlugin {
         }
         // Aggiorna coda (vuota se completato)
         update_option('benzinaoggi_city_posts_queue', $remaining, false);
-        $this->log_progress("City posts completati: creati=$generated saltati=$skipped errori=$errors");
+        $this->log_progress("City posts completati: creati=$generated aggiornati=$updated saltati=$skipped errori=$errors");
     }
 
     /**
@@ -934,11 +938,29 @@ class BenzinaOggiPlugin {
         $metaDesc = $this->smart_trim_sentence($genMeta, 100);
         if (!$genHtml) $genHtml = '<p>'.esc_html($metaDesc).'</p>';
 
-        // Controlla se esiste già - se sì, salta la generazione
+        // Controlla se esiste già
         if ($existing) {
             $post_id = $existing->ID;
-            $this->log_progress("City post già esistente, saltato: $title (ID: $post_id)");
-            return ['created' => false, 'post_id' => $post_id, 'skipped' => true];
+            $content = trim($existing->post_content);
+            
+            // Se l'articolo esiste MA è vuoto (senza contenuto) → aggiornalo
+            if (empty($content)) {
+                wp_update_post(array(
+                    'ID' => $post_id,
+                    'post_title' => $title,
+                    'post_content' => $genHtml,
+                    'post_status' => 'publish'
+                ));
+                update_post_meta($post_id, '_yoast_wpseo_metadesc', $metaDesc);
+                update_post_meta($post_id, '_rank_math_description', $metaDesc);
+                update_post_meta($post_id, '_aioseo_description', $metaDesc);
+                $this->log_progress("City post vuoto aggiornato: $title (ID: $post_id)");
+                return ['created' => true, 'post_id' => $post_id, 'updated' => true];
+            } else {
+                // Se l'articolo esiste E ha già contenuto → skippalo
+                $this->log_progress("City post già esistente con contenuto, saltato: $title (ID: $post_id)");
+                return ['created' => false, 'post_id' => $post_id, 'skipped' => true];
+            }
         } else {
             $post_id = wp_insert_post(array(
                 'post_title' => $title,
