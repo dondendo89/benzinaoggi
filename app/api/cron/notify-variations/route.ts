@@ -51,29 +51,72 @@ export async function GET(req: NextRequest) {
 
     // Raggruppa variazioni per (impiantoId, fuelType) - costruendo il fuelType completo per matching con Subscription
     type Key = string;
-    const keyed = (variations as any[]).map((v: any) => {
+    const keyedItems: Array<{
+      key: Key;
+      impiantoId: number;
+      distributorId: number;
+      distributor: any;
+      fuelType: string;
+      baseFuelType: string;
+      isSelfService: boolean;
+      oldPrice: number;
+      newPrice: number;
+    }> = [];
+    
+    for (const v of variations as any[]) {
       const d = byDistributorId.get(v.distributorId as number);
       const impiantoId = d?.impiantoId as number | undefined;
+      if (!impiantoId) continue;
       
-      // Costruisci il fuelType completo come salvato in Subscription (es: "Benzina Self", "Gasolio Premium")
       const baseFuelType = String(v.fuelType);
       const isSelfService = Boolean(v.isSelfService);
-      const fullFuelType = isSelfService ? `${baseFuelType} Self` : baseFuelType;
       
-      return {
-        key: `${impiantoId}|${fullFuelType}` as Key,
-        impiantoId,
-        distributorId: v.distributorId as number,
-        distributor: d,
-        fuelType: fullFuelType, // Usa il fuelType completo per matching
-        baseFuelType: baseFuelType, // Mantieni anche quello base per display
-        isSelfService,
-        oldPrice: Number(v.oldPrice),
-        newPrice: Number(v.newPrice),
-      } as const;
-    }).filter((x: any) => x.impiantoId != null);
+      // Per Self Service: sempre "Benzina Self", "Gasolio Premium Self"
+      if (isSelfService) {
+        const fullFuelType = `${baseFuelType} Self`;
+        keyedItems.push({
+          key: `${impiantoId}|${fullFuelType}` as Key,
+          impiantoId,
+          distributorId: v.distributorId as number,
+          distributor: d,
+          fuelType: fullFuelType,
+          baseFuelType,
+          isSelfService,
+          oldPrice: Number(v.oldPrice),
+          newPrice: Number(v.newPrice),
+        });
+      } else {
+        // Per Servito: proviamo entrambe le varianti
+        // 1. Senza "Servito": "Benzina", "Gasolio Premium"
+        keyedItems.push({
+          key: `${impiantoId}|${baseFuelType}` as Key,
+          impiantoId,
+          distributorId: v.distributorId as number,
+          distributor: d,
+          fuelType: baseFuelType,
+          baseFuelType,
+          isSelfService,
+          oldPrice: Number(v.oldPrice),
+          newPrice: Number(v.newPrice),
+        });
+        
+        // 2. Con "Servito": "Benzina Servito", "Gasolio Premium Servito"
+        const fullFuelTypeServito = `${baseFuelType} Servito`;
+        keyedItems.push({
+          key: `${impiantoId}|${fullFuelTypeServito}` as Key,
+          impiantoId,
+          distributorId: v.distributorId as number,
+          distributor: d,
+          fuelType: fullFuelTypeServito,
+          baseFuelType,
+          isSelfService,
+          oldPrice: Number(v.oldPrice),
+          newPrice: Number(v.newPrice),
+        });
+      }
+    }
 
-    const grouped = groupBy(keyed, x => x.key);
+    const grouped = groupBy(keyedItems, x => x.key);
 
     // Precarica subscriptions SOLO per le coppie (impiantoId,fuelType) presenti oggi nelle variazioni
     const uniquePairs = Array.from(new Set(Object.values(grouped).map(items => `${items[0]!.impiantoId}|${items[0]!.fuelType}`)));
@@ -99,7 +142,7 @@ export async function GET(req: NextRequest) {
     // Per ogni gruppo, recupera gli externalId iscritti e invia notifica in batch
     let sent = 0;
     const failures: Array<{ key: string; error: string }> = [];
-    const messages: Array<{ key: string; title: string; body: string; externalIds: string[] }> = [];
+    const messages: Array<{ key: string; title: string; body: string; externalIds: string[]; oneSignalResponse?: any }> = [];
 
     for (const [key, items] of Object.entries(grouped)) {
       const sample = items[0];
@@ -108,7 +151,7 @@ export async function GET(req: NextRequest) {
       const baseFuelType = sample!.baseFuelType; // fuelType base per display
 
       const externalIds = subsByKey.get(`${impiantoId}|${fuelType}`) || [];
-      if (externalIds.length === 0) continue;
+      if (externalIds.length === 0) continue; // Salta se non ci sono subscription per questa variante
 
       // Scegli prezzi old/new dall'item con delta maggiore assoluto
       const best = items.reduce((a, b) => {
