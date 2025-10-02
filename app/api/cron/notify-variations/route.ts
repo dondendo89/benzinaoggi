@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
     // Per ogni gruppo, recupera gli externalId iscritti e invia notifica in batch
     let sent = 0;
     const failures: Array<{ key: string; error: string }> = [];
-    const messages: Array<{ key: string; title: string; body: string; externalIds: number }> = [];
+    const messages: Array<{ key: string; title: string; body: string; externalIds: string[] }> = [];
 
     for (const [key, items] of Object.entries(grouped)) {
       const sample = items[0];
@@ -141,7 +141,7 @@ export async function GET(req: NextRequest) {
             
             // Salva il messaggio per il debug
             if (i === 0) { // Solo per il primo chunk per evitare duplicati
-              messages.push({ key, title, body, externalIds: externalIds.length });
+              messages.push({ key, title, body, externalIds: externalIds });
             }
             
             const r = await fetch('https://onesignal.com/api/v1/notifications', {
