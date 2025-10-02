@@ -1573,8 +1573,14 @@ class BenzinaOggiPlugin {
 
         for ($i = $startIndex; $i < $end; $i++) {
             $d = $data['distributors'][$i];
-            $rawTitle = trim(($d['bandiera'] ?: 'Distributore').' '.($d['comune'] ?: ''));
-            $title = trim(preg_replace('/\s+/', ' ', $rawTitle));
+            // Costruisci il titolo nel formato: "bandiera comune indirizzo"
+            $bandiera = trim($d['bandiera'] ?: 'Distributore');
+            $comune = trim($d['comune'] ?: '');
+            $indirizzo = trim($d['indirizzo'] ?: '');
+            
+            // Formato: "Bandiera Comune Indirizzo" (rimuovi spazi multipli)
+            $titleParts = array_filter([$bandiera, $comune, $indirizzo]);
+            $title = trim(preg_replace('/\s+/', ' ', implode(' ', $titleParts)));
             if (empty($d['impiantoId'])) { $skipped++; continue; }
             // Slug nel formato bandiera-comune-id (anche se comune è vuoto)
             $slugParts = [ ($d['bandiera'] ?: 'Distributore') ];
