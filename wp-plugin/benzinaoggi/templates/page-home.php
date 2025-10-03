@@ -58,14 +58,6 @@ get_header(); ?>
         </div>
     </section>
 
-    <!-- Video Hero Section -->
-    <?php 
-    $video_template = plugin_dir_path(__FILE__) . 'video-hero-section.php';
-    if (file_exists($video_template)) {
-        include $video_template;
-    }
-    ?>
-    
     <!-- Mappa e risultati -->
     <section class="bo-results-section">
         <div class="bo-container">
@@ -95,6 +87,82 @@ get_header(); ?>
             </div>
         </div>
     </section>
+
+    <!-- Landing Value Proposition -->
+    <section class="bo-landing-value" aria-label="Perché BenzinaOggi">
+        <div class="bo-container">
+            <h2 class="bo-landing-title">Risparmia tempo e denaro sul pieno</h2>
+            <p class="bo-landing-sub">Trova i distributori migliori vicino a te e attiva gli avvisi quando i prezzi scendono.</p>
+
+            <div class="bo-landing-grid">
+                <div class="bo-landing-card">
+                    <div class="bo-landing-ic">⛽</div>
+                    <h3>Prezzi in tempo reale</h3>
+                    <p>Confronto immediato tra i distributori della tua zona con aggiornamenti continui.</p>
+                </div>
+                <div class="bo-landing-card">
+                    <div class="bo-landing-ic">📍</div>
+                    <h3>Vicino a te</h3>
+                    <p>Ricerca per città o usa la geolocalizzazione per risultati precisi entro pochi km.</p>
+                </div>
+                <div class="bo-landing-card">
+                    <div class="bo-landing-ic">🔔</div>
+                    <h3>Avvisi prezzo</h3>
+                    <p>Attiva le notifiche per distributore e carburante: ricevi un alert quando il prezzo scende.</p>
+                </div>
+                <div class="bo-landing-card">
+                    <div class="bo-landing-ic">💸</div>
+                    <h3>Risparmio reale</h3>
+                    <p>In media fino a €0,15/l in meno scegliendo il distributore giusto ogni volta.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="bo-how" aria-label="Come funziona">
+        <div class="bo-container">
+            <h2 class="bo-landing-title">Come funziona</h2>
+            <div class="bo-how-grid">
+                <div class="bo-how-step">
+                    <span class="bo-step-num">1</span>
+                    <h3>Cerca</h3>
+                    <p>Inserisci la città o consenti la posizione per i distributori vicini.</p>
+                </div>
+                <div class="bo-how-step">
+                    <span class="bo-step-num">2</span>
+                    <h3>Confronta</h3>
+                    <p>Vedi prezzi e servizio (Self/Servito). Apri il dettaglio per i prezzi storici.</p>
+                </div>
+                <div class="bo-how-step">
+                    <span class="bo-step-num">3</span>
+                    <h3>Attiva avvisi</h3>
+                    <p>Spunta "quando scende" e ricevi una notifica quando il prezzo cala.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Notify -->
+    <section class="bo-cta" aria-label="Attiva notifiche">
+        <div class="bo-container">
+            <div class="bo-cta-box">
+                <div class="bo-cta-text">
+                    <h2>Non perdere i ribassi nella tua zona</h2>
+                    <p>Attiva le notifiche push e ricevi un alert quando il tuo carburante preferito scende di prezzo.</p>
+                </div>
+                <button type="button" class="bo-cta-btn" id="bo-cta-enable-notifications">Attiva notifiche</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Video Hero Section -->
+    <?php 
+    $video_template = plugin_dir_path(__FILE__) . 'video-hero-section.php';
+    if (file_exists($video_template)) {
+        include $video_template;
+    }
+    ?>
 
     <!-- Statistiche -->
     <section class="bo-stats">
@@ -188,6 +256,32 @@ get_header(); ?>
     margin-bottom: 40px;
     opacity: 0.9;
 }
+
+/* Landing value */
+.bo-landing-value{background:#fff;padding:48px 0}
+.bo-landing-title{font-size:32px;font-weight:700;color:#1e293b;text-align:center;margin:0 0 8px 0}
+.bo-landing-sub{color:#64748b;text-align:center;margin:0 0 28px 0}
+.bo-landing-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.bo-landing-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.04)}
+.bo-landing-card h3{margin:6px 0 6px 0;color:#0f172a}
+.bo-landing-card p{margin:0;color:#475569}
+.bo-landing-ic{font-size:24px}
+
+/* How it works */
+.bo-how{background:#f8f9fa;padding:48px 0}
+.bo-how-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.bo-how-step{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.04)}
+.bo-step-num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:999px;background:#2c5aa0;color:#fff;font-weight:700;margin-bottom:8px}
+.bo-how-step h3{margin:4px 0 6px 0;color:#0f172a}
+.bo-how-step p{margin:0;color:#475569}
+
+/* CTA */
+.bo-cta{background:linear-gradient(135deg,#2c5aa0 0%,#1e3a5f 100%);padding:40px 0;color:#fff}
+.bo-cta-box{display:flex;align-items:center;justify-content:space-between;gap:20px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);border-radius:14px;padding:20px}
+.bo-cta-text h2{margin:0 0 6px 0;color:#fff}
+.bo-cta-text p{margin:0;color:rgba(255,255,255,0.9)}
+.bo-cta-btn{background:#22c55e;color:#0b3b1f;border:none;border-radius:10px;padding:12px 18px;font-weight:700;cursor:pointer}
+.bo-cta-btn:hover{background:#16a34a}
 
 /* Form di ricerca */
 .bo-search-form {
@@ -541,7 +635,151 @@ get_header(); ?>
     .bo-nav {
         display: none;
     }
+
+    .bo-landing-grid{grid-template-columns:1fr}
+    .bo-how-grid{grid-template-columns:1fr}
+    .bo-cta-box{flex-direction:column;align-items:flex-start}
 }
 </style>
+
+<script>
+(function(){
+  try {
+    var btn = document.getElementById('bo-cta-enable-notifications');
+    if (btn) {
+      btn.addEventListener('click', function(){
+        try {
+          if (window.OneSignal && OneSignal.Notifications && typeof OneSignal.Notifications.requestPermission === 'function') {
+            OneSignal.Notifications.requestPermission().catch(function(){});
+          } else if (window.Notification && Notification.requestPermission) {
+            Notification.requestPermission().catch(function(){});
+          } else {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        } catch(_e) { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+      });
+    }
+  } catch(_err){}
+})();
+</script>
+
+<?php get_footer(); ?>
+
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.bo-price-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 80px;
+}
+
+.bo-price-label {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 4px;
+}
+
+.bo-price-value {
+    font-weight: bold;
+    color: #2c5aa0;
+    font-size: 16px;
+}
+
+.bo-price-change {
+    font-size: 12px;
+    margin-top: 2px;
+}
+
+.bo-price-change.down {
+    color: #28a745;
+}
+
+.bo-price-change.up {
+    color: #dc3545;
+}
+
+/* Statistiche */
+.bo-stats {
+    background: #2c5aa0;
+    color: white;
+    padding: 60px 0;
+}
+
+.bo-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 40px;
+    text-align: center;
+}
+
+.bo-stat-number {
+    font-size: 48px;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.bo-stat-label {
+    font-size: 18px;
+    opacity: 0.9;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .bo-hero-title {
+        font-size: 32px;
+    }
+    
+    .bo-search-row {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .bo-results-layout {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+    
+    .bo-map {
+        height: 400px;
+    }
+    
+    .bo-stats-grid {
+        grid-template-columns: 1fr;
+        gap: 30px;
+    }
+    
+    .bo-nav {
+        display: none;
+    }
+
+    .bo-landing-grid{grid-template-columns:1fr}
+    .bo-how-grid{grid-template-columns:1fr}
+    .bo-cta-box{flex-direction:column;align-items:flex-start}
+}
+</style>
+
+<script>
+(function(){
+  try {
+    var btn = document.getElementById('bo-cta-enable-notifications');
+    if (btn) {
+      btn.addEventListener('click', function(){
+        try {
+          if (window.OneSignal && OneSignal.Notifications && typeof OneSignal.Notifications.requestPermission === 'function') {
+            OneSignal.Notifications.requestPermission().catch(function(){});
+          } else if (window.Notification && Notification.requestPermission) {
+            Notification.requestPermission().catch(function(){});
+          } else {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        } catch(_e) { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+      });
+    }
+  } catch(_err){}
+})();
+</script>
 
 <?php get_footer(); ?>

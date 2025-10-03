@@ -6,7 +6,7 @@
     apiBase: window.BenzinaOggi?.apiBase || '',
     mapCenter: [41.8719, 12.5674],
     defaultZoom: 6,
-    pageSize: 5  // Risultati per pagina
+    pageSize: 50  // Aumenta per mostrare più distributori sulla mappa
   };
 
   // Elementi DOM
@@ -88,6 +88,97 @@
     });
     elements.fuelSelect?.addEventListener('change', handleSearch);
     elements.radiusSelect?.addEventListener('change', handleSearch);
+
+    // Autocomplete città (Nominatim)
+    initCityAutocomplete();
+  }
+
+  // Debounce helper
+  function debounce(fn, wait){
+    let t; return function(){ const ctx=this, args=arguments; clearTimeout(t); t=setTimeout(function(){ fn.apply(ctx, args); }, wait||200); };
+  }
+
+  // Autocomplete con Nominatim (OSM)
+  function initCityAutocomplete(){
+    if (!elements.locationInput) return;
+    // Crea dropdown
+    let list = document.createElement('div');
+    list.id = 'bo-ac-list';
+    list.style.position = 'absolute';
+    list.style.top = '100%';
+    list.style.left = '0';
+    list.style.right = '0';
+    list.style.zIndex = '1000';
+    list.style.background = '#fff';
+    list.style.border = '1px solid #e1e5e9';
+    list.style.borderTop = 'none';
+    list.style.borderRadius = '0 0 8px 8px';
+    list.style.boxShadow = '0 10px 20px rgba(0,0,0,0.08)';
+    list.style.display = 'none';
+
+    const parent = document.querySelector('.bo-location-input-group');
+    if (parent) parent.appendChild(list);
+
+    const updateList = (items) => {
+      if (!items || items.length === 0) { list.style.display = 'none'; list.innerHTML=''; return; }
+      list.innerHTML = '';
+      items.slice(0, 8).forEach((it) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.style.display = 'block';
+        btn.style.width = '100%';
+        btn.style.textAlign = 'left';
+        btn.style.background = 'white';
+        btn.style.border = 'none';
+        btn.style.padding = '10px 12px';
+        btn.style.cursor = 'pointer';
+        btn.style.borderTop = '1px solid #f1f5f9';
+        btn.addEventListener('mouseover', function(){ this.style.background='#f8fafc'; });
+        btn.addEventListener('mouseout', function(){ this.style.background='white'; });
+
+        const name = it.address?.city || it.address?.town || it.address?.village || it.name || it.display_name;
+        const label = name || it.display_name || '';
+        btn.textContent = label;
+        btn.addEventListener('click', function(){
+          elements.locationInput.value = label;
+          // Centra mappa usando le coordinate del suggerimento, ma la ricerca rimane per città (parametro city)
+          var lat = parseFloat(it.lat), lon = parseFloat(it.lon);
+          if (!isNaN(lat) && !isNaN(lon)) {
+            state.userLocation = { lat: lat, lng: lon };
+            try { if (elements.map) { elements.map.setView([lat, lon], 12); } } catch(_e){}
+          } else {
+            state.userLocation = null;
+          }
+          // Salva scelta
+          try {
+            const saved = JSON.parse(localStorage.getItem('bo_last_search')||'{}');
+            saved.location = label; saved.userLocation = state.userLocation; localStorage.setItem('bo_last_search', JSON.stringify(saved));
+          } catch(_){ }
+          list.style.display='none';
+          handleSearch();
+        });
+        list.appendChild(btn);
+      });
+      list.style.display = 'block';
+    };
+
+    const fetchSuggestions = debounce(async function(){
+      try {
+        const q = elements.locationInput.value.trim();
+        if (!q || q === 'La mia posizione' || q.length < 2) { list.style.display='none'; list.innerHTML=''; return; }
+        const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=it&q=' + encodeURIComponent(q);
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        updateList(Array.isArray(data) ? data : []);
+      } catch(_) {
+        list.style.display='none';
+      }
+    }, 250);
+
+    elements.locationInput.addEventListener('input', fetchSuggestions);
+    document.addEventListener('click', function(e){
+      if (!list.contains(e.target) && e.target !== elements.locationInput) { list.style.display='none'; }
+    });
   }
 
   // Geolocalizzazione
@@ -186,6 +277,17 @@
 
     state.currentFilters = { location, fuel, radius };
     state.pagination.currentPage = 1; // Reset alla prima pagina
+
+    // Persisti l'ultima ricerca per poterla ripristinare con "Torna ai risultati"
+    try {
+      const payload = {
+        location: state.currentFilters.location,
+        fuel: state.currentFilters.fuel,
+        radius: state.currentFilters.radius,
+        userLocation: state.userLocation // {lat,lng} oppure null
+      };
+      localStorage.setItem('bo_last_search', JSON.stringify(payload));
+    } catch(_) {}
 
     if (!location && !state.userLocation) {
       alert('Inserisci una località o usa "La mia posizione"');
@@ -374,32 +476,36 @@
     const bounds = L.latLngBounds();
     
     state.searchResults.forEach(distributor => {
-      if (distributor.latitudine && distributor.longitudine) {
-        const marker = L.marker([distributor.latitudine, distributor.longitudine])
+      const latNum = distributor.latitudine != null ? parseFloat(distributor.latitudine) : NaN;
+      const lonNum = distributor.longitudine != null ? parseFloat(distributor.longitudine) : NaN;
+      if (!isNaN(latNum) && !isNaN(lonNum)) {
+        const marker = L.marker([latNum, lonNum])
           .addTo(elements.map);
         
         const prices = (distributor.prices || [])
-          .map(p => `${p.fuelType}: €${p.price.toFixed(3)}`)
+          .map(p => `${p.fuelType}: €${p.price.toFixed(3)}${p.isSelfService ? ' (Self)' : ''}`)
           .join('<br>');
+        const bandiera = (distributor.bandiera || 'Distributore');
+        const comune = (distributor.comune || '').toString();
+        const slug = `${bandiera}-${comune}-${distributor.impiantoId}`
+          .toLowerCase()
+          .replace(/\s+/g, '-')
+          .replace(/[^a-z0-9-]/g, '');
+        const pageUrl = `/distributore/${slug}`;
         
         marker.bindPopup(`
-          <strong>${distributor.bandiera || 'Distributore'}</strong><br>
-          ${distributor.indirizzo || ''}<br>
-          ${prices}
+          <div style="min-width:220px">
+            <strong>${bandiera}</strong><br>
+            ${distributor.indirizzo || ''}${comune ? ', ' + comune : ''}<br>
+            ${prices ? ('<div style=\"margin-top:6px\">' + prices + '</div>') : ''}
+            <div style="margin-top:8px">
+              <a href="${pageUrl}" style="display:inline-block;background:#2c5aa0;color:#fff;padding:6px 10px;border-radius:6px;text-decoration:none">Vai al distributore</a>
+            </div>
+          </div>
         `);
         
-        marker.on('click', () => {
-          const bandiera = (distributor.bandiera || 'Distributore');
-          const comune = (distributor.comune || '').toString();
-          const pageSlug = `${bandiera}-${comune}-${distributor.impiantoId}`
-            .toLowerCase()
-            .replace(/\s+/g, '-')
-            .replace(/[^a-z0-9-]/g, '');
-          window.location.href = `/${pageSlug}/`;
-        });
-        
         elements.markers.push(marker);
-        bounds.extend([distributor.latitudine, distributor.longitudine]);
+        bounds.extend([latNum, lonNum]);
       }
     });
 
@@ -420,10 +526,36 @@
 
   // Carica dati iniziali
   function loadInitialData() {
-    // Mostra un messaggio per invitare l'utente a usare la geolocalizzazione
+    // Prova a ripristinare l'ultima ricerca (se arriviamo da "Torna ai risultati")
+    try {
+      const raw = localStorage.getItem('bo_last_search');
+      if (raw) {
+        const last = JSON.parse(raw);
+        if (last && typeof last === 'object') {
+          if (elements.locationInput && typeof last.location === 'string') {
+            elements.locationInput.value = last.location;
+          }
+          if (elements.fuelSelect && typeof last.fuel === 'string') {
+            elements.fuelSelect.value = last.fuel;
+          }
+          if (elements.radiusSelect && (typeof last.radius === 'number' || typeof last.radius === 'string')) {
+            elements.radiusSelect.value = String(last.radius || 10);
+          }
+          state.userLocation = last.userLocation && typeof last.userLocation === 'object' ? last.userLocation : null;
+          state.currentFilters = {
+            location: elements.locationInput?.value.trim() || '',
+            fuel: elements.fuelSelect?.value || '',
+            radius: parseInt(elements.radiusSelect?.value) || 10
+          };
+          // Avvia subito la ricerca ripristinata
+          searchDistributors();
+          return;
+        }
+      }
+    } catch(_) {}
+
+    // Fallback: mostra messaggio e proponi geolocalizzazione
     console.log('Applicazione caricata. Clicca il pulsante di geolocalizzazione per trovare distributori vicini.');
-    
-    // Mostra un messaggio nella lista risultati
     if (elements.resultsList) {
       elements.resultsList.innerHTML = `
         <div class="bo-welcome-message">
@@ -432,14 +564,8 @@
           <p>Oppure inserisci manualmente una città o indirizzo.</p>
         </div>
       `;
-      // Mantiene spazio sotto la lista iniziale per non sovrapporre il footer
-      try {
-        const wrap = document.querySelector('.benzinaoggi-wrap');
-        if (wrap) { wrap.style.paddingBottom = '48px'; }
-      } catch(_) {}
+      try { const wrap = document.querySelector('.benzinaoggi-wrap'); if (wrap) { wrap.style.paddingBottom = '48px'; } } catch(_) {}
     }
-    
-    // Richiedi automaticamente la geolocalizzazione dopo 1 secondo
     setTimeout(requestLocationAndSearch, 1000);
   }
 
@@ -618,3 +744,129 @@
     init();
   }
 })();
+        }
+        .bo-location-content {
+          text-align: center;
+        }
+        .bo-location-icon {
+          font-size: 24px;
+          margin-bottom: 8px;
+        }
+        .bo-location-text {
+          font-weight: 600;
+          color: #0ea5e9;
+          margin-bottom: 4px;
+        }
+        .bo-location-subtext {
+          font-size: 12px;
+          color: #666;
+          margin-bottom: 8px;
+        }
+        .bo-location-skip {
+          background: #f3f4f6;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          padding: 4px 12px;
+          font-size: 11px;
+          color: #6b7280;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .bo-location-skip:hover {
+          background: #e5e7eb;
+          color: #374151;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    document.body.appendChild(locationMsg);
+    
+    navigator.geolocation.getCurrentPosition(function(pos){
+      // Success: got location
+      state.userLocation = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude
+      };
+      
+      // Update message to success
+      locationMsg.querySelector('.bo-location-icon').textContent = '✅';
+      locationMsg.querySelector('.bo-location-text').textContent = 'Posizione trovata!';
+      locationMsg.querySelector('.bo-location-subtext').textContent = 'Caricamento distributori vicini...';
+      
+      // Center map on user location
+      if (elements.map) {
+        elements.map.setView([state.userLocation.lat, state.userLocation.lng], 13);
+      }
+      
+      // Update search filters
+      state.currentFilters.location = `${state.userLocation.lat},${state.userLocation.lng}`;
+      if (elements.locationInput) {
+        elements.locationInput.value = 'La mia posizione';
+      }
+      
+      // Start search automatically
+      handleSearch();
+      
+      // Remove message after 2 seconds
+      setTimeout(function() {
+        if (locationMsg.parentNode) {
+          locationMsg.style.animation = 'slideIn 0.3s ease-out reverse';
+          setTimeout(function() {
+            if (locationMsg.parentNode) locationMsg.parentNode.removeChild(locationMsg);
+          }, 300);
+        }
+      }, 2000);
+      
+    }, function(error){
+      // Error: couldn't get location
+      console.log('Geolocation error:', error);
+      
+      // Save denial to localStorage if user explicitly denied
+      if (error.code === error.PERMISSION_DENIED) {
+        try {
+          localStorage.setItem('bo_location_denied', 'true');
+        } catch(e) {
+          // localStorage not available
+        }
+      }
+      
+      locationMsg.querySelector('.bo-location-icon').textContent = '❌';
+      locationMsg.querySelector('.bo-location-text').textContent = 'Posizione non disponibile';
+      locationMsg.querySelector('.bo-location-subtext').textContent = 'Usa i filtri per cercare manualmente';
+      locationMsg.style.borderColor = '#ef4444';
+      
+      // Remove message after 3 seconds
+      setTimeout(function() {
+        if (locationMsg.parentNode) {
+          locationMsg.style.animation = 'slideIn 0.3s ease-out reverse';
+          setTimeout(function() {
+            if (locationMsg.parentNode) locationMsg.parentNode.removeChild(locationMsg);
+          }, 300);
+        }
+      }, 3000);
+      
+    }, { 
+      enableHighAccuracy: true, 
+      timeout: 10000,
+      maximumAge: 300000 // 5 minutes cache
+    });
+  }
+
+  // Mostra/nascondi loading
+  function showLoading(show) {
+    const btn = elements.searchBtn;
+    if (btn) {
+      btn.disabled = show;
+      btn.textContent = show ? 'Ricerca...' : 'Cerca';
+    }
+  }
+
+  // Inizializza quando il DOM è pronto
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+

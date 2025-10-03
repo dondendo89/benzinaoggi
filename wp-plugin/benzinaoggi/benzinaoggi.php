@@ -12,10 +12,16 @@ if (!defined('ABSPATH')) { exit; }
 require_once plugin_dir_path(__FILE__) . 'template-loader.php';
 
 class BenzinaOggiPlugin {
+    // Prevent duplicate hook registration when class is instantiated from templates
+    private static $initialized = false;
     const OPTION_GROUP = 'benzinaoggi_options_group';
     const OPTION_NAME = 'benzinaoggi_options';
 
     public function __construct() {
+        if (self::$initialized) {
+            return; // Already initialized, avoid registering hooks twice
+        }
+        self::$initialized = true;
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_init', [$this, 'settings_init']);
         add_action('admin_enqueue_scripts', [$this, 'admin_enqueue_scripts']);
@@ -2740,4 +2746,10 @@ add_action('benzinaoggi_cron_generate_brand_comparisons', [new BenzinaOggiPlugin
 add_action('benzinaoggi_cron_generate_seasonal_content', [new BenzinaOggiPlugin(), 'cron_generate_seasonal_content']);
 
 new BenzinaOggiPlugin();
+
+add_action('benzinaoggi_cron_generate_brand_comparisons', [new BenzinaOggiPlugin(), 'cron_generate_brand_comparisons']);
+add_action('benzinaoggi_cron_generate_seasonal_content', [new BenzinaOggiPlugin(), 'cron_generate_seasonal_content']);
+
+new BenzinaOggiPlugin();
+
 
