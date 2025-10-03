@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useOneSignal } from '@/hooks/useOneSignal';
 
 export default function NotificationsPage() {
@@ -12,6 +12,11 @@ export default function NotificationsPage() {
   const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || "fbcac040-1f81-466f-bf58-238a594af041";
   
   const { user, isLoading, error, subscribe, unsubscribe } = useOneSignal(appId);
+
+  const [derivedSubscribed, setDerivedSubscribed] = useState<boolean>(false);
+  const effectiveSubscribed = useMemo(() => {
+    return Boolean(user?.isSubscribed || derivedSubscribed);
+  }, [user?.isSubscribed, derivedSubscribed]);
 
   const handleSubscriptionChange = (isSubscribed: boolean) => {
     setSubscriptionStatus(isSubscribed);
@@ -44,7 +49,10 @@ export default function NotificationsPage() {
   // Deriva externalId dal localStorage usato nel frontend WordPress
   useEffect(() => {
     try {
-      const v = localStorage.getItem('bo_ext_id');
+      // 1) URL param ha priorità
+      const url = new URL(window.location.href);
+      const qp = url.searchParams.get('externalId') || url.searchParams.get('ext') || '';
+      const v = (qp && qp.trim()) || localStorage.getItem('bo_ext_id');
       if (v) setExternalId(v);
     } catch {}
   }, []);
@@ -64,6 +72,29 @@ export default function NotificationsPage() {
     };
     load();
   }, [externalId]);
+
+  // Aggiorna stato sottoscrizione utilizzando OneSignal v16 quando disponibile
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const w = window as any;
+        if (!w.OneSignal) { setDerivedSubscribed(false); return; }
+        // v16: permission + subscription id
+        let perm: any = w.OneSignal?.Notifications?.permission;
+        if (typeof perm === 'function') {
+          try { perm = await w.OneSignal.Notifications.permission(); } catch {}
+        }
+        if (perm !== 'granted') { setDerivedSubscribed(false); return; }
+        const sid = await (w.OneSignal?.User?.PushSubscription?.getId?.());
+        setDerivedSubscribed(Boolean(sid));
+      } catch {
+        setDerivedSubscribed(false);
+      }
+    };
+    check();
+    const t = setInterval(check, 2000);
+    return () => clearInterval(t);
+  }, []);
 
   const removeSubscription = async (impiantoId: number, fuelType: string) => {
     if (!externalId) return;
@@ -110,36 +141,40 @@ export default function NotificationsPage() {
                   ❌ Errore: {error}
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-5">
                   <div className="flex items-center justify-between">
-                    <span>Stato Sottoscrizione:</span>
-                    <span className={`font-medium ${user.isSubscribed ? 'text-green-600' : 'text-red-600'}`}>
-                      {user.isSubscribed ? '✅ Attiva' : '❌ Disattiva'}
-                    </span>
-                  </div>
-                  
-                  {user.userId && (
-                    <div className="text-sm text-gray-600">
-                      User ID: {user.userId}
+                    <div className="text-sm text-gray-600">Stato Sottoscrizione</div>
+                    <div className={`px-2.5 py-1 rounded text-xs font-semibold ${effectiveSubscribed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                      {effectiveSubscribed ? '✅ Attive' : '❌ Disattive'}
                     </div>
+                  </div>
+
+                  {user.userId && (
+                    <div className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded px-2 py-1">User ID: {user.userId}</div>
                   )}
 
-                  <div className="space-y-2">
-                    {!user.isSubscribed ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    {!effectiveSubscribed ? (
                       <button
                         onClick={subscribe}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                        className="col-span-2 md:col-span-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
                       >
                         🔔 Attiva Notifiche
                       </button>
                     ) : (
                       <button
                         onClick={unsubscribe}
-                        className="w-full bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                        className="col-span-2 md:col-span-1 bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg transition-colors"
                       >
                         🚫 Disattiva Notifiche
                       </button>
                     )}
+                    <button
+                      onClick={testNotification}
+                      className="col-span-2 md:col-span-1 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                    >
+                      📤 Invia Notifica Test
+                    </button>
                   </div>
                 </div>
               )}
@@ -167,7 +202,15 @@ export default function NotificationsPage() {
       <div className="mt-8">
         <h2 className="text-xl font-semibold mb-4">Le tue sottoscrizioni</h2>
         <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="text-sm text-gray-700 mb-2">External ID: <code>{externalId || '—'}</code></div>
+          <div className="text-sm text-gray-700 mb-3 flex items-center justify-between">
+            <span>External ID: <code>{externalId || '—'}</code></span>
+            {externalId && (
+              <button
+                onClick={() => { try { navigator.clipboard.writeText(externalId); } catch {} }}
+                className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-200"
+              >Copia</button>
+            )}
+          </div>
           {loadingList ? (
             <div className="text-gray-500">Caricamento…</div>
           ) : items.length === 0 ? (

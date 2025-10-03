@@ -141,6 +141,36 @@ class BenzinaOggiPlugin {
         add_action('admin_post_benzinaoggi_generate_local_seo', [$this, 'handle_generate_local_seo']);
         add_action('admin_post_benzinaoggi_generate_brand_comparisons', [$this, 'handle_generate_brand_comparisons']);
         add_action('admin_post_benzinaoggi_generate_seasonal_content', [$this, 'handle_generate_seasonal_content']);
+
+        add_action('init', function(){
+            add_shortcode('benzinaoggi_manage_notifications', function($atts){
+                $atts = shortcode_atts(array(
+                    'url' => '',
+			'height' => '900',
+                ), $atts, 'benzinaoggi_manage_notifications');
+                $base = getenv('NEXT_PUBLIC_APP_URL');
+                $default = $base ? rtrim($base, '/') . '/notifications' : 'https://benzinaoggi.vercel.app/notifications';
+                $url = $atts['url'] ? esc_url($atts['url']) : esc_url($default);
+                $h = intval($atts['height']); if ($h < 400) { $h = 900; }
+                ob_start();
+		?>
+		<div class="bo-container" style="max-width:1100px;margin:0 auto;padding:0 20px;">
+			<div class="bo-card" style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.06);overflow:hidden;">
+				<div class="bo-card-head" style="padding:18px 20px;border-bottom:1px solid #eef2f7;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+					<h2 style="margin:0;font-size:20px;color:#0f172a;display:flex;align-items:center;gap:8px;">🔔 Gestisci notifiche</h2>
+					<a href="<?php echo esc_url(home_url('/')); ?>" style="text-decoration:none;background:#2c5aa0;color:#fff;padding:8px 12px;border-radius:8px;font-weight:600;">← Torna alla home</a>
+				</div>
+				<div class="bo-card-body" style="padding:0;background:#f8fafc;">
+					<div class="bo-iframe-wrap" style="position:relative;min-height:<?php echo $h; ?>px;background:#f8fafc;">
+						<iframe src="<?php echo $url; ?>" style="display:block;width:100%;height:<?php echo $h; ?>px;border:0;background:#f8fafc;" loading="lazy" referrerpolicy="no-referrer-when-downgrade" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+					</div>
+				</div>
+			</div>
+		</div>
+		<?php
+                return ob_get_clean();
+            });
+        });
     }
 
     private function get_italian_capitals() {

@@ -508,11 +508,10 @@
               try { localStorage.setItem('bo_notify_'+String(d.impiantoId)+'_'+norm, '1'); } catch(_ls){}
               if (st) { st.textContent = '✓ Attivato per ' + fuel; st.style.display='inline'; st.style.color = '#28a745'; }
             } else {
-              // Fallbacks: impianto-scoped key, then generic key
-              var lsScoped = false, lsGeneric = false;
+              // Fallback: solo chiave per-distributore
+              var lsScoped = false;
               try { lsScoped = (localStorage.getItem('bo_notify_'+String(d.impiantoId)+'_'+norm) === '1'); } catch(_e1){}
-              try { lsGeneric = (localStorage.getItem('bo_notify_'+norm) === '1'); } catch(_e2){}
-              cb.checked = !!(lsScoped || lsGeneric);
+              cb.checked = !!lsScoped;
               if (!cb.checked && st) st.style.display='none';
             }
           }).catch(function(){ /* ignore */ });
@@ -553,7 +552,8 @@
               cb.checked = true;
               try {
                 var normKeyInit = fuel.toLowerCase().replace(/\s+/g, '_');
-                localStorage.setItem('bo_notify_'+normKeyInit, '1');
+                // Solo chiave per-distributore
+                localStorage.setItem('bo_notify_'+String(d.impiantoId)+'_'+normKeyInit, '1');
               } catch(_p0){}
 
               // Send subscription to backend immediately (optimistic), regardless of OneSignal readiness
@@ -765,9 +765,7 @@
               // Store preference in localStorage (use same keys as OS path)
               try {
                 var normB = (fuel||'').toLowerCase().replace(/\s+/g, '_');
-                localStorage.setItem('notify_' + fuel, '1'); // legacy
                 localStorage.setItem('bo_notify_'+String(impId)+'_'+normB, '1');
-                localStorage.setItem('bo_notify_'+normB, '1');
               } catch(_ls){}
               // Persist to backend like OneSignal path
               try {
@@ -788,10 +786,8 @@
           } else { 
             if(statusEl) statusEl.style.display = 'none';
             try {
-              localStorage.removeItem('notify_' + fuel);
               var normBR = (fuel||'').toLowerCase().replace(/\s+/g, '_');
               localStorage.removeItem('bo_notify_'+String(impId)+'_'+normBR);
-              localStorage.removeItem('bo_notify_'+normBR);
             } catch(_rm){}
             // Inform backend removal
             try {
