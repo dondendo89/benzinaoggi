@@ -650,13 +650,11 @@
                               try {
                                 if (OneSignal.login && externalId) { try { await OneSignal.login(externalId); } catch(_l){} }
                                 var tg = { };
-                                // Tag specifico per distributore e carburante
+                                // Tag specifico per distributore e carburante (unico canale di targeting)
                                 var distributorFuelTag = 'notify_' + d.impiantoId + '_' + fuel.toLowerCase().replace(/\s+/g, '_');
                                 tg[distributorFuelTag] = '1';
                                 tg['price_drop_notifications'] = '1';
-                                // Manteniamo anche il tag generale per compatibilità
-                                var fuelTag2 = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
-                                tg[fuelTag2] = '1';
+                                // Non impostare più il tag generico per carburante per evitare cross-activation
                                 tg['fuel_type'] = fuel.trim();
                                 try { await osSetTags(tg); } catch(_t){}
                                 console.log('OneSignal tags set for distributor', d.impiantoId, ':', tg);
@@ -771,8 +769,7 @@
           var deleteTag = function() {
             if (window.OneSignal) {
               try {
-                // Delete both general and distributor-specific fuel notification tags
-                var tagToDelete = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
+                // Delete only distributor-specific fuel notification tags
                 var distributorTagToDelete = 'notify_' + d.impiantoId + '_' + fuel.toLowerCase().replace(/\s+/g, '_');
                 
                 // Inform backend remove FIRST (this stops notifications for this specific impianto+fuel)
@@ -795,8 +792,7 @@
                 } catch(_cr){}
                 
                 // Delete OneSignal tags (general fuel tag and specific distributor+fuel tag)
-                var deletePromises = [osDeleteTag(tagToDelete)];
-                // Delete the new distributor-specific tag
+                var deletePromises = [];
                 if (distributorTagToDelete) {
                   deletePromises.push(osDeleteTag(distributorTagToDelete));
                 }

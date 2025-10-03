@@ -589,6 +589,8 @@ class BenzinaOggiPlugin {
     }
 
     public function options_page() {
+        // Re-entrancy guard to avoid duplicated rendering when filters/actions re-trigger output
+        static $rendering = false; if ($rendering) { return; } $rendering = true;
         $active_tab = isset($_GET['tab']) ? $_GET['tab'] : 'settings';
         ?>
         <div class="wrap">
@@ -931,6 +933,7 @@ class BenzinaOggiPlugin {
             <?php endif; ?>
         </div>
         <?php
+        $rendering = false;
     }
 
     /**
