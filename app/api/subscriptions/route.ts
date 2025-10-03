@@ -8,10 +8,25 @@ function normalizeFuelType(input: string): string {
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const impiantoId = Number(searchParams.get("impiantoId"));
+    const impiantoId = searchParams.get("impiantoId") ? Number(searchParams.get("impiantoId")) : undefined;
     const fuelTypeRaw = searchParams.get("fuelType") || undefined;
     const fuelType = fuelTypeRaw ? normalizeFuelType(fuelTypeRaw) : undefined;
     const externalIdFilter = (searchParams.get("externalId") || '').trim();
+
+    // Listing by externalId only: return all subscriptions for a user
+    if (externalIdFilter && !impiantoId && !fuelType) {
+      const hasModel = !!(prisma as any).subscription;
+      if (hasModel) {
+        const subs = await (prisma as any).subscription.findMany({
+          where: { externalId: externalIdFilter },
+          select: { impiantoId: true, fuelType: true }
+        });
+        return NextResponse.json({ ok: true, items: subs });
+      }
+      const rows = await prisma.$queryRaw<{ impiantoId: number; fuelType: string }[]>`SELECT "impiantoId","fuelType" FROM "Subscription" WHERE "externalId" = ${externalIdFilter}`;
+      return NextResponse.json({ ok: true, items: rows });
+    }
+
     if (!impiantoId || !fuelType) {
       return NextResponse.json({ ok: false, error: "Missing impiantoId or fuelType" }, { status: 400 });
     }

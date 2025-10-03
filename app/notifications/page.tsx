@@ -1,10 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useOneSignal } from '@/hooks/useOneSignal';
 
 export default function NotificationsPage() {
   const [subscriptionStatus, setSubscriptionStatus] = useState(false);
+  const [externalId, setExternalId] = useState<string | null>(null);
+  const [items, setItems] = useState<Array<{ impiantoId: number; fuelType: string }>>([]);
+  const [loadingList, setLoadingList] = useState(false);
+  const [removingKey, setRemovingKey] = useState<string | null>(null);
   const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || "fbcac040-1f81-466f-bf58-238a594af041";
   
   const { user, isLoading, error, subscribe, unsubscribe } = useOneSignal(appId);
@@ -35,6 +39,48 @@ export default function NotificationsPage() {
     } catch (error) {
       console.error('Errore test notifica:', error);
     }
+  };
+
+  // Deriva externalId dal localStorage usato nel frontend WordPress
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('bo_ext_id');
+      if (v) setExternalId(v);
+    } catch {}
+  }, []);
+
+  // Carica sottoscrizioni attive per externalId
+  useEffect(() => {
+    const load = async () => {
+      if (!externalId) return;
+      setLoadingList(true);
+      try {
+        const url = `/api/subscriptions?externalId=${encodeURIComponent(externalId)}`;
+        const r = await fetch(url);
+        const j = await r.json();
+        if (j && j.ok && Array.isArray(j.items)) setItems(j.items);
+      } catch {}
+      setLoadingList(false);
+    };
+    load();
+  }, [externalId]);
+
+  const removeSubscription = async (impiantoId: number, fuelType: string) => {
+    if (!externalId) return;
+    const key = `${impiantoId}|${fuelType}`;
+    setRemovingKey(key);
+    try {
+      const r = await fetch('/api/subscriptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'remove', externalId, impiantoId, fuelType })
+      });
+      const j = await r.json().catch(() => ({}));
+      if (j && j.ok) {
+        setItems(prev => prev.filter(it => !(it.impiantoId === impiantoId && it.fuelType === fuelType)));
+      }
+    } catch {}
+    setRemovingKey(null);
   };
 
   return (
@@ -116,6 +162,40 @@ export default function NotificationsPage() {
             </button>
           </div>
         </div>
+
+      {/* Elenco sottoscrizioni attive per externalId */}
+      <div className="mt-8">
+        <h2 className="text-xl font-semibold mb-4">Le tue sottoscrizioni</h2>
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="text-sm text-gray-700 mb-2">External ID: <code>{externalId || '—'}</code></div>
+          {loadingList ? (
+            <div className="text-gray-500">Caricamento…</div>
+          ) : items.length === 0 ? (
+            <div className="text-gray-500">Nessuna sottoscrizione attiva.</div>
+          ) : (
+            <ul className="space-y-2">
+              {items.map((it, idx) => {
+                const key = `${it.impiantoId}|${it.fuelType}`;
+                const isRemoving = removingKey === key;
+                return (
+                  <li key={idx} className="flex items-center justify-between text-sm border rounded px-3 py-2">
+                    <div>
+                      Impianto <strong>{it.impiantoId}</strong> · <span>{it.fuelType}</span>
+                    </div>
+                    <button
+                      onClick={() => removeSubscription(it.impiantoId, it.fuelType)}
+                      disabled={isRemoving}
+                      className={`text-white px-3 py-1 rounded ${isRemoving ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'}`}
+                    >
+                      {isRemoving ? 'Rimuovo…' : 'Disattiva'}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
 
         {/* Debug Info */}
         <div className="mt-8">

@@ -151,7 +151,13 @@ get_header(); ?>
                     <h2>Non perdere i ribassi nella tua zona</h2>
                     <p>Attiva le notifiche push e ricevi un alert quando il tuo carburante preferito scende di prezzo.</p>
                 </div>
-                <button type="button" class="bo-cta-btn" id="bo-cta-enable-notifications">Attiva notifiche</button>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                    <button type="button" class="bo-cta-btn" id="bo-cta-enable-notifications">Attiva notifiche</button>
+                    <?php 
+                    $bo_manage_url = getenv('NEXT_PUBLIC_APP_URL') ? rtrim(getenv('NEXT_PUBLIC_APP_URL'), '/') . '/notifications' : 'https://benzinaoggi.vercel.app/notifications';
+                    ?>
+                    <a href="<?php echo esc_url($bo_manage_url); ?>" class="bo-cta-btn" style="background:#0ea5e9" target="_blank" rel="noopener">Gestisci notifiche</a>
+                </div>
             </div>
         </div>
     </section>

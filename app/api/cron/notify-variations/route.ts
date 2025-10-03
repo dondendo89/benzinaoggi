@@ -214,23 +214,18 @@ export async function GET(req: NextRequest) {
             const slug = `${bandiera.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${comune.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${impiantoId}`;
             const distributorUrl = `${process.env.WORDPRESS_URL || 'https://www.benzinaoggi.it'}/distributore/${slug}`;
             
-            // Prepara tag specifico per distributore e carburante
-            const fuelTypeNormalized = baseFuelType.toLowerCase().replace(/\s+/g, '_');
-            const distributorSpecificTag = `notify_${impiantoId}_${fuelTypeNormalized}`;
-            
             // Salva il messaggio per il debug
             if (i === 0) { // Solo per il primo chunk per evitare duplicati
               messages.push({ 
                 key, 
                 title, 
                 body, 
-                targetTag: distributorSpecificTag,
+                targetTag: undefined,
                 url: distributorUrl 
               });
             }
             
-            // Usa tag filtering per garantire che solo gli utenti che hanno abilitato 
-            // le notifiche per questo distributore specifico le ricevano
+            // Invia con include_aliases: external_id per il chunk corrente
             const r = await fetch('https://onesignal.com/api/v1/notifications', {
               method: 'POST',
               headers: {
@@ -239,11 +234,8 @@ export async function GET(req: NextRequest) {
               },
               body: JSON.stringify({
                 app_id: appId,
-                included_segments: ["Subscribed Users"],
-                filters: [
-                  { field: "tag", key: "price_drop_notifications", relation: "=", value: "1" },
-                  { field: "tag", key: distributorSpecificTag, relation: "=", value: "1" }
-                ],
+                include_aliases: { external_id: chunk },
+                target_channel: 'push',
                 headings: { it: title, en: title },
                 contents: { it: body, en: body },
                 url: distributorUrl,

@@ -100,6 +100,10 @@ get_header(); ?>
                                     </svg>
                                     Esporta CSV
                                 </button>
+                                <?php 
+                                $bo_manage_url = getenv('NEXT_PUBLIC_APP_URL') ? rtrim(getenv('NEXT_PUBLIC_APP_URL'), '/') . '/notifications' : 'https://benzinaoggi.vercel.app/notifications';
+                                ?>
+                                <a href="<?php echo esc_url($bo_manage_url); ?>" class="bo-action-btn" style="background:#0ea5e9" target="_blank" rel="noopener">Gestisci notifiche</a>
                             </div>
                         </div>
 

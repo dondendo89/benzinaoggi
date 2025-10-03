@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/src/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
@@ -59,18 +60,26 @@ export async function POST(req: NextRequest) {
       chrome_web_icon: "https://carburanti.mise.gov.it/favicon.ico"
     };
 
-    // Targeting: prefer external_id targeting when provided, fallback to tag filters
-    if (Array.isArray(externalIds) && externalIds.length > 0) {
-      notificationPayload.include_aliases = { external_id: externalIds };
-      // Required by OneSignal when using alias targeting
-      notificationPayload.target_channel = 'push';
-    } else {
-      notificationPayload.included_segments = ["Subscribed Users"];
-      notificationPayload.filters = [
-        { field: "tag", key: "price_drop_notifications", relation: "=", value: "1" },
-        { field: "tag", key: "fuel_type", relation: "=", value: fuelType }
-      ];
+    // Targeting: usa SEMPRE external_id. Se non forniti, risolvi da DB per impianto+carburante
+    let resolvedExternalIds: string[] = Array.isArray(externalIds) ? externalIds.filter(Boolean) : [];
+    if (resolvedExternalIds.length === 0) {
+      try {
+        const impiantoId = Number(distributorId);
+        const fuel = String(fuelType || "").trim().replace(/\s+/g, " ");
+        const rows = await prisma.subscription.findMany({
+          where: { impiantoId, fuelType: fuel },
+          select: { externalId: true }
+        });
+        resolvedExternalIds = rows.map(r => r.externalId).filter(Boolean);
+      } catch {}
     }
+
+    if (resolvedExternalIds.length === 0) {
+      return NextResponse.json({ ok: true, message: "Nessun destinatario (externalId)" });
+    }
+
+    notificationPayload.include_aliases = { external_id: resolvedExternalIds };
+    notificationPayload.target_channel = 'push';
 
     // Send notification via OneSignal API
     const response = await fetch('https://onesignal.com/api/v1/notifications', {

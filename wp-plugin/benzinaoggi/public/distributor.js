@@ -152,7 +152,7 @@
     // Global guard map to avoid duplicate subscription POSTs per (impiantoId,fuel)
     try { window.__boSubSent = window.__boSubSent || {}; } catch(_g){}
 
-    // OneSignal helpers (work with both v15 and v16)
+    // OneSignal helpers (keep minimal; DB will drive targeting via externalId)
     function canUseIndexedDB(){
       return new Promise(function(resolve){
         try {
@@ -212,48 +212,8 @@
         });
       });
     }
-    function osSetTags(tags){
-      return new Promise(function(resolve, reject){
-        try {
-          if (window.OneSignal && OneSignal.User && typeof OneSignal.User.addTags === 'function') {
-            OneSignal.User.addTags(tags).then(resolve).catch(reject);
-          } else if (window.OneSignal && typeof OneSignal.sendTags === 'function') {
-            OneSignal.sendTags(tags).then(resolve).catch(reject);
-          } else if (window.OneSignal && typeof OneSignal.sendTag === 'function') {
-            var ps=[]; Object.keys(tags).forEach(function(k){ ps.push(OneSignal.sendTag(k, tags[k])); });
-            Promise.all(ps).then(resolve).catch(reject);
-          } else {
-            reject(new Error('No tag API available'));
-          }
-        } catch(e){ reject(e); }
-      });
-    }
-    function osDeleteTag(key){
-      return new Promise(function(resolve, reject){
-        try {
-          if (window.OneSignal && OneSignal.User && typeof OneSignal.User.removeTag === 'function') {
-            var p = OneSignal.User.removeTag(key);
-            if (p && typeof p.then === 'function') {
-              p.then(resolve).catch(reject);
-            } else {
-              resolve();
-            }
-          } else if (window.OneSignal && typeof OneSignal.deleteTag === 'function') {
-            var p2 = OneSignal.deleteTag(key);
-            if (p2 && typeof p2.then === 'function') {
-              p2.then(resolve).catch(reject);
-            } else {
-              resolve();
-            }
-          } else { 
-            resolve(); // Silently succeed if no API available
-          }
-        } catch(e){ 
-          console.warn('osDeleteTag error:', e);
-          resolve(); // Don't fail the UI flow
-        }
-      });
-    }
+    function osSetTags(){ return Promise.resolve(); }
+    function osDeleteTag(){ return Promise.resolve(); }
     function osPrompt(){
       return new Promise(function(resolve, reject){
         osExec(async function(){
@@ -510,37 +470,20 @@
       
       // (removed per-distributor checkbox handling)
 
-    // Pre-sync fuel checkboxes from existing tags (v16 or v15)
+    // Pre-sync: prendi solo dallo stato server o localStorage per-distributore
       try {
-        osExec(async function(){
+        qsa('input[type=checkbox][data-fuel]', wrap).forEach(function(cbSync){
+          var fSync = cbSync.getAttribute('data-fuel') || '';
+          var norm = fSync.toLowerCase().replace(/\s+/g, '_');
           try {
-            var tagsInit2 = null;
-            if (OneSignal && OneSignal.User && OneSignal.User.getTags) tagsInit2 = await OneSignal.User.getTags();
-            else if (OneSignal && OneSignal.getTags) tagsInit2 = await OneSignal.getTags();
-            if (tagsInit2) {
-              qsa('input[type=checkbox][data-fuel]', wrap).forEach(function(cbSync){
-                var fSync = cbSync.getAttribute('data-fuel') || '';
-                var norm = fSync.toLowerCase().replace(/\s+/g, '_');
-                var tagFuel = 'notify_' + norm;
-                if ((tagsInit2[tagFuel] === '1' || tagsInit2[tagFuel] === 1)) {
-                  cbSync.checked = true;
-                  var stSync = cbSync.parentNode.querySelector('.notif-status');
-                  if (stSync) { stSync.textContent = '✓ Attivato per ' + fSync; stSync.style.display='inline'; stSync.style.color = '#28a745'; }
-                } else {
-                  // Fallback to localStorage persistence
-                  try {
-                    var k1 = 'bo_notify_'+String(d && d.impiantoId)+'_'+norm;
-                    var v1 = localStorage.getItem(k1) === '1';
-                    if (v1) {
-                      cbSync.checked = true;
-                      var stSync2 = cbSync.parentNode.querySelector('.notif-status');
-                      if (stSync2) { stSync2.textContent = '✓ Attivato per ' + fSync; stSync2.style.display='inline'; stSync2.style.color = '#28a745'; }
-                    }
-                  } catch(_ls2){}
-                }
-              });
+            var k1 = 'bo_notify_'+String(d && d.impiantoId)+'_'+norm;
+            var v1 = localStorage.getItem(k1) === '1';
+            if (v1) {
+              cbSync.checked = true;
+              var stSync2 = cbSync.parentNode.querySelector('.notif-status');
+              if (stSync2) { stSync2.textContent = '✓ Attivato per ' + fSync; stSync2.style.display='inline'; stSync2.style.color = '#28a745'; }
             }
-          } catch (_ee) {}
+          } catch(_ls2){}
         });
       } catch (_e) {}
 
@@ -673,7 +616,7 @@
                 return;
               }
               
-              // Ensure OneSignal user is logged-in with externalId (saves external_id server-side)
+              // Ensure OneSignal user is logged-in with externalId (serve solo ad associare l'alias)
               try {
                 osExec(async function(){
                   try { if (OneSignal && OneSignal.login && externalId) { await OneSignal.login(externalId); } } catch(_eL){}
@@ -704,53 +647,12 @@
                 });
                 
                 function setTagsAfterPermission() {
-                  // Set multiple tags for better targeting
-                  var tags = {
-                    'price_drop_notifications': '1',
-                    'fuel_type': fuel.trim()
-                  };
-                  // Add dynamic tag for specific fuel type
-                  var fuelTag = 'notify_' + fuel.toLowerCase().replace(/\s+/g, '_');
-                  tags[fuelTag] = '1';
-                  // Add per-distributor+fuel tag
-                  try {
-                    var impIdForTag = (d && d.impiantoId) ? String(d.impiantoId) : '';
-                    if (impIdForTag) {
-                      var fuelNormForTag = fuel.toLowerCase().replace(/\s+/g, '_');
-                      var impFuelTag = 'notify_imp_' + impIdForTag + '_' + fuelNormForTag;
-                      tags[impFuelTag] = '1';
-                    }
-                  } catch(_c){}
-                  
-                  // Backend subscription has already been attempted optimistically above
-
-                  console.log('Sending tags for fuel:', fuel, 'Tags:', tags);
-                  osSetTags(tags).then(async function(){
-                    console.log('Tags set successfully for fuel:', fuel, tags);
-                    try {
-                      if (OneSignal && OneSignal.User && OneSignal.User.getTags) {
-                        var tg = await OneSignal.User.getTags();
-                        var fuelNormV = fuel.toLowerCase().replace(/\s+/g, '_');
-                        var needs = [ 'price_drop_notifications', 'fuel_type', 'notify_'+fuelNormV ];
-                        var ok = needs.every(function(k){ return tg && (tg[k] === '1' || tg[k] === 1 || tg[k] === fuel || tg[k] === fuel.trim()); });
-                        if (!ok) { await osSetTags(tags); }
-                      }
-                    } catch(_vr){}
-                    if(statusEl) {
-                      statusEl.textContent = '✓ Attivato per ' + fuel;
-                      statusEl.style.display = 'inline';
-                      statusEl.style.color = '#28a745';
-                    }
-                    // Already persisted locally optimistically
-                  }).catch(function(err){
-                    console.error('Error setting tags for fuel:', fuel, err);
-                    // Do not uncheck; keep user preference and rely on externalId targeting
-                    if(statusEl) {
-                      statusEl.textContent = '✓ Attivato (senza tag)';
-                      statusEl.style.display = 'inline';
-                      statusEl.style.color = '#28a745';
-                    }
-                  });
+                  // Nessun tag: affidiamo targeting a externalId lato backend
+                  if(statusEl) {
+                    statusEl.textContent = '✓ Attivato per ' + fuel;
+                    statusEl.style.display = 'inline';
+                    statusEl.style.color = '#28a745';
+                  }
                 }
               } catch (err) {
                 console.error('OneSignal sendTags error:', err);
@@ -769,8 +671,7 @@
           var deleteTag = function() {
             if (window.OneSignal) {
               try {
-                // Delete only distributor-specific fuel notification tags
-                var distributorTagToDelete = 'notify_' + d.impiantoId + '_' + fuel.toLowerCase().replace(/\s+/g, '_');
+                // Nessun tag da cancellare; aggiorna solo backend e localStorage
                 
                 // Inform backend remove FIRST (this stops notifications for this specific impianto+fuel)
                 try {
@@ -791,27 +692,7 @@
                   }
                 } catch(_cr){}
                 
-                // Delete OneSignal tags (general fuel tag and specific distributor+fuel tag)
-                var deletePromises = [];
-                if (distributorTagToDelete) {
-                  deletePromises.push(osDeleteTag(distributorTagToDelete));
-                }
-                try {
-                  var impIdDel = (d && d.impiantoId) ? String(d.impiantoId) : '';
-                  if (impIdDel) {
-                    var fuelNormDel = fuel.toLowerCase().replace(/\s+/g, '_');
-                    var delCombo = 'notify_imp_' + impIdDel + '_' + fuelNormDel;
-                    deletePromises.push(osDeleteTag(delCombo));
-                  }
-                } catch(_del){}
-                
-                Promise.all(deletePromises).then(function(){
-                  console.log('All tags deleted successfully for fuel:', fuel, 'distributor:', d.impiantoId);
-                  if(statusEl) statusEl.style.display = 'none';
-                }).catch(function(err){
-                  console.warn('Error deleting some tags for fuel:', fuel, err);
-                  if(statusEl) statusEl.style.display = 'none'; // Hide status anyway
-                });
+                if(statusEl) statusEl.style.display = 'none';
                 
                 // Remove local persistence
                 try {

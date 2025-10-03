@@ -75,6 +75,10 @@ get_header(); ?>
                             </svg>
                             Condividi
                         </button>
+                        <?php 
+                        $bo_manage_url = getenv('NEXT_PUBLIC_APP_URL') ? rtrim(getenv('NEXT_PUBLIC_APP_URL'), '/') . '/notifications' : 'https://benzinaoggi.vercel.app/notifications';
+                        ?>
+                        <a href="<?php echo esc_url($bo_manage_url); ?>" class="bo-action-btn bo-secondary" style="border-color:#0ea5e9; color:#0ea5e9" target="_blank" rel="noopener">Gestisci notifiche</a>
                     </div>
                 </div>
 
